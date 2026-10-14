@@ -4,6 +4,7 @@ import { requirePerm, actingWorkerId } from "@/lib/guard";
 import { logAudit, changedFields } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
 import { isValidPhoto } from "@/lib/photoValidation";
+import { MEDIA_ENABLED } from "@/lib/features";
 
 // PATCH /api/tickets/:id
 //   { action: "accept", workerId }                        -> ACCEPTED, assigned
@@ -14,6 +15,8 @@ import { isValidPhoto } from "@/lib/photoValidation";
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json();
   body.workerId = await actingWorkerId(req, body.workerId);
+  // Photos switched off (lib/features.ts): closing still works, the photo is just ignored.
+  if (!MEDIA_ENABLED) delete body.afterPhotoUrl;
 
   // accept / reject / start / close = the maintenance team's own app (signed in as themselves).
   // reopen / update = management.

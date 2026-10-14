@@ -4,6 +4,7 @@ import { requirePerm, actingWorkerId } from "@/lib/guard";
 import { logAudit, changedFields } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
 import { isValidPhoto, MAX_PHOTOS_PER_TASK } from "@/lib/photoValidation";
+import { MEDIA_ENABLED } from "@/lib/features";
 import type { Perm } from "@/lib/permissions";
 
 // PATCH /api/tasks/:id — the one endpoint the cleaner app calls repeatedly:
@@ -70,6 +71,7 @@ export async function PATCH(
 
     // Before/after photos from the cleaner's phone (and removal, by them or a reviewer).
     case "addPhoto": {
+      if (!MEDIA_ENABLED) return NextResponse.json({ error: "photos are switched off" }, { status: 403 });
       if (!isValidPhoto(body.photo)) {
         return NextResponse.json({ error: "invalid or too large photo" }, { status: 400 });
       }
@@ -87,6 +89,7 @@ export async function PATCH(
     }
 
     case "removePhoto": {
+      if (!MEDIA_ENABLED) return NextResponse.json({ error: "photos are switched off" }, { status: 403 });
       const data = (task.checklistData as any) ?? { checklist: [], photos: [] };
       const photos: string[] = [...(data.photos ?? [])];
       if (typeof body.index === "number" && photos[body.index] !== undefined) photos.splice(body.index, 1);

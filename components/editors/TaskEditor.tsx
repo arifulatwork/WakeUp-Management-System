@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { useCan } from "@/lib/useSession";
 import { PhotoStrip } from "@/components/Photos";
+import { MEDIA_ENABLED } from "@/lib/features";
 
 export type EdHouse = { id: string; name: string };
 export type EdWorker = { id: string; name: string; area: string; role: string };
@@ -143,7 +144,7 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
       <label style={S.label}>{tr("Notes")}</label>
       <textarea style={{ ...S.input, height: 60 }} value={notes} onChange={(e) => setNotes(e.target.value)} />
 
-      {editing && photos.length > 0 && (
+      {MEDIA_ENABLED && editing && photos.length > 0 && (
         <>
           <label style={S.label}>{tr("Photos")}</label>
           <PhotoStrip photos={photos} size={72} onRemove={removePhoto} />

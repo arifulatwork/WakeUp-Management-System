@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { useCan } from "@/lib/useSession";
 import { PhotoStrip } from "@/components/Photos";
+import { MEDIA_ENABLED } from "@/lib/features";
 import type { EdHouse, EdWorker } from "./TaskEditor";
 
 export type EdTicket = {
@@ -95,7 +96,7 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
       <textarea style={{ ...S.input, height: 70 }} value={description} onChange={(e) => setDescription(e.target.value)}
         placeholder={tr("e.g. Leaking pipe under the sink")} />
 
-      {editing && (ticket!.photoUrl || ticket!.afterPhotoUrl) && (
+      {MEDIA_ENABLED && editing && (ticket!.photoUrl || ticket!.afterPhotoUrl) && (
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
           {ticket!.photoUrl && (
             <div>

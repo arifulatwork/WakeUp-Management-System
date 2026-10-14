@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { MEDIA_ENABLED } from "@/lib/features";
 
 // GET /api/houses/:id/media?kind=photo|video[&v=…]
 // Serves an apartment's photo or video as a real file, so <img>/<video> can use it as a
@@ -15,6 +16,7 @@ function decode(dataUrl: string): { mime: string; bytes: Buffer } | null {
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!MEDIA_ENABLED) return new NextResponse("Not found", { status: 404 }); // switched off (lib/features.ts)
   const kind = req.nextUrl.searchParams.get("kind") === "video" ? "video" : "photo";
   const row = await db.houseMedia.findFirst({ where: { houseId: params.id } });
   const file = row ? decode(row[kind] ?? "") : null;

@@ -7,6 +7,7 @@ import { Modal, FormFooter, S } from "@/components/ui";
 import { useCan } from "@/lib/useSession";
 import { PhotoPicker, VideoPicker } from "@/components/Photos";
 import { houseMediaUrl } from "@/components/HouseMedia";
+import { MEDIA_ENABLED } from "@/lib/features";
 
 export type EdHouseFull = {
   id: string; name: string; address: string; keyStatus: string;
@@ -82,30 +83,35 @@ export default function HouseEditor({ house, onClose, onSaved }: {
         {KEY_STATES.map((k) => <option key={k} value={k}>{ev(k)}</option>)}
       </select>
 
-      <label style={S.label}>{tr("Apartment photo / video")}</label>
-      {photoSrc && (
-        <div style={{ position: "relative", marginBottom: 8 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={photoSrc} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)", display: "block" }} />
-          <button type="button" aria-label={tr("Remove photo")} onClick={() => setPhoto(null)}
-            style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#111", color: "#fff", cursor: "pointer", padding: 0 }}>×</button>
+      {MEDIA_ENABLED && (
+        <>
+        <label style={S.label}>{tr("Apartment photo / video")}</label>
+        {photoSrc && (
+          <div style={{ position: "relative", marginBottom: 8 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoSrc} alt="" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)", display: "block" }} />
+            <button type="button" aria-label={tr("Remove photo")} onClick={() => setPhoto(null)}
+              style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#111", color: "#fff", cursor: "pointer", padding: 0 }}>×</button>
+          </div>
+        )}
+        {videoSrc && (
+          <div style={{ position: "relative", marginBottom: 8 }}>
+            <video src={videoSrc} controls playsInline preload="metadata" style={{ width: "100%", maxHeight: 180, borderRadius: 8, background: "#000", display: "block" }} />
+            <button type="button" aria-label={tr("Remove video")} onClick={() => setVideo(null)}
+              style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#111", color: "#fff", cursor: "pointer", padding: 0 }}>×</button>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <PhotoPicker label={`📷 ${photoSrc ? tr("Replace photo") : tr("Upload photo")}`} style={{ ...S.ghost, width: "100%" }} onPhoto={setPhoto} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <VideoPicker label={`🎬 ${videoSrc ? tr("Replace video") : tr("Upload video")}`} style={{ ...S.ghost, width: "100%" }} onVideo={setVideo} />
+          </div>
         </div>
+
+        </>
       )}
-      {videoSrc && (
-        <div style={{ position: "relative", marginBottom: 8 }}>
-          <video src={videoSrc} controls playsInline preload="metadata" style={{ width: "100%", maxHeight: 180, borderRadius: 8, background: "#000", display: "block" }} />
-          <button type="button" aria-label={tr("Remove video")} onClick={() => setVideo(null)}
-            style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#111", color: "#fff", cursor: "pointer", padding: 0 }}>×</button>
-        </div>
-      )}
-      <div style={{ display: "flex", gap: 8 }}>
-        <div style={{ flex: 1 }}>
-          <PhotoPicker label={`📷 ${photoSrc ? tr("Replace photo") : tr("Upload photo")}`} style={{ ...S.ghost, width: "100%" }} onPhoto={setPhoto} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <VideoPicker label={`🎬 ${videoSrc ? tr("Replace video") : tr("Upload video")}`} style={{ ...S.ghost, width: "100%" }} onVideo={setVideo} />
-        </div>
-      </div>
 
       <label style={{ ...S.label, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
         <input type="checkbox" checked={temporary} onChange={(e) => setTemporary(e.target.checked)} />

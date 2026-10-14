@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePerm, actingWorkerId } from "@/lib/guard";
 import { isValidPhoto } from "@/lib/photoValidation";
+import { MEDIA_ENABLED } from "@/lib/features";
 import { logAudit } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
 import { maybePurgeTickets } from "@/lib/retention";
@@ -38,7 +39,9 @@ export async function GET(req: NextRequest) {
 // submits to. Also reachable from a house menu per spec, and from
 // Coordinators reporting a problem directly.
 export async function POST(req: NextRequest) {
-  const { houseId, area, description, priority, photoUrl, reportedById: claimedReporter } = await req.json();
+  const { houseId, area, description, priority, photoUrl: sentPhoto, reportedById: claimedReporter } = await req.json();
+  // Photos switched off (lib/features.ts): the issue is still saved, just without the photo.
+  const photoUrl = MEDIA_ENABLED ? sentPhoto : null;
   const reportedById = await actingWorkerId(req, claimedReporter);
 
   if (!houseId || !area || !description || !reportedById) {

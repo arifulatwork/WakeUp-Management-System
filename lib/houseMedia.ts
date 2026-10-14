@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { isValidPhoto, isValidVideo } from "@/lib/photoValidation";
+import { MEDIA_ENABLED } from "@/lib/features";
 
 // An apartment's cover photo and video. The big files live in the HouseMedia table; the House
 // row only carries small flags (hasPhoto / hasVideo / mediaUpdatedAt) so lists stay light.
@@ -9,6 +10,8 @@ import { isValidPhoto, isValidVideo } from "@/lib/photoValidation";
 export type MediaChange = { photo?: string | null; video?: string | null };
 
 export function parseMedia(body: Record<string, unknown>): { error?: string; change?: MediaChange } {
+  // Photos & videos switched off (lib/features.ts): ignore them, the rest of the house still saves.
+  if (!MEDIA_ENABLED) return {};
   const change: MediaChange = {};
   if ("photo" in body) {
     const v = body.photo || null;

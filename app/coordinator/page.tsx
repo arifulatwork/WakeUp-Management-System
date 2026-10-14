@@ -9,6 +9,7 @@ import { useCan } from "@/lib/useSession";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { S, StatusBadge, PriorityDot } from "@/components/ui";
 import { PhotoStrip } from "@/components/Photos";
+import { MEDIA_ENABLED } from "@/lib/features";
 import { cmpText, sortTickets, taskWhen } from "@/lib/sort";
 import { checkReadiness, REASON_TEXT } from "@/lib/readiness";
 import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
@@ -216,7 +217,7 @@ export default function CoordinatorView() {
                       padding: "5px 8px", marginBottom: 4, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, cursor: "pointer",
                     }}>
                       <PriorityDot p={k.priority} />
-                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.photoUrl ? "📷 " : ""}{tr(k.description)}</span>
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{MEDIA_ENABLED && k.photoUrl ? "📷 " : ""}{tr(k.description)}</span>
                       <StatusBadge status={k.status} />
                     </button>
                   ))}

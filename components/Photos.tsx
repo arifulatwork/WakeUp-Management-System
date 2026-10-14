@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { compressImage, readVideo } from "@/lib/photos";
 import { useI18n } from "@/lib/i18n";
+import { MEDIA_ENABLED } from "@/lib/features";
 
 // Button that opens the camera / gallery. On a phone, "accept=image/*" offers
 // "Take photo" or "Photo library"; on a laptop it opens a file chooser.
@@ -30,6 +31,7 @@ export function PhotoPicker({ label, onPhoto, style }: {
     setBusy(false);
   }
 
+  if (!MEDIA_ENABLED) return null; // photos & videos are switched off (lib/features.ts)
   return (
     <>
       <input ref={ref} type="file" accept="image/*" onChange={pick} style={{ display: "none" }} />
@@ -66,6 +68,7 @@ export function VideoPicker({ label, onVideo, style }: {
     setBusy(false);
   }
 
+  if (!MEDIA_ENABLED) return null; // photos & videos are switched off (lib/features.ts)
   return (
     <>
       <input ref={ref} type="file" accept="video/mp4,video/webm,video/quicktime" onChange={pick} style={{ display: "none" }} />
@@ -85,7 +88,7 @@ export function PhotoStrip({ photos, onRemove, size = 64 }: {
 }) {
   const { tr } = useI18n();
   const [open, setOpen] = useState<string | null>(null);
-  if (!photos.length) return null;
+  if (!MEDIA_ENABLED || !photos.length) return null;
   return (
     <>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
