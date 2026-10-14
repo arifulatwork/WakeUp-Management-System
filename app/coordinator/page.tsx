@@ -1,11 +1,11 @@
 "use client";
 
-import Logo from "@/components/Logo";
+import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
+import { useSectionVisibility } from "@/lib/useSectionVisibility";
 import { useEffect, useState, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/useSession";
-import AdminLink from "@/components/AdminLink";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { S, StatusBadge, PriorityDot } from "@/components/ui";
 import { PhotoStrip } from "@/components/Photos";
@@ -18,6 +18,9 @@ import MaterialEditor from "@/components/editors/MaterialEditor";
 
 type Task = EdTask & { house: { id: string; name: string } };
 type Ticket = EdTicket & { house: { id: string; name: string } };
+
+const SECTIONS = ["stats", "houses"] as const;
+const SECTION_LABEL: Record<(typeof SECTIONS)[number], string> = { stats: "Overview", houses: "Houses" };
 
 const KEY_STATES = ["AT_OFFICE", "WITH_CLEANER", "WITH_GUEST", "MISSING"];
 
@@ -33,7 +36,7 @@ export default function CoordinatorView() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [houses, setHouses] = useState<EdHouseFull[]>([]);
   const [workers, setWorkers] = useState<EdWorker[]>([]);
-  const [me, setMe] = useState<{ name: string } | null>(null);
+  const vis = useSectionVisibility("coordinatorSections", SECTIONS);
   const [order, setOrder] = useState<"attention" | "name">("attention");
 
   // which editor is open
@@ -53,7 +56,6 @@ export default function CoordinatorView() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then(setMe);
     load();
   }, [load]);
   useLiveRefresh(load); // instant updates (falls back to polling if the connection drops)
@@ -72,11 +74,6 @@ export default function CoordinatorView() {
     await api(`/api/houses/${houseId}`, "PATCH", { keyStatus });
     load();
   }
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
-  }
-
   const houseOpts = houses.map((h) => ({ id: h.id, name: h.name }));
 
   // "Needs attention" puts the houses where the coordinator has to act on top:
@@ -95,37 +92,55 @@ export default function CoordinatorView() {
     order === "attention" ? attention(a) - attention(b) || cmpText(a.name, b.name) : cmpText(a.name, b.name)
   );
 
+  // Summary tiles
+  const isReady = (h: EdHouseFull) => {
+    const ts = tasks.filter((t) => t.house.id === h.id);
+    const hasIssue = tickets.some((k) => k.house.id === h.id) || ts.some((t) => t.status === "WITH_ISSUE");
+    return ts.length > 0 && !hasIssue && ts.every((t) => ["APPROVED", "COMPLETED"].includes(t.status));
+  };
+  const readyCount = houses.filter(isReady).length;
+  const toVerify = tasks.filter((t) => t.status === "TO_BE_VERIFIED").length;
+  const keysMissing = houses.filter((h) => h.keyStatus === "MISSING").length;
+
   return (
-    <main style={{ maxWidth: 980, margin: "0 auto", padding: "28px 24px 90px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 10, marginBottom: 6 }}>
-        <div>
-          <Logo height={30} style={{ marginBottom: 10 }} />
-          <h1 style={{ fontSize: 18, marginBottom: 2 }}>{tr("Check-in Readiness")}</h1>
-          {me && <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>{tr("Signed in as {name}", { name: me.name })} · {tr("Coordinator")}</p>}
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <AdminLink />
+    <PanelShell
+      title={tr("Check-in Readiness")}
+      subtitle={tr("Verify cleaning, maintenance, linens and keys before confirming a house is ready.")}
+      vis={vis}
+      labels={SECTION_LABEL}
+      actions={
+        <>
           <button style={S.navDark} onClick={() => setTaskEd({ task: null })}>+ {tr("New task")}</button>
           <button style={S.nav} onClick={() => setTicketEd({ ticket: null })}>+ {tr("Report an Issue")}</button>
           <button style={S.nav} onClick={() => setMatEd({})}>+ {tr("New request")}</button>
           {canCreateHouse && <button style={S.nav} onClick={() => setHouseEd({ house: null })}>+ {tr("New house")}</button>}
-          <button style={S.nav} onClick={logout}>{tr("Sign out")}</button>
-        </div>
-      </div>
-      <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 18 }}>
-        {tr("Verify cleaning, maintenance, linens and keys before confirming a house is ready.")}
-      </p>
+        </>
+      }
+    >
+      {vis.shown.stats && (
+        <StatGrid>
+          <StatCard n={readyCount} label={tr("Houses ready")} color="#4F7A26" />
+          <StatCard n={toVerify} label={tr("To be verified")} color="#D98A33" />
+          <StatCard n={tickets.length} label={tr("Open issues")} color="#C1503C" />
+          <StatCard n={keysMissing} label={tr("Keys missing")} color="#C1503C" />
+        </StatGrid>
+      )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{tr("Sort by")}:</span>
-        {([["attention", "Needs attention"], ["name", "Name"]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setOrder(k)} aria-pressed={order === k} style={{
-            fontSize: 11.5, padding: "5px 11px", borderRadius: 999, border: "1px solid var(--line)", cursor: "pointer",
-            background: order === k ? "var(--ink)" : "#fff", color: order === k ? "#fff" : "var(--ink-soft)",
-          }}>{tr(label)}</button>
-        ))}
-      </div>
-
+      {vis.shown.houses && (
+      <PanelCard
+        title={tr("Houses")}
+        action={
+          <>
+            <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{tr("Sort by")}:</span>
+            {([["attention", "Needs attention"], ["name", "Name"]] as const).map(([k, label]) => (
+              <button key={k} onClick={() => setOrder(k)} aria-pressed={order === k} style={{
+                fontSize: 11.5, padding: "5px 11px", borderRadius: 999, border: "1px solid var(--line)", cursor: "pointer",
+                background: order === k ? "var(--ink)" : "#fff", color: order === k ? "#fff" : "var(--ink-soft)",
+              }}>{tr(label)}</button>
+            ))}
+          </>
+        }
+      >
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))", gap: 14 }}>
         {sortedHouses.map((h) => {
           const hTasks = tasks.filter((t) => t.house.id === h.id).sort((a, b) => cmpText(taskWhen(a), taskWhen(b)));
@@ -217,13 +232,15 @@ export default function CoordinatorView() {
           );
         })}
       </div>
-      {houses.length === 0 && <p style={{ color: "var(--ink-soft)" }}>{tr("No houses yet.")}</p>}
+      {houses.length === 0 && <p style={{ color: "var(--ink-soft)", margin: 0 }}>{tr("No houses yet.")}</p>}
+      </PanelCard>
+      )}
 
       {taskEd && <TaskEditor task={taskEd.task} defaultHouseId={taskEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTaskEd(null)} onSaved={done} />}
       {ticketEd && <TicketEditor ticket={ticketEd.ticket} defaultHouseId={ticketEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTicketEd(null)} onSaved={done} />}
       {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={done} />}
       {matEd && <MaterialEditor defaultHouseId={matEd.houseId} houses={houseOpts} onClose={() => setMatEd(null)} onSaved={done} />}
-    </main>
+    </PanelShell>
   );
 }
 
