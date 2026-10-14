@@ -321,6 +321,11 @@ const ROWS: Row[] = [
   ["No photo added", "Sem fotos", "Sin fotos", "Aucune photo", "Nessuna foto", "Немає фото"],
   ["Open maintenance problem", "Problema de manutenção em aberto", "Problema de mantenimiento abierto", "Problème de maintenance ouvert", "Problema di manutenzione aperto", "Відкрита проблема з обслуговування"],
   ["Key is missing", "Chave em falta", "Falta la llave", "Clé manquante", "Chiave mancante", "Ключ відсутній"],
+  ["Review before approving", "Rever antes de aprovar", "Revisar antes de aprobar", "Vérifier avant d'approuver", "Controlla prima di approvare", "Перегляд перед затвердженням"],
+  ["Task photos", "Fotos da tarefa", "Fotos de la tarea", "Photos de la tâche", "Foto del lavoro", "Фото завдання"],
+  ["Apartment reference", "Referência do apartamento", "Referencia del apartamento", "Référence de l'appartement", "Riferimento dell'appartamento", "Еталон квартири"],
+  ["Confirm approve", "Confirmar aprovação", "Confirmar aprobación", "Confirmer l'approbation", "Conferma approvazione", "Підтвердити затвердження"],
+  ["No checklist items.", "Sem itens na lista.", "Sin elementos en la lista.", "Aucun élément dans la liste.", "Nessun elemento nella lista.", "У списку немає пунктів."],
   // ---- change history, field labels, notifications ----
   ["Started cleaning", "Limpeza iniciada", "Limpieza iniciada", "Nettoyage commencé", "Pulizia iniziata", "Прибирання розпочато"],
   ["Marked ready for check-in", "Marcado como pronto para check-in", "Marcado como listo para el check-in", "Marqué prêt pour l'arrivée", "Segnato come pronto per il check-in", "Позначено як готове до заселення"],
