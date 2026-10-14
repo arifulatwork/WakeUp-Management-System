@@ -20,8 +20,9 @@ export const S = {
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   const { tr } = useI18n();
   return (
+    // Clicking the dark area outside does NOT close the pop-up (it caused lost input while typing).
+    // It closes only with the × button or the Cancel button.
     <div
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 60, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 14px", overflowY: "auto" }}
     >
       <div style={{ background: "#fff", borderRadius: 14, padding: 20, width: "100%", maxWidth: 440, marginBottom: 70 }}>
