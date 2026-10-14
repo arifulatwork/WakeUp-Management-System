@@ -1,0 +1,209 @@
+// Prisma schema — WakeUp Projects Cleaning & Maintenance Platform
+// Phase 1: Worker, House, CleaningTask.
+// MaintenanceTicket modeled now (Phase 2) so the "report issue" button
+// in the cleaner app has somewhere real to write to later — table is
+// unused by the Phase 1 UI but keeps the schema stable as we grow.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")  // what the running app uses (Supabase: pooler, port 6543)
+  directUrl = env("DIRECT_URL")    // what migrations use (Supabase: direct, port 5432)
+}
+
+enum Area {
+  CLEANING
+  MAINTENANCE
+}
+
+enum CleaningStatus {
+  SCHEDULED
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  TO_BE_VERIFIED
+  APPROVED
+  WITH_ISSUE
+}
+
+enum Priority {
+  YELLOW
+  ORANGE
+  RED
+}
+
+// Worker identity — created once at onboarding, referenced by every
+// action for audit purposes ("unequivocally identified by who performed it").
+model Worker {
+  id        String   @id @default(cuid())
+  name      String
+  language  String   // e.g. "pt", "en", "es", "fr"
+  area      Area
+  role      String   @default("worker") // worker | manager | coordinator | admin
+  createdAt DateTime @default(now())
+
+  // Only set for manager/coordinator/admin — cleaners and maintenance
+  // workers keep the no-password unique-ID flow from onboarding.
+  username     String? @unique
+  passwordHash String?
+
+  assignedTasks CleaningTask[] @relation("AssignedWorker")
+  completedBy   CleaningTask[] @relation("CompletedByWorker")
+  ticketsRaised MaintenanceTicket[] @relation("ReportedBy")
+  ticketsAssigned MaintenanceTicket[] @relation("AssignedMaintenanceWorker")
+  materialRequests MaterialRequest[]
+  pushSubscriptions PushSubscription[]
+}
+
+// House — can be a permanent WakeUp property, or a temporary listing
+// (Airbnb / Booking.com) with a validity window set by an admin.
+model House {
+  id          String    @id @default(cuid())
+  name        String
+  address     String
+  // null = permanent house. Set both for a temporary listing.
+  validFrom   DateTime?
+  validUntil  DateTime?
+  createdAt   DateTime  @default(now())
+
+  // "status of keys" from the Ops Overview spec. Simple state machine,
+  // not a full key-log/audit-trail — enough for Ops to see at a glance.
+  keyStatus    String   @default("AT_OFFICE") // AT_OFFICE | WITH_CLEANER | WITH_GUEST | MISSING
+  keyUpdatedAt DateTime @default(now())
+
+  // Apartment photo / video. The (large) files live in HouseMedia so that every
+  // list that includes a house stays small; these flags say whether there is one.
+  hasPhoto       Boolean   @default(false)
+  hasVideo       Boolean   @default(false)
+  mediaUpdatedAt DateTime?
+  media          HouseMedia?
+
+  tasks       CleaningTask[]
+  tickets     MaintenanceTicket[]
+  materialRequests MaterialRequest[]
+}
+
+// The apartment's cover photo and walkthrough video, stored as data URLs.
+// For production, move these to object storage (S3 / R2 / Supabase) and keep a URL instead.
+model HouseMedia {
+  id        String   @id @default(cuid())
+  house     House    @relation(fields: [houseId], references: [id], onDelete: Cascade)
+  houseId   String   @unique
+  photo     String?
+  video     String?
+  updatedAt DateTime @updatedAt
+}
+
+// "Request products or materials" from the cleaner app, and the
+// "status of... products and materials" Cristina/Ops need visibility
+// into. Deliberately simple — free-text items list, not a full
+// inventory/stock system.
+model MaterialRequest {
+  id            String   @id @default(cuid())
+  house         House    @relation(fields: [houseId], references: [id])
+  houseId       String
+  requestedBy   Worker   @relation(fields: [requestedById], references: [id])
+  requestedById String
+  items         String   // free text, e.g. "Bathroom disinfectant x2, bin bags"
+  status        String   @default("PENDING") // PENDING | FULFILLED
+  createdAt     DateTime @default(now())
+  fulfilledAt   DateTime?
+}
+
+model CleaningTask {
+  id               String         @id @default(cuid())
+  house            House          @relation(fields: [houseId], references: [id])
+  houseId          String
+
+  scheduledDate    DateTime
+  scheduledTime    String         // "10:00" — kept as string for simple display/edit
+  // multi-select cleaning types, e.g. ["GENERAL","CHECKOUT"]
+  cleaningTypes    String[]
+
+  assignedWorker   Worker?        @relation("AssignedWorker", fields: [assignedWorkerId], references: [id])
+  assignedWorkerId String?
+
+  estimatedMinutes Int?
+  priority         Priority       @default(YELLOW)
+  nextCheckIn      DateTime?
+  notes            String?
+  materialsNeeded  String?
+
+  status           CleaningStatus @default(SCHEDULED)
+
+  // --- proof of cleaning ---
+  startedAt        DateTime?
+  completedAt      DateTime?
+  completedBy      Worker?        @relation("CompletedByWorker", fields: [completedByWorkerId], references: [id])
+  completedByWorkerId String?
+
+  // Dynamic/flexible fields live here as JSON so Super Admin can add
+  // checklist items later without a schema migration.
+  // Shape: { "checklist": [{ "label": string, "done": boolean }], "photos": [url] }
+  checklistData    Json           @default("{}")
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model MaintenanceTicket {
+  id           String    @id @default(cuid())
+  house        House     @relation(fields: [houseId], references: [id])
+  houseId      String
+
+  area         String    // room/area affected, e.g. "Bathroom"
+  description  String
+  priority     Priority  @default(YELLOW)
+  photoUrl     String?   // photo of the problem, from the person who reported it
+  afterPhotoUrl String?  // photo after the fix, from maintenance (run a migration to add this column)
+
+  reportedBy   Worker    @relation("ReportedBy", fields: [reportedById], references: [id])
+  reportedById String
+  reportedAt   DateTime  @default(now())
+
+  assignedWorker   Worker? @relation("AssignedMaintenanceWorker", fields: [assignedWorkerId], references: [id])
+  assignedWorkerId String?
+
+  status       String    @default("OPEN") // OPEN | ACCEPTED | REJECTED | IN_PROGRESS | CLOSED
+  startedAt    DateTime?
+  materialsUsed String?
+  timeSpentMinutes Int?
+  closedAt     DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// Who changed what, and when. Written by lib/audit.ts after every change.
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?  // null for the system / unknown field app
+  actorName String
+  actorRole String
+  entity    String   // task | ticket | material | house | staff | system
+  entityId  String?
+  action    String   // e.g. approve, update, delete
+  summary   String   // English sentence (fallback for old entries / other tools)
+  template  String?  // English template with {placeholders}; translated on screen
+  params    Json?    // the values for the placeholders
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// One row per phone/browser that agreed to receive notifications.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  worker    Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId  String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([workerId])
+}

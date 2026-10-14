@@ -1,0 +1,25 @@
+:root {
+  --ink: #111;
+  --ink-soft: #5b5b5b;
+  --paper: #fafaf8;
+  --line: #e4e4e0;
+  --green: #7cb342;
+  --green-dark: #4f7a26;
+  --green-bg: #eef6e6;
+  --red: #c1503c;
+  --red-bg: #f8e5e0;
+  --orange: #d98a33;
+  --yellow: #c7a623;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Inter", Segoe UI, Roboto, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+}
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }

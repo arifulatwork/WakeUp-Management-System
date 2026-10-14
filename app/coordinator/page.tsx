@@ -1,0 +1,229 @@
+"use client";
+
+import Logo from "@/components/Logo";
+import { useEffect, useState, useCallback } from "react";
+import { useI18n } from "@/lib/i18n";
+import { api } from "@/lib/api";
+import { useCan } from "@/lib/useSession";
+import { useLiveRefresh } from "@/lib/useLiveRefresh";
+import { S, StatusBadge, PriorityDot } from "@/components/ui";
+import { PhotoStrip } from "@/components/Photos";
+import { cmpText, sortTickets, taskWhen } from "@/lib/sort";
+import { checkReadiness, REASON_TEXT } from "@/lib/readiness";
+import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
+import TicketEditor, { EdTicket } from "@/components/editors/TicketEditor";
+import HouseEditor, { EdHouseFull } from "@/components/editors/HouseEditor";
+import MaterialEditor from "@/components/editors/MaterialEditor";
+
+type Task = EdTask & { house: { id: string; name: string } };
+type Ticket = EdTicket & { house: { id: string; name: string } };
+
+const KEY_STATES = ["AT_OFFICE", "WITH_CLEANER", "WITH_GUEST", "MISSING"];
+
+// Coordinators verify cleaning / maintenance / linens / keys and confirm a
+// house is ready for check-in. Everything on this screen is editable:
+// tasks (create, edit, reassign, delete), issues, houses, key status and
+// material requests.
+export default function CoordinatorView() {
+  const { tr, ev } = useI18n();
+  const canCreateHouse = useCan("houses.create");
+  const canEditHouse = useCan("houses.edit");
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [houses, setHouses] = useState<EdHouseFull[]>([]);
+  const [workers, setWorkers] = useState<EdWorker[]>([]);
+  const [me, setMe] = useState<{ name: string } | null>(null);
+  const [order, setOrder] = useState<"attention" | "name">("attention");
+
+  // which editor is open
+  const [taskEd, setTaskEd] = useState<{ task: Task | null; houseId?: string } | null>(null);
+  const [ticketEd, setTicketEd] = useState<{ ticket: Ticket | null; houseId?: string } | null>(null);
+  const [houseEd, setHouseEd] = useState<{ house: EdHouseFull | null } | null>(null);
+  const [matEd, setMatEd] = useState<{ houseId?: string } | null>(null);
+
+  const load = useCallback(async () => {
+    const [t, k, h, w] = await Promise.all([
+      fetch("/api/tasks"), fetch("/api/tickets?open=1"), fetch("/api/houses"), fetch("/api/workers"),
+    ]);
+    setTasks(await t.json());
+    setTickets(await k.json());
+    setHouses(await h.json());
+    setWorkers(await w.json());
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then(setMe);
+    load();
+  }, [load]);
+  useLiveRefresh(load); // instant updates (falls back to polling if the connection drops)
+
+  const done = () => {
+    setTaskEd(null); setTicketEd(null); setHouseEd(null); setMatEd(null);
+    load();
+  };
+
+  async function patchTask(id: string, action: string) {
+    await api(`/api/tasks/${id}`, "PATCH", { action });
+    load();
+  }
+  async function setKey(houseId: string, keyStatus: string) {
+    setHouses((hs) => hs.map((h) => (h.id === houseId ? { ...h, keyStatus } : h))); // optimistic
+    await api(`/api/houses/${houseId}`, "PATCH", { keyStatus });
+    load();
+  }
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
+
+  const houseOpts = houses.map((h) => ({ id: h.id, name: h.name }));
+
+  // "Needs attention" puts the houses where the coordinator has to act on top:
+  // 0 a job is waiting to be verified · 1 open problem · 2 key missing ·
+  // 3 work still in progress · 4 nothing scheduled · 5 all done & ready.
+  const attention = (h: EdHouseFull) => {
+    const ts = tasks.filter((t) => t.house.id === h.id);
+    const ks = tickets.filter((k) => k.house.id === h.id);
+    if (ts.some((t) => t.status === "TO_BE_VERIFIED")) return 0;
+    if (ks.length > 0 || ts.some((t) => t.status === "WITH_ISSUE")) return 1;
+    if (h.keyStatus === "MISSING") return 2;
+    if (ts.some((t) => !["APPROVED", "COMPLETED"].includes(t.status))) return 3;
+    return ts.length === 0 ? 4 : 5;
+  };
+  const sortedHouses = [...houses].sort((a, b) =>
+    order === "attention" ? attention(a) - attention(b) || cmpText(a.name, b.name) : cmpText(a.name, b.name)
+  );
+
+  return (
+    <main style={{ maxWidth: 980, margin: "0 auto", padding: "28px 24px 90px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 10, marginBottom: 6 }}>
+        <div>
+          <Logo height={30} style={{ marginBottom: 10 }} />
+          <h1 style={{ fontSize: 18, marginBottom: 2 }}>{tr("Check-in Readiness")}</h1>
+          {me && <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>{tr("Signed in as {name}", { name: me.name })} · {tr("Coordinator")}</p>}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button style={S.navDark} onClick={() => setTaskEd({ task: null })}>+ {tr("New task")}</button>
+          <button style={S.nav} onClick={() => setTicketEd({ ticket: null })}>+ {tr("Report an Issue")}</button>
+          <button style={S.nav} onClick={() => setMatEd({})}>+ {tr("New request")}</button>
+          {canCreateHouse && <button style={S.nav} onClick={() => setHouseEd({ house: null })}>+ {tr("New house")}</button>}
+          <button style={S.nav} onClick={logout}>{tr("Sign out")}</button>
+        </div>
+      </div>
+      <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 18 }}>
+        {tr("Verify cleaning, maintenance, linens and keys before confirming a house is ready.")}
+      </p>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{tr("Sort by")}:</span>
+        {([["attention", "Needs attention"], ["name", "Name"]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setOrder(k)} aria-pressed={order === k} style={{
+            fontSize: 11.5, padding: "5px 11px", borderRadius: 999, border: "1px solid var(--line)", cursor: "pointer",
+            background: order === k ? "var(--ink)" : "#fff", color: order === k ? "#fff" : "var(--ink-soft)",
+          }}>{tr(label)}</button>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))", gap: 14 }}>
+        {sortedHouses.map((h) => {
+          const hTasks = tasks.filter((t) => t.house.id === h.id).sort((a, b) => cmpText(taskWhen(a), taskWhen(b)));
+          const hTickets = sortTickets(tickets.filter((k) => k.house.id === h.id), "priority");
+          const hasIssue = hTickets.length > 0 || hTasks.some((t) => t.status === "WITH_ISSUE");
+          const ready = hTasks.length > 0 && !hasIssue && hTasks.every((t) => ["APPROVED", "COMPLETED"].includes(t.status));
+          return (
+            <div key={h.id} style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 14, background: ready ? "#EEF6E6" : hasIssue ? "#F8E5E0" : "#fff" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  {h.name}
+                  {(h.validFrom || h.validUntil) && <span style={{ ...tag }}>{tr("Temporary")}</span>}
+                </div>
+                {canEditHouse && <button style={S.small} onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>}
+              </div>
+
+              {/* key status — pick any state directly */}
+              <select value={h.keyStatus} onChange={(e) => setKey(h.id, e.target.value)} aria-label={tr("Key status")}
+                style={{ ...S.input, padding: "7px 8px", fontSize: 12, marginBottom: 10, fontWeight: 600, background: keyBg[h.keyStatus] ?? "#fff" }}>
+                {KEY_STATES.map((k) => <option key={k} value={k}>🔑 {ev(k)}</option>)}
+              </select>
+
+              {hTasks.length === 0 && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginBottom: 8 }}>{tr("No tasks for this house.")}</p>}
+              {hTasks.map((t) => (
+                <div key={t.id} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 9, padding: "7px 9px", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                    <PriorityDot p={t.priority} />
+                    <b>{t.scheduledTime}</b>
+                    <span style={{ color: "var(--ink-soft)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {t.cleaningTypes.map(ev).join(", ")}
+                    </span>
+                    <StatusBadge status={t.status} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--ink-soft)", margin: "4px 0 6px" }}>
+                    {t.assignedWorker?.name ?? tr("Unassigned")}
+                  </div>
+                  <PhotoStrip photos={t.checklistData?.photos ?? []} size={44} />
+                  {t.status === "TO_BE_VERIFIED" && (() => {
+                    // Helps the person decide; it never approves anything by itself.
+                    const r = checkReadiness(t, h, hTickets.filter((k) => k.status !== "REJECTED").length);
+                    return (
+                      <div style={{ fontSize: 11.5, margin: "2px 0 6px", color: r.ok ? "#4F7A26" : "#B3472E", fontWeight: 600 }}>
+                        {r.ok ? `✓ ${tr("Auto-check: all clear")}` : `⚠ ${tr("Auto-check: needs attention")}`}
+                        {!r.ok && (
+                          <ul style={{ margin: "2px 0 0 16px", padding: 0, fontWeight: 400, color: "var(--ink-soft)" }}>
+                            {r.reasons.map((x) => <li key={x}>{tr(REASON_TEXT[x])}</li>)}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button style={S.small} onClick={() => setTaskEd({ task: t })}>{tr("Edit")}</button>
+                    {t.status === "TO_BE_VERIFIED" && (
+                      <>
+                        <button style={S.smallDark} onClick={() => patchTask(t.id, "approve")}>{tr("Confirm ready for check-in")}</button>
+                        <button style={S.small} onClick={() => patchTask(t.id, "reopen")}>{tr("Send back")}</button>
+                      </>
+                    )}
+                    {t.status === "APPROVED" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#4F7A26", alignSelf: "center" }}>{tr("✓ Ready")}</span>}
+                  </div>
+                </div>
+              ))}
+
+              {hTickets.length > 0 && (
+                <div style={{ margin: "8px 0 6px" }}>
+                  <div style={{ fontSize: 10.5, textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 4 }}>
+                    {tr("Open maintenance: {n}", { n: hTickets.length })}
+                  </div>
+                  {hTickets.map((k) => (
+                    <button key={k.id} onClick={() => setTicketEd({ ticket: k })} style={{
+                      display: "flex", alignItems: "center", gap: 6, width: "100%", textAlign: "left", fontSize: 11.5,
+                      padding: "5px 8px", marginBottom: 4, background: "#fff", border: "1px solid var(--line)", borderRadius: 8, cursor: "pointer",
+                    }}>
+                      <PriorityDot p={k.priority} />
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.photoUrl ? "📷 " : ""}{tr(k.description)}</span>
+                      <StatusBadge status={k.status} />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                <button style={S.small} onClick={() => setTaskEd({ task: null, houseId: h.id })}>+ {tr("Task")}</button>
+                <button style={S.small} onClick={() => setTicketEd({ ticket: null, houseId: h.id })}>+ {tr("Issue")}</button>
+                <button style={S.small} onClick={() => setMatEd({ houseId: h.id })}>+ {tr("Materials")}</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {houses.length === 0 && <p style={{ color: "var(--ink-soft)" }}>{tr("No houses yet.")}</p>}
+
+      {taskEd && <TaskEditor task={taskEd.task} defaultHouseId={taskEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTaskEd(null)} onSaved={done} />}
+      {ticketEd && <TicketEditor ticket={ticketEd.ticket} defaultHouseId={ticketEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTicketEd(null)} onSaved={done} />}
+      {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={done} />}
+      {matEd && <MaterialEditor defaultHouseId={matEd.houseId} houses={houseOpts} onClose={() => setMatEd(null)} onSaved={done} />}
+    </main>
+  );
+}
+
+const keyBg: Record<string, string> = { AT_OFFICE: "var(--green-bg)", WITH_CLEANER: "#FAF3D6", WITH_GUEST: "#E6F0F8", MISSING: "var(--red-bg)" };
+const tag: React.CSSProperties = { fontSize: 9, fontWeight: 700, marginLeft: 6, padding: "1px 6px", borderRadius: 999, background: "#E6F0F8", textTransform: "uppercase", verticalAlign: "middle" };
