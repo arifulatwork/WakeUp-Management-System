@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/useSession";
+import AdminLink from "@/components/AdminLink";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { S, StatusBadge, PriorityDot } from "@/components/ui";
 import { PhotoStrip } from "@/components/Photos";
@@ -103,6 +104,7 @@ export default function CoordinatorView() {
           {me && <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>{tr("Signed in as {name}", { name: me.name })} · {tr("Coordinator")}</p>}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <AdminLink />
           <button style={S.navDark} onClick={() => setTaskEd({ task: null })}>+ {tr("New task")}</button>
           <button style={S.nav} onClick={() => setTicketEd({ ticket: null })}>+ {tr("Report an Issue")}</button>
           <button style={S.nav} onClick={() => setMatEd({})}>+ {tr("New request")}</button>

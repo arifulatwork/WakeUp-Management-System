@@ -6,6 +6,7 @@ import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/useSession";
+import AdminLink from "@/components/AdminLink";
 import { S, StatusBadge, PriorityDot, TicketSortBar } from "@/components/ui";
 import { PhotoStrip } from "@/components/Photos";
 import { cmpText, KEY_RANK, sortTickets, TicketSort } from "@/lib/sort";
@@ -101,6 +102,7 @@ export default function OpsOverview() {
           <h1 style={{ fontSize: 18, margin: 0 }}>{tr("Operations Overview")}</h1>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <AdminLink />
           <a href="/manager" style={S.nav}>{tr("Cleaning Tasks — Live")}</a>
           <a href="/coordinator" style={S.nav}>{tr("Check-in Readiness")}</a>
         </div>

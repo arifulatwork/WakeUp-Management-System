@@ -4,6 +4,7 @@ import Logo from "@/components/Logo";
 import { useEffect, useState } from "react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useI18n } from "@/lib/i18n";
+import AdminLink from "@/components/AdminLink";
 import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
 import { SortTh, useSort } from "@/components/ui";
 import { applyDir, cmpText, PRIORITY_RANK, TASK_STATUS_RANK, taskWhen } from "@/lib/sort";
@@ -102,6 +103,7 @@ export default function ManagerDashboard() {
           <button style={{ ...navLink, background: "var(--ink)", color: "#fff", border: "none", cursor: "pointer" }} onClick={() => setTaskEd({ task: null })}>
             + {tr("New task")}
           </button>
+          <AdminLink />
           <a href="/coordinator" style={navLink}>{tr("Check-in Readiness")}</a>
           <a href="/ops" style={navLink}>{tr("Ops Overview")}</a>
           <button
