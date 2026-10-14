@@ -9,7 +9,8 @@ import { useRouter } from "next/navigation";
 import { PhotoPicker, PhotoStrip } from "@/components/Photos";
 import AppFooter from "@/components/AppFooter";
 import { HouseThumb, HouseGallery } from "@/components/HouseMedia";
-import { DONE_TASK, PRIORITY_RANK, taskWhen, cmpText } from "@/lib/sort";
+import { DONE_TASK, PRIORITY_RANK, taskWhen, cmpText, dayKey } from "@/lib/sort";
+import { MEDIA_ENABLED } from "@/lib/features";
 
 type Task = {
   id: string;
@@ -42,8 +43,21 @@ export default function CleanerApp() {
   const [materialsText, setMaterialsText] = useState("");
   const [materialsSubmitting, setMaterialsSubmitting] = useState(false);
   const [materialsDone, setMaterialsDone] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const { tr, ev } = useI18n();
   const router = useRouter();
+
+  // A short message at the top when the server refused something (instead of failing silently).
+  function showError(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 4000);
+  }
+  const toastEl = toast ? (
+    <div role="alert" style={{ position: "fixed", top: 10, left: 12, right: 12, maxWidth: 356, margin: "0 auto", zIndex: 50,
+      background: "var(--red-bg)", color: "var(--red)", border: "1px solid var(--red)", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, fontWeight: 600 }}>
+      {toast}
+    </div>
+  ) : null;
 
   useEffect(() => {
     const id = localStorage.getItem("workerId");
@@ -80,24 +94,35 @@ export default function CleanerApp() {
 
   async function startTask(task: Task) {
     setActiveTask({ ...task, status: "IN_PROGRESS" }); // optimistic
-    await queueFetch(`/api/tasks/${task.id}`, {
+    const r = await queueFetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
       body: JSON.stringify({ action: "start" }),
     });
+    if (!r.ok) { setActiveTask(task); showError(tr("Could not save. Please try again.")); }
     if (workerId) loadTasks(workerId);
   }
 
   async function toggleCheck(task: Task, index: number) {
-    // Optimistic local toggle first — works even fully offline.
+    // Optimistic local change first — works even fully offline.
     const current = activeTask?.checklistData?.checklist ?? [];
-    const next = current.map((item, i) => (i === index ? { ...item, done: !item.done } : item));
+    const done = !current[index]?.done;
+    const next = current.map((item, i) => (i === index ? { ...item, done } : item));
     setActiveTask({ ...task, checklistData: { ...task.checklistData, checklist: next } });
 
+    // Sends the wanted value (done = true/false), not "flip it", so a repeated or
+    // replayed request can never undo a tick.
     const result = await queueFetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ action: "toggleCheck", index }),
+      body: JSON.stringify({ action: "setCheck", index, done }),
     });
     if (!result.queued) {
+      if (!result.ok) {
+        // The server said no: go back to what it has, never replace the job with an error.
+        setActiveTask((a) => (a && a.id === task.id ? task : a));
+        showError(tr("Could not save. Please try again."));
+        if (workerId) loadTasks(workerId);
+        return;
+      }
       const updated = await result.json();
       // The server's reply has no "house" attached, so keep the one we already have.
       setActiveTask((a) => ({ ...updated, house: updated.house ?? a?.house ?? task.house }));
@@ -105,21 +130,31 @@ export default function CleanerApp() {
   }
 
   async function markReady(task: Task) {
+    // Ask before sending a job that looks unfinished (nothing is blocked — some items may not apply).
+    const open = (task.checklistData?.checklist ?? []).filter((i) => !i.done).length;
+    const noPhoto = MEDIA_ENABLED && !(task.checklistData?.photos ?? []).length;
+    const warnings: string[] = [];
+    if (open > 0) warnings.push(tr("{n} checklist items are not ticked.", { n: open }));
+    if (noPhoto) warnings.push(tr("No photo added."));
+    if (warnings.length && !window.confirm(`${warnings.join(" ")}\n${tr("Mark ready anyway?")}`)) return;
+
     setActiveTask(null); // optimistic — back to house list immediately
-    await queueFetch(`/api/tasks/${task.id}`, {
+    const r = await queueFetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
       body: JSON.stringify({ action: "complete", workerId }),
     });
+    if (!r.ok) showError(tr("Could not save. Please try again."));
     if (workerId) loadTasks(workerId);
   }
 
   // Marked ready by mistake? Take it back before the coordinator verifies.
   async function undoReady(task: Task) {
     setActiveTask(null);
-    await queueFetch(`/api/tasks/${task.id}`, {
+    const r = await queueFetch(`/api/tasks/${task.id}`, {
       method: "PATCH",
       body: JSON.stringify({ action: "undoReady" }),
     });
+    if (!r.ok) showError(tr("Could not save. Please try again."));
     if (workerId) loadTasks(workerId);
   }
 
@@ -129,20 +164,22 @@ export default function CleanerApp() {
     const patch = (t: Task): Task => ({ ...t, checklistData: { ...t.checklistData, photos: [...(t.checklistData.photos ?? []), photo] } });
     setActiveTask((a) => (a && a.id === task.id ? patch(a) : a));
     setTasks((ts) => ts.map((t) => (t.id === task.id ? patch(t) : t)));
-    await queueFetch(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ action: "addPhoto", photo }) });
+    const r = await queueFetch(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ action: "addPhoto", photo }) });
+    if (!r.ok) { showError(tr("Could not save. Please try again.")); if (workerId) loadTasks(workerId); }
   }
 
   async function removePhoto(task: Task, index: number) {
     const patch = (t: Task): Task => ({ ...t, checklistData: { ...t.checklistData, photos: (t.checklistData.photos ?? []).filter((_, i) => i !== index) } });
     setActiveTask((a) => (a && a.id === task.id ? patch(a) : a));
     setTasks((ts) => ts.map((t) => (t.id === task.id ? patch(t) : t)));
-    await queueFetch(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ action: "removePhoto", index }) });
+    const r = await queueFetch(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ action: "removePhoto", index }) });
+    if (!r.ok) { showError(tr("Could not save. Please try again.")); if (workerId) loadTasks(workerId); }
   }
 
   async function submitIssue() {
     if (!activeTask || !workerId || !issueDesc.trim()) return;
     setIssueSubmitting(true);
-    await queueFetch("/api/tickets", {
+    const r = await queueFetch("/api/tickets", {
       method: "POST",
       body: JSON.stringify({
         houseId: activeTask.houseId,
@@ -154,6 +191,7 @@ export default function CleanerApp() {
       }),
     });
     setIssueSubmitting(false);
+    if (!r.ok) { showError(tr("Could not save. Please try again.")); return; }
     setIssueDone(true);
     if (workerId) loadTasks(workerId);
   }
@@ -170,7 +208,7 @@ export default function CleanerApp() {
   async function submitMaterials() {
     if (!activeTask || !workerId || !materialsText.trim()) return;
     setMaterialsSubmitting(true);
-    await queueFetch("/api/materials", {
+    const r = await queueFetch("/api/materials", {
       method: "POST",
       body: JSON.stringify({
         houseId: activeTask.houseId,
@@ -179,6 +217,7 @@ export default function CleanerApp() {
       }),
     });
     setMaterialsSubmitting(false);
+    if (!r.ok) { showError(tr("Could not save. Please try again.")); return; }
     setMaterialsDone(true);
   }
 
@@ -197,6 +236,7 @@ export default function CleanerApp() {
     if (issueDone) {
       return (
         <main style={wrap}>
+        {toastEl}
           <div style={{ textAlign: "center", padding: "60px 10px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{tr("Ticket submitted")}</div>
             <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 20 }}>
@@ -210,6 +250,7 @@ export default function CleanerApp() {
     }
     return (
       <main style={wrap}>
+        {toastEl}
         <button style={backBtn} onClick={closeIssueScreen}>&larr; {tr("Back")}</button>
         <h1 style={{ fontSize: 17, margin: "10px 0 2px" }}>{tr("Report an Issue")}</h1>
         <p style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14 }}>
@@ -262,6 +303,7 @@ export default function CleanerApp() {
     if (materialsDone) {
       return (
         <main style={wrap}>
+        {toastEl}
           <div style={{ textAlign: "center", padding: "60px 10px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{tr("Request sent")}</div>
             <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 20 }}>
@@ -275,6 +317,7 @@ export default function CleanerApp() {
     }
     return (
       <main style={wrap}>
+        {toastEl}
         <button style={backBtn} onClick={closeMaterialsScreen}>&larr; {tr("Back")}</button>
         <h1 style={{ fontSize: 17, margin: "10px 0 2px" }}>{tr("Request Products / Materials")}</h1>
         <p style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14 }}>{activeTask.house.name}</p>
@@ -301,8 +344,11 @@ export default function CleanerApp() {
   // --- Task detail / checklist screen ---
   if (activeTask) {
     const checklist = activeTask.checklistData?.checklist ?? [];
+    // A job must be started before it can be ticked off or marked ready.
+    const notStarted = activeTask.status === "ASSIGNED" || activeTask.status === "SCHEDULED";
     return (
       <main style={wrap}>
+        {toastEl}
         <button style={backBtn} onClick={() => setActiveTask(null)}>&larr; {tr("Back")}</button>
         <h1 style={{ fontSize: 17, margin: "10px 0 2px" }}>{activeTask.house.name}</h1>
         <p style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14 }}>
@@ -323,7 +369,7 @@ export default function CleanerApp() {
 
         <div style={{ marginTop: 12 }}>
           {checklist.map((item, i) => (
-            <button key={i} style={checkRow} onClick={() => toggleCheck(activeTask, i)}>
+            <button key={i} style={{ ...checkRow, ...(notStarted ? { opacity: 0.55 } : {}) }} disabled={notStarted} onClick={() => toggleCheck(activeTask, i)}>
               <span style={checkbox(item.done)}>{item.done ? "✓" : ""}</span>
               {tr(item.label)}
             </button>
@@ -338,7 +384,7 @@ export default function CleanerApp() {
           <button style={ghostBtn} onClick={() => undoReady(activeTask)}>
             ↩ {tr("Undo ready — keep cleaning")}
           </button>
-        ) : (
+        ) : notStarted ? null : (
           <button style={primaryBtn} onClick={() => markReady(activeTask)}>
             ✓ {tr("Mark ready for check-in")}
           </button>
@@ -351,7 +397,11 @@ export default function CleanerApp() {
   // --- House list screen ---
   // Order a cleaner actually works in: the job in progress first, then what's
   // next by day + time (urgent first if two share a time), finished jobs last.
-  const sortedTasks = [...tasks].sort((a, b) => {
+  // Finished jobs from earlier days are history: hide them. Jobs for later days go under "Upcoming".
+  const today = dayKey(new Date());
+  const dk = (t: Task) => dayKey(t.scheduledDate);
+  const visible = tasks.filter((t) => !(DONE_TASK.includes(t.status) && dk(t) < today));
+  const sortedTasks = [...visible].sort((a, b) => {
     const done = (t: Task) => (DONE_TASK.includes(t.status) ? 1 : 0);
     const current = (t: Task) => (t.status === "IN_PROGRESS" ? 0 : 1);
     return (
@@ -361,37 +411,48 @@ export default function CleanerApp() {
       (PRIORITY_RANK[a.priority ?? "YELLOW"] ?? 2) - (PRIORITY_RANK[b.priority ?? "YELLOW"] ?? 2)
     );
   });
+  const todays = sortedTasks.filter((t) => dk(t) <= today); // today + anything overdue and unfinished
+  const upcoming = sortedTasks.filter((t) => dk(t) > today).sort((a, b) => cmpText(taskWhen(a), taskWhen(b)));
+
+  const card = (task: Task) => (
+    <button key={task.id} style={houseCard} onClick={() => setActiveTask(task)}>
+      <HouseThumb houseId={task.houseId} house={task.house} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 700, fontSize: 13 }}>
+          <span>{task.house.name}</span>
+          <span style={statusBadge(task.status)}>{ev(task.status)}</span>
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 3 }}>
+          {dk(task) !== today ? `${dk(task)} · ` : ""}{task.scheduledTime} · {task.cleaningTypes.map(ev).join(", ")}
+        </div>
+        <a
+          href={`https://maps.google.com/?q=${encodeURIComponent(task.house.address)}`}
+          target="_blank"
+          style={{ fontSize: 10.5, color: "var(--green-dark)" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          📍 {tr("Open in Google Maps")}
+        </a>
+      </div>
+    </button>
+  );
 
   return (
     <main style={wrap}>
+      {toastEl}
       <FieldHeader />
       <h1 style={{ fontSize: 17, marginBottom: 2 }}>{tr("My Houses — Today")}</h1>
       <p style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14 }}>
-        {tr("{n} assigned", { n: tasks.length })}
+        {tr("{n} assigned", { n: todays.length })}
       </p>
-      {sortedTasks.map((task) => (
-        <button key={task.id} style={houseCard} onClick={() => setActiveTask(task)}>
-          <HouseThumb houseId={task.houseId} house={task.house} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontWeight: 700, fontSize: 13 }}>
-              <span>{task.house.name}</span>
-              <span style={statusBadge(task.status)}>{ev(task.status)}</span>
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 3 }}>
-              {task.scheduledTime} · {task.cleaningTypes.map(ev).join(", ")}
-            </div>
-            <a
-              href={`https://maps.google.com/?q=${encodeURIComponent(task.house.address)}`}
-              target="_blank"
-              style={{ fontSize: 10.5, color: "var(--green-dark)" }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              📍 {tr("Open in Google Maps")}
-            </a>
-          </div>
-        </button>
-      ))}
-      {tasks.length === 0 && (
+      {todays.map(card)}
+      {upcoming.length > 0 && (
+        <>
+          <p style={{ fontSize: 11.5, fontWeight: 700, color: "var(--ink-soft)", margin: "16px 0 8px" }}>{tr("Upcoming")}</p>
+          {upcoming.map(card)}
+        </>
+      )}
+      {visible.length === 0 && (
         <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>
           <p>{tr("No tasks assigned yet.")}</p>
           {process.env.NEXT_PUBLIC_DEMO_MODE !== "false" && (

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePerm, actingWorkerId } from "@/lib/guard";
+import { requirePerm, actingWorkerId, currentSession } from "@/lib/guard";
 import { logAudit, changedFields } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
 import { isValidPhoto, MAX_PHOTOS_PER_TASK } from "@/lib/photoValidation";
@@ -33,6 +33,16 @@ export async function PATCH(
     return NextResponse.json({ error: "task not found" }, { status: 404 });
   }
 
+  // A cleaner / maintenance worker may only touch a job that is assigned to THEM.
+  // (Office roles keep full access, including "open the app as this worker".)
+  const FIELD_ACTIONS = ["start", "toggleCheck", "setCheck", "complete", "markIssue", "undoReady", "addPhoto", "removePhoto"];
+  if (FIELD_ACTIONS.includes(body.action)) {
+    const who = await currentSession(req);
+    if (who?.role === "worker" && task.assignedWorkerId !== who.workerId) {
+      return NextResponse.json({ error: "this job is not assigned to you" }, { status: 403 });
+    }
+  }
+
   // Audit the actions that matter (checklist ticks and photos are too noisy to log).
   const AUDITED: Record<string, string> = {
     start: "Started cleaning", complete: "Marked ready for check-in", undoReady: "Took back ready for check-in",
@@ -44,8 +54,18 @@ export async function PATCH(
   const refused = body.action === "undoReady" && !["TO_BE_VERIFIED", "COMPLETED"].includes(task.status);
   if (AUDITED[body.action] && !refused) await audit(AUDITED[body.action]);
 
+  // A job has to be started before it can be ticked off or marked ready.
+  const NOT_STARTED = ["ASSIGNED", "SCHEDULED"];
+  if ((body.action === "complete" || body.action === "toggleCheck" || body.action === "setCheck") && NOT_STARTED.includes(task.status)) {
+    return NextResponse.json({ error: "start the job first" }, { status: 409 });
+  }
+
   switch (body.action) {
     case "start": {
+      // Starting again must not reopen a job that is already finished or waiting for review.
+      if (!NOT_STARTED.includes(task.status) && task.status !== "ON_HOLD") {
+        return NextResponse.json(task);
+      }
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { status: "IN_PROGRESS", startedAt: new Date() },
@@ -61,6 +81,20 @@ export async function PATCH(
           ...checklist[body.index],
           done: !checklist[body.index].done,
         };
+      }
+      const updated = await db.cleaningTask.update({
+        where: { id: params.id },
+        data: { checklistData: { ...data, checklist } },
+      });
+      return NextResponse.json(updated);
+    }
+
+    // Sets one checklist item to an exact value (safe to repeat; unlike toggleCheck it can't flip back).
+    case "setCheck": {
+      const data = (task.checklistData as any) ?? { checklist: [], photos: [] };
+      const checklist = [...(data.checklist ?? [])];
+      if (typeof body.index === "number" && checklist[body.index] && typeof body.done === "boolean") {
+        checklist[body.index] = { ...checklist[body.index], done: body.done };
       }
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
