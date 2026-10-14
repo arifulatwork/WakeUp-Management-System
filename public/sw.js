@@ -15,7 +15,7 @@
 //    Safari, which doesn't support the Background Sync API this
 //    service worker would otherwise need for queued writes).
 
-const CACHE_NAME = "wakeup-shell-v3";
+const CACHE_NAME = "wakeup-shell-v4";
 const APP_SHELL = [
   "/",
   "/login",
@@ -92,6 +92,8 @@ self.addEventListener("push", (event) => {
     icon: "/icon-192.png",
     badge: "/icon-192.png",
     data: { url: data.url || "/" },
+    vibrate: [200, 100, 200], // buzz on phones that allow it; the sound itself is the phone's notification sound
+    silent: false,
   };
   if (data.tag) {
     options.tag = data.tag;

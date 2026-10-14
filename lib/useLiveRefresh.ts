@@ -10,7 +10,7 @@ import { useEffect, useRef } from "react";
 // While the live connection is up there is only a slow safety poll (60 s). If it drops
 // (bad signal, server restart) the screen falls back to polling every 8 s, and
 // reloads once when the connection comes back.
-const IGNORED_BY_DEFAULT = new Set(["auditLog", "pushSubscription"]);
+const IGNORED_BY_DEFAULT = new Set(["auditLog", "pushSubscription", "notification"]);
 
 export function useLiveRefresh(load: () => void, opts: { models?: string[] } = {}) {
   const latest = useRef(load);

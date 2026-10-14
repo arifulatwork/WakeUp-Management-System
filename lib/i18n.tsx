@@ -40,6 +40,11 @@ const ROWS: Row[] = [
   // ---- notifications bell / footer / apartment media ----
   ["Notifications", "Notificações", "Notificaciones", "Notifications", "Notifiche", "Сповіщення"],
   ["Notifications are not set up on the server yet.", "As notificações ainda não estão configuradas no servidor.", "Las notificaciones aún no están configuradas en el servidor.", "Les notifications ne sont pas encore configurées sur le serveur.", "Le notifiche non sono ancora configurate sul server.", "Сповіщення на сервері ще не налаштовано."],
+  ["No notifications yet", "Ainda sem notificações", "Aún no hay notificaciones", "Aucune notification pour le moment", "Ancora nessuna notifica", "Сповіщень ще немає"],
+  ["Mark all as read", "Marcar tudo como lido", "Marcar todo como leído", "Tout marquer comme lu", "Segna tutto come letto", "Позначити все прочитаним"],
+  ["Sound on", "Som ligado", "Sonido activado", "Son activé", "Suono attivo", "Звук увімкнено"],
+  ["Sound off", "Som desligado", "Sonido desactivado", "Son désactivé", "Suono disattivato", "Звук вимкнено"],
+  ["Phone alerts", "Alertas no telemóvel", "Alertas en el móvil", "Alertes sur le téléphone", "Avvisi sul telefono", "Сповіщення на телефоні"],
   ["All rights reserved.", "Todos os direitos reservados.", "Todos los derechos reservados.", "Tous droits réservés.", "Tutti i diritti riservati.", "Усі права захищено."],
   ["Apartment photo", "Foto do apartamento", "Foto del apartamento", "Photo de l'appartement", "Foto dell'appartamento", "Фото квартири"],
   ["Apartment photo / video", "Foto / vídeo do apartamento", "Foto / vídeo del apartamento", "Photo / vidéo de l'appartement", "Foto / video dell'appartamento", "Фото / відео квартири"],

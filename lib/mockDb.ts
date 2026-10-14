@@ -54,6 +54,7 @@ const DEFAULTS: Record<string, () => Row> = {
   materialRequest: () => ({ status: "PENDING", createdAt: new Date(), fulfilledAt: null }),
   auditLog: () => ({ actorId: null, entityId: null, template: null, params: null, createdAt: new Date() }),
   pushSubscription: () => ({ createdAt: new Date() }),
+  notification: () => ({ params: null, url: null, readAt: null, createdAt: new Date() }),
 };
 
 let idCounter = 1000;
@@ -296,7 +297,7 @@ function buildSeed(): Tables {
       items: "Dishwasher tablets", status: "FULFILLED", createdAt: new Date(now - 6 * HOUR), fulfilledAt: new Date(now - 5 * HOUR) },
   ];
 
-  return { worker: workers, house: houses, cleaningTask: tasks, maintenanceTicket: tickets, materialRequest: materials, houseMedia, auditLog: [], pushSubscription: [] };
+  return { worker: workers, house: houses, cleaningTask: tasks, maintenanceTicket: tickets, materialRequest: materials, houseMedia, auditLog: [], pushSubscription: [], notification: [] };
 }
 
 // ---------- live simulator ----------
@@ -399,6 +400,7 @@ function tick(t: Tables) {
 function housekeeping(t: Tables) {
   const now = new Date();
   if (t.auditLog.length > 500) t.auditLog = t.auditLog.slice(-500);
+  if (t.notification && t.notification.length > 1000) t.notification = t.notification.slice(-1000);
   const simTasks = t.cleaningTask.filter((r) => SIM_CLEANERS.includes(r.assignedWorkerId));
 
   // Keep the cleaners supplied with work
@@ -466,7 +468,7 @@ export function resetDemo() {
   const s = store();
   const fresh = buildSeed();
   // Phones that subscribed to notifications stay subscribed through a demo reset.
-  for (const k of Object.keys(fresh)) if (k !== "pushSubscription") s.tables[k] = fresh[k];
+  for (const k of Object.keys(fresh)) if (k !== "pushSubscription" && k !== "notification") s.tables[k] = fresh[k];
   notifyChange("worker", "house", "cleaningTask", "maintenanceTicket", "materialRequest", "auditLog");
 }
 
@@ -489,6 +491,7 @@ export const mockDb = {
   materialRequest: makeModel(tablesProxy, "materialRequest"),
   auditLog: makeModel(tablesProxy, "auditLog"),
   pushSubscription: makeModel(tablesProxy, "pushSubscription"),
+  notification: makeModel(tablesProxy, "notification"),
 };
 
 // Demo only: a freshly onboarded cleaner would otherwise open an empty app.

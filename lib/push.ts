@@ -41,7 +41,6 @@ export type PushTarget = {
 };
 
 export async function sendPush(target: PushTarget, key: PushKey, params: Record<string, string | number> = {}, tag?: string) {
-  if (!pushConfigured()) return;
   const workers = await db.worker.findMany({
     where: target.workerIds ? { id: { in: target.workerIds } } : target.roles ? { role: { in: target.roles } } : undefined,
   });
@@ -49,6 +48,20 @@ export async function sendPush(target: PushTarget, key: PushKey, params: Record<
     (w: any) => (!target.area || w.area === target.area) && w.id !== target.excludeWorkerId
   );
   if (!people.length) return;
+
+  // 1. Always keep a history row per person, so the bell can list past + present
+  //    notifications even when phone push is off or not set up on the server.
+  //    (The "test" message is only for checking the phone, so it is not kept.)
+  if (key !== "test") {
+    await Promise.allSettled(
+      people.map((w: any) =>
+        db.notification.create({ data: { workerId: w.id, key, params, url: homeFor(w) } })
+      )
+    );
+  }
+
+  // 2. Then the phone push, only when configured.
+  if (!pushConfigured()) return;
   const byId = new Map<string, any>(people.map((w: any) => [w.id, w]));
   const subs = await db.pushSubscription.findMany({ where: { workerId: { in: people.map((w: any) => w.id) } } });
 

@@ -57,6 +57,7 @@ model Worker {
   ticketsAssigned MaintenanceTicket[] @relation("AssignedMaintenanceWorker")
   materialRequests MaterialRequest[]
   pushSubscriptions PushSubscription[]
+  notifications     Notification[]
 }
 
 // House — can be a permanent WakeUp property, or a temporary listing
@@ -206,4 +207,19 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([workerId])
+}
+
+// In-app notification history: one row per person per event. Shown in the bell
+// ("20 min ago", "1 hour ago") whether or not phone push is switched on.
+model Notification {
+  id        String    @id @default(cuid())
+  worker    Worker    @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId  String
+  key       String    // push text key, e.g. "ticket_new" (translated on screen)
+  params    Json?     // values for the placeholders
+  url       String?   // where tapping it should go
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([workerId, createdAt])
 }
