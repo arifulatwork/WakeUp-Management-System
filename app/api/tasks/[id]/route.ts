@@ -12,6 +12,7 @@ import type { Perm } from "@/lib/permissions";
 //   { action: "toggleCheck", index: 2 }        -> flips a checklist item
 //   { action: "complete", workerId }           -> status COMPLETED/TO_BE_VERIFIED
 //   { action: "approve" }                      -> Cristina approves -> APPROVED
+//   { action: "unapprove" }                    -> APPROVED taken back -> TO_BE_VERIFIED
 //   { action: "markIssue" }                    -> status WITH_ISSUE
 export async function PATCH(
   req: NextRequest,
@@ -22,7 +23,7 @@ export async function PATCH(
 
   // Field actions (start / toggleCheck / complete / markIssue / undoReady) are open to the
   // cleaner's own login. Everything that manages jobs needs a signed-in role.
-  const NEED: Record<string, Perm> = { approve: "tasks.review", reopen: "tasks.review", update: "tasks.write" };
+  const NEED: Record<string, Perm> = { approve: "tasks.review", unapprove: "tasks.review", reopen: "tasks.review", update: "tasks.write" };
   if (NEED[body.action]) {
     const g = await requirePerm(req, NEED[body.action]);
     if (g.error) return g.error;
@@ -46,12 +47,14 @@ export async function PATCH(
   // Audit the actions that matter (checklist ticks and photos are too noisy to log).
   const AUDITED: Record<string, string> = {
     start: "Started cleaning", complete: "Marked ready for check-in", undoReady: "Took back ready for check-in",
-    approve: "Confirmed ready for check-in", reopen: "Sent back to the cleaner", markIssue: "Flagged with issue",
+    approve: "Confirmed ready for check-in", unapprove: "Took back approval", reopen: "Sent back to the cleaner", markIssue: "Flagged with issue",
   };
   const audit = (template: string, p: Record<string, string | number> = {}) =>
     logAudit(req, "task", params.id, body.action, template, p, body.workerId ?? task.assignedWorkerId);
   const houseName = async () => (await db.house.findUnique({ where: { id: task.houseId } }))?.name ?? "";
-  const refused = body.action === "undoReady" && !["TO_BE_VERIFIED", "COMPLETED"].includes(task.status);
+  const refused =
+    (body.action === "undoReady" && !["TO_BE_VERIFIED", "COMPLETED"].includes(task.status)) ||
+    (body.action === "unapprove" && task.status !== "APPROVED");
   if (AUDITED[body.action] && !refused) await audit(AUDITED[body.action]);
 
   // A job has to be started before it can be ticked off or marked ready.
@@ -183,6 +186,19 @@ export async function PATCH(
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { status: "APPROVED" },
+      });
+      return NextResponse.json(updated);
+    }
+
+    // Approved by mistake (or changed your mind)? Back to "To be verified" so it can be reviewed
+    // again, approved properly or sent back to the cleaner. Only for office roles (tasks.review).
+    case "unapprove": {
+      if (task.status !== "APPROVED") {
+        return NextResponse.json({ error: "task is not approved" }, { status: 409 });
+      }
+      const updated = await db.cleaningTask.update({
+        where: { id: params.id },
+        data: { status: "TO_BE_VERIFIED" },
       });
       return NextResponse.json(updated);
     }

@@ -16,6 +16,7 @@ import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
 import TicketEditor, { EdTicket } from "@/components/editors/TicketEditor";
 import HouseEditor, { EdHouseFull } from "@/components/editors/HouseEditor";
 import MaterialEditor from "@/components/editors/MaterialEditor";
+import TaskReview from "@/components/TaskReview";
 
 type Task = EdTask & { house: { id: string; name: string } };
 type Ticket = EdTicket & { house: { id: string; name: string } };
@@ -45,6 +46,7 @@ export default function CoordinatorView() {
   const [ticketEd, setTicketEd] = useState<{ ticket: Ticket | null; houseId?: string } | null>(null);
   const [houseEd, setHouseEd] = useState<{ house: EdHouseFull | null } | null>(null);
   const [matEd, setMatEd] = useState<{ houseId?: string } | null>(null);
+  const [reviewing, setReviewing] = useState<Task | null>(null); // the job being reviewed before it is confirmed
 
   const load = useCallback(async () => {
     const [t, k, h, w] = await Promise.all([
@@ -69,6 +71,11 @@ export default function CoordinatorView() {
   async function patchTask(id: string, action: string) {
     await api(`/api/tasks/${id}`, "PATCH", { action });
     load();
+  }
+  // Approved by mistake / changed your mind: back to "To be verified" (asks first).
+  async function undoApproval(id: string) {
+    if (!window.confirm(tr("Take back the approval? The job goes back to To be verified."))) return;
+    await patchTask(id, "unapprove");
   }
   async function setKey(houseId: string, keyStatus: string) {
     setHouses((hs) => hs.map((h) => (h.id === houseId ? { ...h, keyStatus } : h))); // optimistic
@@ -197,11 +204,16 @@ export default function CoordinatorView() {
                     <button style={S.small} onClick={() => setTaskEd({ task: t })}>{tr("Edit")}</button>
                     {t.status === "TO_BE_VERIFIED" && (
                       <>
-                        <button style={S.smallDark} onClick={() => patchTask(t.id, "approve")}>{tr("Confirm ready for check-in")}</button>
+                        <button style={S.smallDark} onClick={() => setReviewing(t)}>{tr("Review & confirm")}</button>
                         <button style={S.small} onClick={() => patchTask(t.id, "reopen")}>{tr("Send back")}</button>
                       </>
                     )}
-                    {t.status === "APPROVED" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#4F7A26", alignSelf: "center" }}>{tr("✓ Ready")}</span>}
+                    {t.status === "APPROVED" && (
+                      <>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: "#4F7A26", alignSelf: "center" }}>{tr("✓ Ready")}</span>
+                        <button style={S.small} onClick={() => undoApproval(t.id)}>{tr("Undo approval")}</button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -235,6 +247,18 @@ export default function CoordinatorView() {
       </div>
       {houses.length === 0 && <p style={{ color: "var(--ink-soft)", margin: 0 }}>{tr("No houses yet.")}</p>}
       </PanelCard>
+      )}
+
+      {reviewing && (
+        <TaskReview
+          task={reviewing}
+          house={houses.find((h) => h.id === reviewing.house.id)}
+          openTickets={tickets.filter((k) => k.house.id === reviewing.house.id && k.status !== "REJECTED").length}
+          confirmLabel={tr("Confirm ready for check-in")}
+          onApprove={() => patchTask(reviewing.id, "approve")}
+          onSendBack={() => patchTask(reviewing.id, "reopen")}
+          onClose={() => setReviewing(null)}
+        />
       )}
 
       {taskEd && <TaskEditor task={taskEd.task} defaultHouseId={taskEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTaskEd(null)} onSaved={done} />}

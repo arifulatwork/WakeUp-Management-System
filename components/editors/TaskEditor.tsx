@@ -16,7 +16,8 @@ export type EdTask = {
   assignedWorkerId?: string | null; assignedWorker?: { id?: string; name: string } | null;
   estimatedMinutes?: number | null; notes?: string | null;
   nextCheckIn?: string | null; materialsNeeded?: string | null;
-  checklistData?: { checklist?: { label: string; done: boolean }[]; photos?: string[] };
+  startedAt?: string | null; completedAt?: string | null;
+  checklistData?: { checklist?: { label: string; done: boolean }[]; photos?: string[]; videos?: string[] };
 };
 
 const TYPES = ["GENERAL", "CHECKOUT", "DEEP_CLEAN", "EXTRAORDINARY", "OUTDOOR", "BEDSHEET_CHANGE"];

@@ -1,3 +1,11 @@
+# Coordinator: review before approving + undo approval
+
+- The Coordinator's "Review & confirm" now opens the same review pop-up the Manager uses (new shared `components/TaskReview.tsx`): checklist ticks, timing, task notes, photos/videos (when media is on) and the automatic check. Nothing is approved until "Confirm ready for check-in" is pressed there; "Send back" is in the same pop-up.
+- New "Undo approval" button (Coordinator cards and Manager table) for approved jobs: asks first, then moves the job back to "To be verified" so it can be reviewed again, approved properly or sent back. New server action `unapprove` (office roles only, refused unless the job is Approved, written to the change history).
+- Manager screen now uses the same shared review component (no behaviour change).
+
+Changed: `app/coordinator/page.tsx`, `app/manager/page.tsx`, `app/api/tasks/[id]/route.ts`, `components/editors/TaskEditor.tsx`, `lib/i18n.tsx`. New: `components/TaskReview.tsx`. No database migration.
+
 # Spec review fixes
 
 - Task form: new cleaning type "Extraordinary"; new fields "Next check-in" (date) and "Products / materials needed". Both are saved on create AND edit (edit used to ignore the check-in date) and shown to the cleaner on the job screen.
