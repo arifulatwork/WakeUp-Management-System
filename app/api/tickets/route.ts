@@ -8,8 +8,9 @@ import { pushAsync, STAFF_ROLES } from "@/lib/push";
 import { maybePurgeTickets } from "@/lib/retention";
 
 // GET /api/tickets
-//   ?open=1       -> only tickets not yet closed (maintenance worker's queue)
-//   ?mine=1&closed=1 -> the maintenance worker's OWN closed tickets, newest first (their History)
+//   ?open=1       -> only tickets not yet closed (office screens; includes "to be verified")
+//   ?open=1&queue=1 -> the maintenance worker's queue (handed-in tickets waiting for review are left out)
+//   ?mine=1&closed=1 -> the maintenance worker's OWN finished tickets (waiting for review or closed), newest first
 //   (no params)   -> every ticket (ops overview)
 // Sorted by priority (RED first) then oldest first, matching the spec's
 // "sort requests by both entry date and severity."
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
     if (!me) return NextResponse.json({ error: "sign in required" }, { status: 401 });
     await maybePurgeTickets();
     const done = await db.maintenanceTicket.findMany({
-      where: { status: "CLOSED", assignedWorkerId: me },
+      where: { status: { in: ["TO_BE_VERIFIED", "CLOSED"] }, assignedWorkerId: me },
       include: { house: true, reportedBy: true },
     });
     done.sort((a: any, b: any) => new Date(b.closedAt ?? 0).getTime() - new Date(a.closedAt ?? 0).getTime());
@@ -38,11 +39,14 @@ export async function GET(req: NextRequest) {
 
   await maybePurgeTickets(); // six-month cleanup of closed tickets (at most hourly)
 
-  const tickets = await db.maintenanceTicket.findMany({
+  let tickets = await db.maintenanceTicket.findMany({
     where: openOnly ? { status: { not: "CLOSED" } } : undefined,
     include: { house: true, reportedBy: true, assignedWorker: true },
     orderBy: [{ reportedAt: "asc" }],
   });
+
+  // A ticket the worker already handed in is waiting for the office: not part of their queue any more.
+  if (req.nextUrl.searchParams.get("queue")) tickets = tickets.filter((t: any) => t.status !== "TO_BE_VERIFIED");
 
   const priorityRank: Record<string, number> = { RED: 0, ORANGE: 1, YELLOW: 2 };
   tickets.sort((a: { priority: string }, b: { priority: string }) => priorityRank[a.priority] - priorityRank[b.priority]);

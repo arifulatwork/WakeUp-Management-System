@@ -368,7 +368,7 @@ function tick(t: Tables) {
   const tomas = t.maintenanceTicket.filter((k) => k.assignedWorkerId === SIM_MAINT);
   const started = tomas.find((k) => k.status === "IN_PROGRESS");
   if (roll < 0.82 && started) {
-    Object.assign(started, { status: "CLOSED", closedAt: now, materialsUsed: "Misc. parts", timeSpentMinutes: 20 + Math.floor(Math.random() * 40) });
+    Object.assign(started, { status: "TO_BE_VERIFIED", closedAt: now, materialsUsed: "Misc. parts", timeSpentMinutes: 20 + Math.floor(Math.random() * 40) });
     return;
   }
   const accepted = tomas.find((k) => k.status === "ACCEPTED");

@@ -10,13 +10,16 @@ import { MEDIA_ENABLED } from "@/lib/features";
 //   { action: "accept", workerId }                        -> ACCEPTED, assigned
 //   { action: "reject" }                                   -> REJECTED
 //   { action: "start" }                                     -> IN_PROGRESS, startedAt now
-//   { action: "close", materialsUsed, timeSpentMinutes }    -> CLOSED, closedAt now
+//   { action: "close", materialsUsed, timeSpentMinutes }    -> TO_BE_VERIFIED (handed in), closedAt now;
+//     the coordinators / managers are notified to review it
+//   { action: "confirm" }                                   -> office confirms the fix -> CLOSED (reporter notified)
+//   { action: "sendBack" }                                  -> office sends it back -> IN_PROGRESS (worker notified)
 //     (closed tickets are kept 6 months, then removed — see lib/retention.ts)
 //   { action: "addPhoto", photo } / { action: "removePhoto", index }   -> photos while working
 //   { action: "addVideo", video } / { action: "removeVideo", index }   -> videos while working
 //     (kept in mediaData; refused while NEXT_PUBLIC_MEDIA_ENABLED is not "true")
-//   { action: "undoClose" }                                 -> CLOSED taken back -> IN_PROGRESS (the worker who
-//     closed it, or an office role)
+//   { action: "undoClose" }                                 -> handed in by mistake -> IN_PROGRESS (the worker,
+//     only until the office has confirmed it)
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json();
   body.workerId = await actingWorkerId(req, body.workerId);
@@ -24,8 +27,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!MEDIA_ENABLED) delete body.afterPhotoUrl;
 
   // accept / reject / start / close = the maintenance team's own app (signed in as themselves).
-  // reopen / update = management.
-  if (body.action === "reopen" || body.action === "update") {
+  // reopen / update / confirm / sendBack = management (the review of finished work).
+  if (["reopen", "update", "confirm", "sendBack"].includes(body.action)) {
     const g = await requirePerm(req, "tickets.write");
     if (g.error) return g.error;
   }
@@ -36,12 +39,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const LABELS: Record<string, string> = {
     accept: "Accepted ticket", reject: "Rejected ticket", start: "Started intervention",
     close: "Closed ticket", reopen: "Reopened ticket", undoClose: "Took back closed ticket",
+    confirm: "Confirmed ticket fixed", sendBack: "Sent ticket back to maintenance",
   };
-  // Closed by mistake: only the worker who did the job (or the office) can take it back,
-  // and only while it is still closed. Checked BEFORE the audit entry so refusals aren't logged.
+  // Review of finished work. Checked BEFORE the audit entry so refusals aren't logged.
+  if ((body.action === "confirm" || body.action === "sendBack") && ticket.status !== "TO_BE_VERIFIED") {
+    return NextResponse.json({ error: "ticket is not waiting for review" }, { status: 409 });
+  }
+  // Handed in by mistake: only the worker who did the job can take it back, and only until
+  // the office has confirmed it (after that the office sends it back with "sendBack").
   if (body.action === "undoClose") {
-    if (ticket.status !== "CLOSED") {
-      return NextResponse.json({ error: "ticket is not closed" }, { status: 409 });
+    if (ticket.status !== "TO_BE_VERIFIED") {
+      return NextResponse.json({ error: "ticket is not waiting for review" }, { status: 409 });
     }
     const who = await currentSession(req);
     if (who?.role === "worker" && ticket.assignedWorkerId !== who.workerId) {
@@ -56,8 +64,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (who?.role === "worker" && ticket.assignedWorkerId !== who.workerId) {
       return NextResponse.json({ error: "this ticket is not yours" }, { status: 403 });
     }
-    if (ticket.status === "CLOSED") {
-      return NextResponse.json({ error: "ticket is closed" }, { status: 409 });
+    if (ticket.status === "CLOSED" || ticket.status === "TO_BE_VERIFIED") {
+      return NextResponse.json({ error: "ticket is already handed in" }, { status: 409 });
     }
   }
   const badPhoto = body.action === "close" && body.afterPhotoUrl && !isValidPhoto(body.afterPhotoUrl);
@@ -94,17 +102,40 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       const updated = await db.maintenanceTicket.update({
         where: { id: params.id },
         data: {
-          status: "CLOSED",
+          status: "TO_BE_VERIFIED",
           closedAt: new Date(),
           materialsUsed: body.materialsUsed ?? null,
           timeSpentMinutes: body.timeSpentMinutes ?? null,
           ...(body.afterPhotoUrl ? { afterPhotoUrl: body.afterPhotoUrl } : {}),
         },
       });
-      // Tell whoever reported it that it is fixed.
+      // Tell the coordinators / managers the work is done and waiting for their check.
+      const house = await db.house.findUnique({ where: { id: ticket.houseId } });
+      pushAsync({ roles: STAFF_ROLES }, "ticket_review", { house: house?.name ?? "" }, `ticket-review-${params.id}`);
+      return NextResponse.json(updated);
+    }
+    // The office checked the work: the ticket is really closed now. Only now is the reporter told.
+    case "confirm": {
+      const updated = await db.maintenanceTicket.update({
+        where: { id: params.id },
+        data: { status: "CLOSED", closedAt: ticket.closedAt ?? new Date() },
+      });
       if (ticket.reportedById && ticket.reportedById !== body.workerId) {
         const house = await db.house.findUnique({ where: { id: ticket.houseId } });
         pushAsync({ workerIds: [ticket.reportedById] }, "ticket_closed", { house: house?.name ?? "" }, `closed-${params.id}`);
+      }
+      return NextResponse.json(updated);
+    }
+    // The fix isn't good enough: back to the same worker (or the open queue if nobody is assigned).
+    // Materials, time and photos/videos stay so nothing has to be typed again.
+    case "sendBack": {
+      const updated = await db.maintenanceTicket.update({
+        where: { id: params.id },
+        data: { status: ticket.assignedWorkerId ? "IN_PROGRESS" : "OPEN", closedAt: null },
+      });
+      if (ticket.assignedWorkerId) {
+        const house = await db.house.findUnique({ where: { id: ticket.houseId } });
+        pushAsync({ workerIds: [ticket.assignedWorkerId] }, "ticket_back", { house: house?.name ?? "" }, `ticket-back-${params.id}`);
       }
       return NextResponse.json(updated);
     }
@@ -168,8 +199,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (f.status) {
         data.status = f.status;
         if (f.status === "IN_PROGRESS" && !ticket.startedAt) data.startedAt = new Date();
-        if (f.status === "CLOSED" && !ticket.closedAt) data.closedAt = new Date();
-        if (f.status !== "CLOSED") data.closedAt = null;
+        if (["CLOSED", "TO_BE_VERIFIED"].includes(f.status) && !ticket.closedAt) data.closedAt = new Date();
+        if (!["CLOSED", "TO_BE_VERIFIED"].includes(f.status)) data.closedAt = null;
       }
       const updated = await db.maintenanceTicket.update({
         where: { id: params.id },

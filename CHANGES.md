@@ -1,3 +1,13 @@
+# Maintenance: review after the work is done
+
+- When maintenance taps "Close ticket" the ticket now goes to **To be verified** (it is no longer closed straight away). Coordinators / managers / admins get a notification ("Repair finished — please check").
+- Ops screen: tickets waiting for review show the time / materials and **Confirm fixed** or **Send back** buttons. The same buttons are in the ticket pop-up (Coordinator, Manager, Ops).
+- **Confirm fixed** closes the ticket and only then tells the person who reported it. **Send back** returns it to the same maintenance worker (In progress, nothing to retype) and notifies them.
+- The worker sees it under "Done tickets" as "Waiting for review"; "Undo close — keep working" works only until the office has confirmed it. Photos / videos can't be added once it is handed in.
+- New actions `confirm` and `sendBack` (office roles only, only for tickets waiting for review, written to the change history). `GET /api/tickets?open=1&queue=1` is the worker's queue (handed-in tickets left out).
+
+Changed: `app/api/tickets/route.ts`, `app/api/tickets/[id]/route.ts`, `app/maintenance/page.tsx`, `app/ops/page.tsx`, `components/editors/TicketEditor.tsx`, `lib/pushText.ts`, `lib/i18n.tsx`, `lib/mockDb.ts`. No database migration (status is a plain text column).
+
 # Maintenance app: done-ticket history + undo close
 
 - `/maintenance` now has a "Done tickets" list under the open queue: the worker's own closed tickets, newest first, with closing time, time spent and materials ("Show more" after 15). Closed tickets are kept 6 months (existing retention rule).

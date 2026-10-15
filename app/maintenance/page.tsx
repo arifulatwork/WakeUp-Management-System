@@ -55,7 +55,7 @@ export default function MaintenanceApp() {
   }, [active?.id, active?.status, active?.startedAt]);
 
   async function load() {
-    const res = await fetch("/api/tickets?open=1");
+    const res = await fetch("/api/tickets?open=1&queue=1");
     setTickets(await res.json());
     loadDone();
   }
@@ -72,12 +72,12 @@ export default function MaintenanceApp() {
   // update locally, queued-and-synced-later if there's no signal where
   // the maintenance worker is fixing the problem.
   const nextStatus: Record<string, string> = {
-    accept: "ACCEPTED", reject: "REJECTED", start: "IN_PROGRESS", close: "CLOSED",
+    accept: "ACCEPTED", reject: "REJECTED", start: "IN_PROGRESS", close: "TO_BE_VERIFIED",
   };
 
   async function act(ticket: Ticket, action: string, extra: Record<string, unknown> = {}) {
     const optimisticStatus = nextStatus[action] ?? ticket.status;
-    setActive(optimisticStatus === "CLOSED" || optimisticStatus === "REJECTED" ? null : {
+    setActive(optimisticStatus === "TO_BE_VERIFIED" || optimisticStatus === "REJECTED" ? null : {
       ...ticket, status: optimisticStatus,
       ...(action === "start" ? { startedAt: new Date().toISOString() } : {}), // works offline too
     });
@@ -88,7 +88,7 @@ export default function MaintenanceApp() {
     });
     if (!result.queued) {
       const updated = await result.json();
-      setActive(updated.status === "CLOSED" || updated.status === "REJECTED" ? null : { ...ticket, ...updated });
+      setActive(updated.status === "TO_BE_VERIFIED" || updated.status === "REJECTED" ? null : { ...ticket, ...updated });
     }
     load();
   }
@@ -214,7 +214,9 @@ export default function MaintenanceApp() {
         <div key={t.id} style={{ ...card, cursor: "default" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 13 }}>
             <span>{t.house.name} · {tr(t.area)}</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--green-dark)" }}>✓ {ev("CLOSED")}</span>
+            {t.status === "TO_BE_VERIFIED"
+              ? <span style={{ fontSize: 10, fontWeight: 700, color: "#3B6E9E" }}>⏳ {tr("Waiting for review")}</span>
+              : <span style={{ fontSize: 10, fontWeight: 700, color: "var(--green-dark)" }}>✓ {ev("CLOSED")}</span>}
           </div>
           <div style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 3 }}>{tr(t.description)}</div>
           <div style={{ fontSize: 10, color: "var(--ink-soft)", marginTop: 2 }}>
@@ -224,9 +226,12 @@ export default function MaintenanceApp() {
           {t.materialsUsed && <div style={{ fontSize: 10, color: "var(--ink-soft)", marginTop: 2 }}>{tr("Materials: {materials}", { materials: t.materialsUsed })}</div>}
           <PhotoStrip photos={t.mediaData?.photos ?? []} size={56} />
           <VideoStrip videos={t.mediaData?.videos ?? []} />
-          <button style={{ ...ghostBtn, marginTop: 8, padding: 8, fontSize: 12 }} onClick={() => undoClose(t)}>
-            ↩ {tr("Undo close — keep working")}
-          </button>
+          {/* Only until the office has confirmed it; after that the office sends it back if needed. */}
+          {t.status === "TO_BE_VERIFIED" && (
+            <button style={{ ...ghostBtn, marginTop: 8, padding: 8, fontSize: 12 }} onClick={() => undoClose(t)}>
+              ↩ {tr("Undo close — keep working")}
+            </button>
+          )}
         </div>
       ))}
       {done.length > doneLimit && (

@@ -167,6 +167,12 @@ const ROWS: Row[] = [
 
   // ---- maintenance app ----
   ["Add after-work video", "Adicionar vídeo depois do trabalho", "Añadir vídeo después del trabajo", "Ajouter une vidéo après le travail", "Aggiungi video dopo il lavoro", "Додати відео після роботи"],
+  ["Review", "Rever", "Revisar", "Vérifier", "Verifica", "Перевірити"],
+  ["Waiting for review", "A aguardar verificação", "Pendiente de revisión", "En attente de vérification", "In attesa di verifica", "Очікує перевірки"],
+  ["Confirm fixed", "Confirmar resolvido", "Confirmar resuelto", "Confirmer la réparation", "Conferma risolto", "Підтвердити виправлення"],
+  ["Maintenance finished this ticket — please check the work.", "A manutenção terminou este pedido — verifique o trabalho.", "Mantenimiento terminó este ticket: revisa el trabajo.", "La maintenance a terminé ce ticket — vérifiez le travail.", "La manutenzione ha finito questo ticket — verifica il lavoro.", "Технічна служба завершила заявку — перевірте роботу."],
+  ["Confirmed ticket fixed", "Pedido confirmado como resolvido", "Ticket confirmado como resuelto", "Ticket confirmé comme réparé", "Ticket confermato come risolto", "Заявку підтверджено як виконану"],
+  ["Sent ticket back to maintenance", "Pedido devolvido à manutenção", "Ticket devuelto a mantenimiento", "Ticket renvoyé à la maintenance", "Ticket rimandato alla manutenzione", "Заявку повернено технічній службі"],
   ["Done tickets", "Pedidos concluídos", "Tickets terminados", "Tickets terminés", "Ticket completati", "Виконані заявки"],
   ["Closed {time}", "Fechado {time}", "Cerrado {time}", "Clôturé {time}", "Chiuso {time}", "Закрито {time}"],
   ["Materials: {materials}", "Materiais: {materials}", "Materiales: {materials}", "Matériel : {materials}", "Materiali: {materials}", "Матеріали: {materials}"],

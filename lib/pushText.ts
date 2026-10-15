@@ -38,6 +38,20 @@ export const PUSH_TEXT = {
     title: ["Materials requested", "Materiais pedidos", "Materiales solicitados", "Matériel demandé", "Materiali richiesti", "Запит матеріалів"],
     body: ["{house}: {items}", "{house}: {items}", "{house}: {items}", "{house} : {items}", "{house}: {items}", "{house}: {items}"],
   },
+  ticket_review: {
+    title: ["Repair finished — please check", "Reparação concluída — verifique", "Reparación terminada: revísala", "Réparation terminée — à vérifier", "Riparazione finita — da verificare", "Ремонт завершено — перевірте"],
+    body: [
+      "{house} is waiting for your check.", "{house} aguarda a sua verificação.", "{house} espera tu revisión.",
+      "{house} attend votre vérification.", "{house} attende la tua verifica.", "{house} чекає на вашу перевірку.",
+    ],
+  },
+  ticket_back: {
+    title: ["Repair sent back", "Reparação devolvida", "Reparación devuelta", "Réparation renvoyée", "Riparazione rimandata", "Ремонт повернено"],
+    body: [
+      "{house}: please check it again.", "{house}: por favor verifique de novo.", "{house}: por favor revísalo de nuevo.",
+      "{house} : merci de vérifier à nouveau.", "{house}: controlla di nuovo, per favore.", "{house}: будь ласка, перевірте ще раз.",
+    ],
+  },
   ticket_closed: {
     title: ["Issue fixed", "Problema resolvido", "Incidencia resuelta", "Problème résolu", "Problema risolto", "Проблему вирішено"],
     body: [

@@ -163,9 +163,25 @@ export default function OpsOverview() {
                 </div>
                 <div style={sub}>{tr(t.area)} — {tr(t.description)}</div>
                 {t.photoUrl && <PhotoStrip photos={[t.photoUrl]} size={44} />}
+                {t.status === "TO_BE_VERIFIED" && (
+                  <div style={sub}>
+                    {tr("Maintenance finished this ticket — please check the work.")}
+                    {(t.timeSpentMinutes || t.materialsUsed) ? ` ${t.timeSpentMinutes ? t.timeSpentMinutes + " min" : ""}${t.materialsUsed ? " · " + t.materialsUsed : ""}` : ""}
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-                  <button style={S.small} onClick={() => setTicketEd({ ticket: t })}>{tr("Edit")}</button>
-                  <button style={S.small} onClick={() => ticketStatus(t.id, "reject")}>{tr("Reject")}</button>
+                  {t.status === "TO_BE_VERIFIED" ? (
+                    <>
+                      <button style={S.smallDark} onClick={() => ticketStatus(t.id, "confirm")}>✓ {tr("Confirm fixed")}</button>
+                      <button style={S.small} onClick={() => ticketStatus(t.id, "sendBack")}>{tr("Send back")}</button>
+                      <button style={S.small} onClick={() => setTicketEd({ ticket: t })}>{tr("Review")}</button>
+                    </>
+                  ) : (
+                    <>
+                      <button style={S.small} onClick={() => setTicketEd({ ticket: t })}>{tr("Edit")}</button>
+                      <button style={S.small} onClick={() => ticketStatus(t.id, "reject")}>{tr("Reject")}</button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

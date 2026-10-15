@@ -18,7 +18,7 @@ export type EdTicket = {
 };
 
 const AREAS = ["Bathroom", "Kitchen", "Bedroom", "Living room", "Outdoor", "Other"];
-const STATUSES = ["OPEN", "ACCEPTED", "REJECTED", "IN_PROGRESS", "CLOSED"];
+const STATUSES = ["OPEN", "ACCEPTED", "REJECTED", "IN_PROGRESS", "TO_BE_VERIFIED", "CLOSED"];
 
 // Report a new maintenance issue, or edit / reassign / close / reopen / delete one.
 export default function TicketEditor({ ticket, houses, workers, defaultHouseId, onClose, onSaved }: {
@@ -62,6 +62,19 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
       } else {
         await api("/api/tickets", "POST", { houseId, area, priority, description: description.trim(), photoUrl: photo, reportedById: me });
       }
+      onSaved();
+    } catch (e) {
+      setError(saveError(e, tr));
+      setSaving(false);
+    }
+  }
+
+  // Review of finished work: confirm it (ticket is closed, reporter told) or send it back to maintenance.
+  async function review(action: "confirm" | "sendBack") {
+    setSaving(true);
+    setError("");
+    try {
+      await api(`/api/tickets/${ticket!.id}`, "PATCH", { action });
       onSaved();
     } catch (e) {
       setError(saveError(e, tr));
@@ -127,6 +140,21 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
           <label style={S.label}>{tr("After-work photo")}</label>
           <PhotoStrip photos={ticket!.mediaData?.photos ?? []} size={84} />
           <VideoStrip videos={ticket!.mediaData?.videos ?? []} />
+        </div>
+      )}
+
+      {editing && ticket!.status === "TO_BE_VERIFIED" && (
+        <div style={{ background: "#E6F0F8", borderRadius: 10, padding: "10px 12px", margin: "10px 0" }}>
+          <p style={{ fontSize: 12.5, fontWeight: 700, margin: "0 0 4px" }}>{tr("Maintenance finished this ticket — please check the work.")}</p>
+          <p style={{ fontSize: 11.5, color: "var(--ink-soft)", margin: "0 0 8px" }}>
+            {ticket!.assignedWorker?.name ? `${ticket!.assignedWorker.name} · ` : ""}
+            {ticket!.timeSpentMinutes ? `${ticket!.timeSpentMinutes} min · ` : ""}
+            {ticket!.materialsUsed ?? ""}
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" disabled={saving} style={{ ...S.smallDark, flex: 1, padding: "9px 10px" }} onClick={() => review("confirm")}>✓ {tr("Confirm fixed")}</button>
+            <button type="button" disabled={saving} style={{ ...S.small, flex: 1, padding: "9px 10px" }} onClick={() => review("sendBack")}>{tr("Send back")}</button>
+          </div>
         </div>
       )}
 
