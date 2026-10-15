@@ -62,3 +62,14 @@ input, select, textarea { font-family: inherit; }
   .panel-topbar { padding: 10px 14px; }
   .panel-content { padding: 14px 14px 90px; }
 }
+
+/* Hide the browser's built-in password reveal/clear buttons (Edge/IE) — the login page has its own */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-contacts-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+}
