@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { parseMedia, writeMedia } from "@/lib/houseMedia";
-import { findDuplicate, normMode, HOUSE_MODES, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
+import { findDuplicate, normMode, nameKey, isUniqueViolation, HOUSE_MODES, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
 
 const KEY_STATES = ["AT_OFFICE", "WITH_CLEANER", "WITH_GUEST", "MISSING"];
@@ -31,6 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.name !== undefined) {
     if (!String(body.name).trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
     data.name = String(body.name).trim();
+    data.nameKey = nameKey(data.name); // keeps the UNIQUE (nameKey, mode) index in step with the name
   }
   if (body.address !== undefined) {
     if (!String(body.address).trim()) return NextResponse.json({ error: "address required" }, { status: 400 });
@@ -79,7 +80,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       pushAsync({ roles: STAFF_ROLES }, "key_missing", { house: house.name }, `key-${params.id}`);
     }
     return NextResponse.json(house);
-  } catch {
+  } catch (e) {
+    // Another save took this name + mode between our check and the update.
+    if (isUniqueViolation(e)) {
+      return NextResponse.json({ error: "duplicate house", code: "DUPLICATE_HOUSE" }, { status: 409 });
+    }
     return NextResponse.json({ error: "house not found" }, { status: 404 });
   }
 }

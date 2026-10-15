@@ -56,7 +56,8 @@ export default function HouseEditor({ house, onClose, onSaved }: {
 
   // Same name twice in the same mode is not allowed (School + Tourism of one house is fine).
   const [allHouses, setAllHouses] = useState<EdHouseFull[]>([]);
-  useEffect(() => { fetch("/api/houses").then((r) => r.json()).then(setAllHouses).catch(() => {}); }, []);
+  const loadHouses = () => fetch("/api/houses").then((r) => r.json()).then(setAllHouses).catch(() => {});
+  useEffect(() => { loadHouses(); }, []);
   const duplicate = findDuplicate(allHouses, name, mode, house?.id);
   const duplicateMsg = duplicate
     ? tr("There is already a house called “{name}” in {mode} mode. Change the name, or switch the mode.", { name: duplicate.name, mode: ev(mode) })
@@ -89,7 +90,11 @@ export default function HouseEditor({ house, onClose, onSaved }: {
       }
       onSaved();
     } catch (e) {
-      if ((e as { status?: number })?.status === 409) setError(duplicateMsg || tr("A house with this name already exists in this mode."));
+      if ((e as { status?: number })?.status === 409) {
+        // Someone else just saved this name: reload the list so the red warning shows which house it is.
+        setError(duplicateMsg || tr("A house with this name already exists in this mode."));
+        loadHouses();
+      }
       else setError(saveError(e, tr));
       setSaving(false);
     }

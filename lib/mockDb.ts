@@ -12,12 +12,22 @@
 
 import bcrypt from "bcryptjs";
 import { notifyChange } from "./events";
+import { nameKey } from "./houseMode";
 
 type Row = Record<string, any>;
 type Tables = Record<string, Row[]>;
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
+
+// Demo copy of the database's UNIQUE (nameKey, mode) index on House. Throws the same error code Prisma does.
+// There is no await between this check and the write, so two simultaneous saves cannot both pass.
+function assertHouseUnique(rows: Row[], row: Row, ignore?: Row) {
+  const key = nameKey(row.name);
+  if (rows.some((r) => r !== ignore && nameKey(r.name) === key && (r.mode ?? "SCHOOL") === (row.mode ?? "SCHOOL"))) {
+    throw Object.assign(new Error("Unique constraint failed on the fields: (`nameKey`,`mode`)"), { code: "P2002" });
+  }
+}
 
 // model -> { relationName: foreignKeyField, targetTable }
 const RELATIONS: Record<string, Record<string, [string, string]>> = {
@@ -131,6 +141,7 @@ function makeModel(tables: Tables, name: string) {
     },
     async create(args: Row) {
       const row: Row = { id: newId(name.slice(0, 2)), ...DEFAULTS[name](), ...args.data };
+      if (name === "house") assertHouseUnique(tables.house, row);
       tables[name].push(row);
       notifyChange(name);
       return withIncludes(row, args.include);
@@ -138,6 +149,7 @@ function makeModel(tables: Tables, name: string) {
     async update(args: Row) {
       const row = tables[name].find((r) => matches(r, args.where));
       if (!row) throw new Error(`${name} not found`);
+      if (name === "house") assertHouseUnique(tables.house, { ...row, ...args.data }, row);
       Object.assign(row, args.data, { updatedAt: new Date() });
       notifyChange(name);
       return withIncludes(row, args.include);

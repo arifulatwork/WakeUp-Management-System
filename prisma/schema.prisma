@@ -86,6 +86,10 @@ model House {
   // SCHOOL (students group, the house is one single block) | TOURISM (summer, guests).
   // The same house name can exist once per mode.
   mode        String    @default("SCHOOL")
+  // The name without capitals, accents and extra spaces (see lib/houseMode.ts normName).
+  // UNIQUE together with mode, so the database itself refuses two identical houses even when
+  // two people save at the same moment. Always set it with nameKey(name) when writing a name.
+  nameKey     String
   // Tourism mode: written check-in instructions. Room photos live in HouseRoomPhoto.
   checkInText String?
   roomPhotos  HouseRoomPhoto[]
@@ -93,6 +97,8 @@ model House {
   tasks       CleaningTask[]
   tickets     MaintenanceTicket[]
   materialRequests MaterialRequest[]
+
+  @@unique([nameKey, mode])
 }
 
 // The apartment's cover photo and walkthrough video, stored as data URLs.

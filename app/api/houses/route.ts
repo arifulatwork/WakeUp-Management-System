@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { parseMedia, writeMedia } from "@/lib/houseMedia";
-import { findDuplicate, normMode, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
+import { findDuplicate, normMode, nameKey, isUniqueViolation, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
 
 // GET /api/houses — house list (cleaner's "My Houses" screen,
 // Cristina's task-assignment dropdown).
@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
   }
 
   // The same name is allowed once per mode (School + Tourism), never twice in the same mode.
+  // This check gives the friendly answer; the UNIQUE (nameKey, mode) index in the database is the
+  // real guard when two people save at the same moment (see the catch below).
   const dup = findDuplicate(await db.house.findMany({}), name, mode);
   if (dup) {
     return NextResponse.json(
@@ -43,17 +45,27 @@ export async function POST(req: NextRequest) {
   const media = parseMedia(body);
   if (media.error) return NextResponse.json({ error: media.error }, { status: 400 });
 
-  let house = await db.house.create({
-    data: {
-      name,
-      address,
-      mode,
-      checkInText,
-      validFrom: validFrom ? new Date(validFrom) : null,
-      validUntil: validUntil ? new Date(validUntil) : null,
-      ...(keyStatus ? { keyStatus } : {}),
-    },
-  });
+  let house;
+  try {
+    house = await db.house.create({
+      data: {
+        name,
+        nameKey: nameKey(name),
+        address,
+        mode,
+        checkInText,
+        validFrom: validFrom ? new Date(validFrom) : null,
+        validUntil: validUntil ? new Date(validUntil) : null,
+        ...(keyStatus ? { keyStatus } : {}),
+      },
+    });
+  } catch (e) {
+    // Someone else saved the same name + mode a moment ago.
+    if (isUniqueViolation(e)) {
+      return NextResponse.json({ error: "duplicate house", code: "DUPLICATE_HOUSE", mode }, { status: 409 });
+    }
+    throw e;
+  }
 
   if (media.change) {
     const flags = await writeMedia(house.id, media.change);

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { nameKey } from "../lib/houseMode";
 
 const db = new PrismaClient();
 
@@ -17,18 +18,19 @@ async function main() {
 
   // --- Houses ---
   const villa1 = await db.house.create({
-    data: { name: "Villa 1 — Room C", address: "Rua das Flores 12, Faro" },
+    data: { name: "Villa 1 — Room C", nameKey: nameKey("Villa 1 — Room C"), address: "Rua das Flores 12, Faro" },
   });
   const villa3 = await db.house.create({
-    data: { name: "Villa 3 — Room A", address: "Rua do Mar 45, Faro" },
+    data: { name: "Villa 3 — Room A", nameKey: nameKey("Villa 3 — Room A"), address: "Rua do Mar 45, Faro" },
   });
   const villa5 = await db.house.create({
-    data: { name: "Villa 5 — Room B", address: "Av. da Republica 8, Faro" },
+    data: { name: "Villa 5 — Room B", nameKey: nameKey("Villa 5 — Room B"), address: "Av. da Republica 8, Faro" },
   });
   // A temporary Airbnb listing — has a validity window
   const airbnb1 = await db.house.create({
     data: {
       name: "Airbnb — Beco do Sol 3",
+      nameKey: nameKey("Airbnb — Beco do Sol 3"),
       address: "Beco do Sol 3, Faro",
       validFrom: new Date(),
       validUntil: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14), // +14 days
