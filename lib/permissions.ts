@@ -9,7 +9,7 @@
 //                only their own jobs (see the "worker actions" in the routes)
 //   coordinator  verifies readiness, can create/edit but never delete
 //   manager      runs operations day to day, can also delete operational data
-//   admin        "Super Admin" — everything, plus staff, roles, logins, houses
+//   admin        "Super Admin" — everything, plus staff, roles, logins, deleting houses
 
 export type Role = "worker" | "coordinator" | "manager" | "admin";
 
@@ -31,7 +31,7 @@ export const PERMS = {
   // houses
   "houses.key": OPS,        // change key status
   "houses.edit": MGMT,      // name, address, temporary-listing dates
-  "houses.create": ADMIN,
+  "houses.create": MGMT,
   "houses.delete": ADMIN,
   // staff
   "staff.manage": ADMIN,
@@ -67,7 +67,8 @@ export const MATRIX: { label: string; roles: readonly Role[] }[] = [
   { label: "Open the Manager & Ops screens", roles: SCREENS["/manager"] },
   { label: "Delete tasks, tickets & requests", roles: PERMS["tasks.delete"] },
   { label: "Edit house details", roles: PERMS["houses.edit"] },
-  { label: "Add / delete houses", roles: PERMS["houses.create"] },
+  { label: "Add houses", roles: PERMS["houses.create"] },
+  { label: "Delete houses", roles: PERMS["houses.delete"] },
   { label: "Staff, roles, logins & passwords (Admin screen)", roles: PERMS["staff.manage"] },
   { label: "See the change history (who changed what)", roles: PERMS["audit.read"] },
 ];

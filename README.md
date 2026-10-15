@@ -36,7 +36,8 @@ UI (buttons a role can't use are hidden). The Admin screen shows the same table 
 | Edit tickets & material requests, change key status | – | ✓ | ✓ | ✓ |
 | Delete tasks, tickets, requests | – | – | ✓ | ✓ |
 | Edit house details (name, address, listing dates) | – | – | ✓ | ✓ |
-| Add / delete houses | – | – | – | ✓ |
+| Add houses | – | – | ✓ | ✓ |
+| Delete houses | – | – | – | ✓ |
 | Staff, roles, logins, **password reset**, "Open app" as any worker | – | – | – | ✓ |
 | Screens | phone apps | Coordinator | Manager, Coordinator, Ops | all incl. Admin |
 

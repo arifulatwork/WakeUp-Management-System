@@ -9,6 +9,8 @@ import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
 import TicketEditor from "@/components/editors/TicketEditor";
 import TaskReview from "@/components/TaskReview";
 import MaintenanceReview from "@/components/MaintenanceReview";
+import HouseEditor from "@/components/editors/HouseEditor";
+import { useCan } from "@/lib/useSession";
 import { S, SortTh, useSort } from "@/components/ui";
 import { applyDir, cmpText, dayKey, PRIORITY_RANK, TASK_STATUS_RANK, taskWhen } from "@/lib/sort";
 
@@ -41,6 +43,8 @@ export default function ManagerDashboard() {
   const [workers, setWorkers] = useState<EdWorker[]>([]);
   const sort = useSort<"house" | "type" | "time" | "priority" | "assigned" | "status">("time");
   const [taskEd, setTaskEd] = useState<{ task: Task | null } | null>(null);
+  const [houseEd, setHouseEd] = useState(false);
+  const canCreateHouse = useCan("houses.create");
 
   useEffect(() => {
     load();
@@ -130,6 +134,7 @@ export default function ManagerDashboard() {
         <>
           <button style={S.navDark} onClick={() => setTaskEd({ task: null })}>+ {tr("New task")}</button>
           <button style={S.nav} onClick={() => setTicketEd(true)}>+ {tr("Report an Issue")}</button>
+          {canCreateHouse && <button style={S.nav} onClick={() => setHouseEd(true)}>+ {tr("New house")}</button>}
         </>
       }
     >
@@ -215,6 +220,8 @@ export default function ManagerDashboard() {
           onSaved={() => { setTicketEd(false); load(); }}
         />
       )}
+
+      {houseEd && <HouseEditor house={null} onClose={() => setHouseEd(false)} onSaved={() => { setHouseEd(false); load(); }} />}
 
       {taskEd && (
         <TaskEditor

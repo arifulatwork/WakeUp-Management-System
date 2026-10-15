@@ -56,6 +56,8 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const isCheckout = types.includes("CHECKOUT");
+
   // Workers with a profile pointing to a person no longer in the list still show.
   const workerOptions = [...cleaners];
   if (workerId && !cleaners.some((w) => w.id === workerId) && task?.assignedWorker) {
@@ -70,7 +72,8 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
         houseId, scheduledTime: time, cleaningTypes: types, assignedWorkerId: workerId || null,
         estimatedMinutes: minutes ? Number(minutes) : null, priority, notes: notes.trim() || null,
         scheduledDate: fromDateInput(date),
-        nextCheckIn: nextCheck ? fromDateInput(nextCheck) : null,
+        // Only meaningful for a check-out cleaning; cleared for every other type.
+        nextCheckIn: isCheckout && nextCheck ? fromDateInput(nextCheck) : null,
         materialsNeeded: materialsNeeded.trim() || null,
       };
       if (editing) {
@@ -138,8 +141,12 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
       <label style={S.label}>{tr("Estimated minutes")}</label>
       <input style={S.input} type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="60" />
 
-      <label style={S.label}>{tr("Next check-in")}</label>
-      <input style={S.input} type="date" value={nextCheck} onChange={(e) => setNextCheck(e.target.value)} />
+      {isCheckout && (
+        <>
+          <label style={S.label}>{tr("Next check-in")}</label>
+          <input style={S.input} type="date" value={nextCheck} onChange={(e) => setNextCheck(e.target.value)} />
+        </>
+      )}
 
       {editing && (
         <>
