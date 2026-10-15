@@ -17,6 +17,9 @@ type Ticket = {
   status: string;
   reportedAt: string;
   startedAt?: string | null;
+  closedAt?: string | null;
+  materialsUsed?: string | null;
+  timeSpentMinutes?: number | null;
   photoUrl?: string | null;
   house: { name: string };
   reportedBy: { name: string };
@@ -24,6 +27,9 @@ type Ticket = {
 
 export default function MaintenanceApp() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [done, setDone] = useState<Ticket[]>([]);
+  const [doneLimit, setDoneLimit] = useState(15);
+  const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<Ticket | null>(null);
   const [workerId, setWorkerId] = useState<string | null>(null);
   const [materials, setMaterials] = useState("");
@@ -51,6 +57,13 @@ export default function MaintenanceApp() {
   async function load() {
     const res = await fetch("/api/tickets?open=1");
     setTickets(await res.json());
+    loadDone();
+  }
+  // The worker's own finished tickets (History), newest first.
+  async function loadDone() {
+    const id = localStorage.getItem("workerId");
+    const res = await fetch(`/api/tickets?mine=1&closed=1${id ? `&workerId=${encodeURIComponent(id)}` : ""}`);
+    if (res.ok) setDone(await res.json());
   }
   // New issues appear on the phone straight away.
   useLiveRefresh(() => { if (navigator.onLine) load(); }, { models: ["maintenanceTicket"] });
@@ -78,6 +91,25 @@ export default function MaintenanceApp() {
       const updated = await result.json();
       setActive(updated.status === "CLOSED" || updated.status === "REJECTED" ? null : { ...ticket, ...updated });
     }
+    load();
+  }
+
+  // Closed by mistake? Take it back: it returns to "In progress" and opens so work can continue.
+  async function undoClose(ticket: Ticket) {
+    if (!window.confirm(tr("Take back this closed ticket? It goes back to In progress."))) return;
+    setError(null);
+    const r = await queueFetch(`/api/tickets/${ticket.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: "undoClose", workerId }),
+    });
+    if (!r.queued && !r.ok) {
+      setError(tr("Could not save. Please try again."));
+      load();
+      return;
+    }
+    const back = { ...ticket, status: "IN_PROGRESS", closedAt: null, materialsUsed: null, timeSpentMinutes: null };
+    setDone((d) => d.filter((t) => t.id !== ticket.id)); // instantly, also offline
+    setActive(r.queued ? back : { ...back, ...(await r.json()) });
     load();
   }
 
@@ -153,6 +185,32 @@ export default function MaintenanceApp() {
         </button>
       ))}
       {sorted.length === 0 && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>{tr("No open tickets.")}</p>}
+      {error && <p style={{ fontSize: 12, color: "#C1503C", fontWeight: 600 }}>{error}</p>}
+
+      <p style={{ fontSize: 11.5, fontWeight: 700, color: "var(--ink-soft)", margin: "18px 0 8px" }}>
+        {tr("Done tickets")} ({done.length})
+      </p>
+      {done.slice(0, doneLimit).map((t) => (
+        <div key={t.id} style={{ ...card, cursor: "default" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 13 }}>
+            <span>{t.house.name} · {tr(t.area)}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--green-dark)" }}>✓ {ev("CLOSED")}</span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 3 }}>{tr(t.description)}</div>
+          <div style={{ fontSize: 10, color: "var(--ink-soft)", marginTop: 2 }}>
+            {t.closedAt && tr("Closed {time}", { time: new Date(t.closedAt).toLocaleString(locale) })}
+            {t.timeSpentMinutes ? ` · ${tr("Time spent: {minutes} min", { minutes: t.timeSpentMinutes })}` : ""}
+          </div>
+          {t.materialsUsed && <div style={{ fontSize: 10, color: "var(--ink-soft)", marginTop: 2 }}>{tr("Materials: {materials}", { materials: t.materialsUsed })}</div>}
+          <button style={{ ...ghostBtn, marginTop: 8, padding: 8, fontSize: 12 }} onClick={() => undoClose(t)}>
+            ↩ {tr("Undo close — keep working")}
+          </button>
+        </div>
+      ))}
+      {done.length > doneLimit && (
+        <button style={ghostBtn} onClick={() => setDoneLimit((n) => n + 15)}>{tr("Show more")}</button>
+      )}
+      {done.length === 0 && <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>{tr("No done tickets yet.")}</p>}
     </main>
   );
 }

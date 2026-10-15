@@ -1,3 +1,11 @@
+# Maintenance app: done-ticket history + undo close
+
+- `/maintenance` now has a "Done tickets" list under the open queue: the worker's own closed tickets, newest first, with closing time, time spent and materials ("Show more" after 15). Closed tickets are kept 6 months (existing retention rule).
+- New "Undo close — keep working" button (asks first): a ticket closed by mistake goes back to "In progress" and opens so work can continue. Works offline (queued).
+- Server: new `undoClose` action on `PATCH /api/tickets/:id` (only the worker who closed it, or an office role; refused unless the ticket is Closed; clears materials / time / after-photo; written to the change history). New `GET /api/tickets?mine=1&closed=1`.
+
+Changed: `app/maintenance/page.tsx`, `app/api/tickets/route.ts`, `app/api/tickets/[id]/route.ts`, `lib/i18n.tsx`. No database migration.
+
 # Cleaner app: all jobs together, with history
 
 - The cleaner's list no longer hides finished jobs from earlier days. One screen, in order: Today (job in progress first, then by time, jobs already marked ready last) → Upcoming → History (jobs marked ready / approved on earlier days, newest first, "Show more" after 15).

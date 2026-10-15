@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePerm, actingWorkerId } from "@/lib/guard";
+import { requirePerm, actingWorkerId, currentSession } from "@/lib/guard";
 import { logAudit, changedFields } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
 import { isValidPhoto } from "@/lib/photoValidation";
@@ -12,6 +12,8 @@ import { MEDIA_ENABLED } from "@/lib/features";
 //   { action: "start" }                                     -> IN_PROGRESS, startedAt now
 //   { action: "close", materialsUsed, timeSpentMinutes }    -> CLOSED, closedAt now
 //     (closed tickets are kept 6 months, then removed — see lib/retention.ts)
+//   { action: "undoClose" }                                 -> CLOSED taken back -> IN_PROGRESS (the worker who
+//     closed it, or an office role)
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json();
   body.workerId = await actingWorkerId(req, body.workerId);
@@ -30,8 +32,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const LABELS: Record<string, string> = {
     accept: "Accepted ticket", reject: "Rejected ticket", start: "Started intervention",
-    close: "Closed ticket", reopen: "Reopened ticket",
+    close: "Closed ticket", reopen: "Reopened ticket", undoClose: "Took back closed ticket",
   };
+  // Closed by mistake: only the worker who did the job (or the office) can take it back,
+  // and only while it is still closed. Checked BEFORE the audit entry so refusals aren't logged.
+  if (body.action === "undoClose") {
+    if (ticket.status !== "CLOSED") {
+      return NextResponse.json({ error: "ticket is not closed" }, { status: 409 });
+    }
+    const who = await currentSession(req);
+    if (who?.role === "worker" && ticket.assignedWorkerId !== who.workerId) {
+      return NextResponse.json({ error: "this ticket is not yours" }, { status: 403 });
+    }
+  }
   const badPhoto = body.action === "close" && body.afterPhotoUrl && !isValidPhoto(body.afterPhotoUrl);
   if (LABELS[body.action] && !badPhoto) {
     await logAudit(req, "ticket", params.id, body.action, LABELS[body.action], {}, body.workerId ?? ticket.assignedWorkerId);
@@ -85,6 +98,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       const updated = await db.maintenanceTicket.update({
         where: { id: params.id },
         data: { status: "OPEN", closedAt: null, assignedWorkerId: null },
+      });
+      return NextResponse.json(updated);
+    }
+    // Closed by mistake -> back to "In progress" with the same worker, so they can carry on and
+    // close it again properly. The closing details (materials, time, after-photo) are cleared.
+    case "undoClose": {
+      const updated = await db.maintenanceTicket.update({
+        where: { id: params.id },
+        data: { status: "IN_PROGRESS", closedAt: null, materialsUsed: null, timeSpentMinutes: null, afterPhotoUrl: null },
+        include: { house: true, reportedBy: true },
       });
       return NextResponse.json(updated);
     }

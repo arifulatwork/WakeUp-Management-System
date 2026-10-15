@@ -166,6 +166,14 @@ const ROWS: Row[] = [
   ["Trash emptied", "Lixo despejado", "Basura vaciada", "Poubelles vidées", "Spazzatura svuotata", "Сміття винесено"],
 
   // ---- maintenance app ----
+  ["Done tickets", "Pedidos concluídos", "Tickets terminados", "Tickets terminés", "Ticket completati", "Виконані заявки"],
+  ["Closed {time}", "Fechado {time}", "Cerrado {time}", "Clôturé {time}", "Chiuso {time}", "Закрито {time}"],
+  ["Materials: {materials}", "Materiais: {materials}", "Materiales: {materials}", "Matériel : {materials}", "Materiali: {materials}", "Матеріали: {materials}"],
+  ["Time spent: {minutes} min", "Tempo gasto: {minutes} min", "Tiempo empleado: {minutes} min", "Temps passé : {minutes} min", "Tempo impiegato: {minutes} min", "Витрачено часу: {minutes} хв"],
+  ["Undo close — keep working", "Anular — continuar a trabalhar", "Deshacer — seguir trabajando", "Annuler — continuer le travail", "Annulla — continua a lavorare", "Скасувати — продовжити роботу"],
+  ["Take back this closed ticket? It goes back to In progress.", "Anular o fecho deste pedido? Volta a Em curso.", "¿Deshacer el cierre de este ticket? Vuelve a En curso.", "Annuler la clôture de ce ticket ? Il repasse à En cours.", "Annullare la chiusura di questo ticket? Torna In corso.", "Скасувати закриття заявки? Вона повернеться до «Виконується»."],
+  ["Took back closed ticket", "Fecho do pedido anulado", "Cierre del ticket deshecho", "Clôture du ticket annulée", "Chiusura del ticket annullata", "Закриття заявки скасовано"],
+  ["No done tickets yet.", "Ainda sem pedidos concluídos.", "Aún no hay tickets terminados.", "Aucun ticket terminé pour l'instant.", "Nessun ticket completato per ora.", "Виконаних заявок поки немає."],
   ["Open Tickets", "Pedidos Abertos", "Tickets Abiertos", "Tickets ouverts", "Ticket aperti", "Відкриті заявки"],
   ["Sorted by priority", "Ordenados por prioridade", "Ordenados por prioridad", "Triés par priorité", "Ordinati per priorità", "Відсортовано за пріоритетом"],
   ["Reported by {name}", "Reportado por {name}", "Reportado por {name}", "Signalé par {name}", "Segnalato da {name}", "Повідомив(ла): {name}"],

@@ -9,11 +9,26 @@ import { maybePurgeTickets } from "@/lib/retention";
 
 // GET /api/tickets
 //   ?open=1       -> only tickets not yet closed (maintenance worker's queue)
+//   ?mine=1&closed=1 -> the maintenance worker's OWN closed tickets, newest first (their History)
 //   (no params)   -> every ticket (ops overview)
 // Sorted by priority (RED first) then oldest first, matching the spec's
 // "sort requests by both entry date and severity."
 export async function GET(req: NextRequest) {
   const openOnly = req.nextUrl.searchParams.get("open");
+
+  // The worker's own history: tickets they closed (kept 6 months, see lib/retention.ts).
+  // Only ever their own — the id comes from their login, whatever the URL says.
+  if (req.nextUrl.searchParams.get("mine") && req.nextUrl.searchParams.get("closed")) {
+    const me = await actingWorkerId(req, req.nextUrl.searchParams.get("workerId"));
+    if (!me) return NextResponse.json({ error: "sign in required" }, { status: 401 });
+    await maybePurgeTickets();
+    const done = await db.maintenanceTicket.findMany({
+      where: { status: "CLOSED", assignedWorkerId: me },
+      include: { house: true, reportedBy: true },
+    });
+    done.sort((a: any, b: any) => new Date(b.closedAt ?? 0).getTime() - new Date(a.closedAt ?? 0).getTime());
+    return NextResponse.json(done);
+  }
 
   // The maintenance team reads the open queue (their own login); the full history is management only.
   if (!openOnly) {
