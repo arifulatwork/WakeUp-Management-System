@@ -161,6 +161,7 @@ model MaintenanceTicket {
   priority     Priority  @default(YELLOW)
   photoUrl     String?   // photo of the problem, from the person who reported it
   afterPhotoUrl String?  // photo after the fix, from maintenance (run a migration to add this column)
+  mediaData    Json?     // { photos: string[], videos: string[] } added by maintenance while working (same idea as CleaningTask.checklistData)
 
   reportedBy   Worker    @relation("ReportedBy", fields: [reportedById], references: [id])
   reportedById String

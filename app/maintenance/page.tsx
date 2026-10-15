@@ -6,7 +6,7 @@ import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { queueFetch } from "@/lib/offlineQueue";
 import { useI18n } from "@/lib/i18n";
 import { TicketSortBar } from "@/components/ui";
-import { PhotoPicker, PhotoStrip } from "@/components/Photos";
+import { PhotoPicker, PhotoStrip, VideoPicker, VideoStrip } from "@/components/Photos";
 import { sortTickets, TicketSort } from "@/lib/sort";
 
 type Ticket = {
@@ -21,6 +21,7 @@ type Ticket = {
   materialsUsed?: string | null;
   timeSpentMinutes?: number | null;
   photoUrl?: string | null;
+  mediaData?: { photos?: string[]; videos?: string[] } | null;
   house: { name: string };
   reportedBy: { name: string };
 };
@@ -34,7 +35,6 @@ export default function MaintenanceApp() {
   const [workerId, setWorkerId] = useState<string | null>(null);
   const [materials, setMaterials] = useState("");
   const [minutes, setMinutes] = useState("");
-  const [afterPhoto, setAfterPhoto] = useState<string | null>(null);
   const [sort, setSort] = useState<TicketSort>("priority");
   const { tr, ev, locale } = useI18n();
 
@@ -77,7 +77,6 @@ export default function MaintenanceApp() {
 
   async function act(ticket: Ticket, action: string, extra: Record<string, unknown> = {}) {
     const optimisticStatus = nextStatus[action] ?? ticket.status;
-    if (action === "close") setAfterPhoto(null);
     setActive(optimisticStatus === "CLOSED" || optimisticStatus === "REJECTED" ? null : {
       ...ticket, status: optimisticStatus,
       ...(action === "start" ? { startedAt: new Date().toISOString() } : {}), // works offline too
@@ -92,6 +91,27 @@ export default function MaintenanceApp() {
       setActive(updated.status === "CLOSED" || updated.status === "REJECTED" ? null : { ...ticket, ...updated });
     }
     load();
+  }
+
+  // Photos / videos while working. Shown straight away, uploaded in the background
+  // (kept in the offline queue if there is no signal at the house).
+  async function addMedia(ticket: Ticket, kind: "photos" | "videos", item: string) {
+    const patch = (t: Ticket): Ticket => ({ ...t, mediaData: { ...t.mediaData, [kind]: [...(t.mediaData?.[kind] ?? []), item] } });
+    setActive((a) => (a && a.id === ticket.id ? patch(a) : a));
+    const r = await queueFetch(`/api/tickets/${ticket.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: kind === "photos" ? "addPhoto" : "addVideo", workerId, [kind === "photos" ? "photo" : "video"]: item }),
+    });
+    if (!r.ok) { setError(tr("Could not save. Please try again.")); load(); }
+  }
+  async function removeMedia(ticket: Ticket, kind: "photos" | "videos", index: number) {
+    const patch = (t: Ticket): Ticket => ({ ...t, mediaData: { ...t.mediaData, [kind]: (t.mediaData?.[kind] ?? []).filter((_, i) => i !== index) } });
+    setActive((a) => (a && a.id === ticket.id ? patch(a) : a));
+    const r = await queueFetch(`/api/tickets/${ticket.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: kind === "photos" ? "removePhoto" : "removeVideo", workerId, index }),
+    });
+    if (!r.ok) { setError(tr("Could not save. Please try again.")); load(); }
   }
 
   // Closed by mistake? Take it back: it returns to "In progress" and opens so work can continue.
@@ -120,7 +140,7 @@ export default function MaintenanceApp() {
   if (active) {
     return (
       <main style={wrap}>
-        <button style={backBtn} onClick={() => { setActive(null); setAfterPhoto(null); }}>&larr; {tr("Back")}</button>
+        <button style={backBtn} onClick={() => setActive(null)}>&larr; {tr("Back")}</button>
         <h1 style={{ fontSize: 17, margin: "10px 0 2px" }}>{active.house.name} · {tr(active.area)}</h1>
         <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginBottom: 14 }}>
           {tr("Reported by {name}", { name: active.reportedBy.name })} · {new Date(active.reportedAt).toLocaleString(locale)}
@@ -147,14 +167,14 @@ export default function MaintenanceApp() {
             <label style={{ ...label, marginTop: 10 }}>{tr("Time spent (minutes)")}</label>
             <input style={input} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="45" />
             {active.startedAt && <p style={{ fontSize: 11, color: "var(--ink-soft)", margin: "0 0 6px" }}>{tr("Time is calculated from the start time — you can change it.")}</p>}
-            {afterPhoto ? (
-              <PhotoStrip photos={[afterPhoto]} size={96} onRemove={() => setAfterPhoto(null)} />
-            ) : (
-              <PhotoPicker label={`📷 ${tr("Attach after-work photo")}`} style={ghostBtn} onPhoto={setAfterPhoto} />
-            )}
+            {/* Same as the cleaner app: buttons stay visible but greyed out ("Coming soon") while media is off. */}
+            <PhotoPicker showWhenOff label={`📷 ${tr("Attach after-work photo")}`} style={ghostBtn} onPhoto={(p) => addMedia(active, "photos", p)} />
+            <PhotoStrip photos={active.mediaData?.photos ?? []} onRemove={(i) => removeMedia(active, "photos", i)} />
+            <VideoPicker showWhenOff label={`🎥 ${tr("Add after-work video")}`} style={ghostBtn} onVideo={(v) => addMedia(active, "videos", v)} />
+            <VideoStrip videos={active.mediaData?.videos ?? []} onRemove={(i) => removeMedia(active, "videos", i)} />
             <button
               style={primaryBtn}
-              onClick={() => act(active, "close", { materialsUsed: materials, timeSpentMinutes: Number(minutes) || null, afterPhotoUrl: afterPhoto })}
+              onClick={() => act(active, "close", { materialsUsed: materials, timeSpentMinutes: Number(minutes) || null })}
             >
               ✓ {tr("Close ticket")}
             </button>
@@ -202,6 +222,8 @@ export default function MaintenanceApp() {
             {t.timeSpentMinutes ? ` · ${tr("Time spent: {minutes} min", { minutes: t.timeSpentMinutes })}` : ""}
           </div>
           {t.materialsUsed && <div style={{ fontSize: 10, color: "var(--ink-soft)", marginTop: 2 }}>{tr("Materials: {materials}", { materials: t.materialsUsed })}</div>}
+          <PhotoStrip photos={t.mediaData?.photos ?? []} size={56} />
+          <VideoStrip videos={t.mediaData?.videos ?? []} />
           <button style={{ ...ghostBtn, marginTop: 8, padding: 8, fontSize: 12 }} onClick={() => undoClose(t)}>
             ↩ {tr("Undo close — keep working")}
           </button>

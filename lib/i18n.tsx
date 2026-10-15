@@ -166,6 +166,7 @@ const ROWS: Row[] = [
   ["Trash emptied", "Lixo despejado", "Basura vaciada", "Poubelles vidées", "Spazzatura svuotata", "Сміття винесено"],
 
   // ---- maintenance app ----
+  ["Add after-work video", "Adicionar vídeo depois do trabalho", "Añadir vídeo después del trabajo", "Ajouter une vidéo après le travail", "Aggiungi video dopo il lavoro", "Додати відео після роботи"],
   ["Done tickets", "Pedidos concluídos", "Tickets terminados", "Tickets terminés", "Ticket completati", "Виконані заявки"],
   ["Closed {time}", "Fechado {time}", "Cerrado {time}", "Clôturé {time}", "Chiuso {time}", "Закрито {time}"],
   ["Materials: {materials}", "Materiais: {materials}", "Materiales: {materials}", "Matériel : {materials}", "Materiali: {materials}", "Матеріали: {materials}"],

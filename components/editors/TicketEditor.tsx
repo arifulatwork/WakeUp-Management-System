@@ -5,7 +5,7 @@ import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { useCan } from "@/lib/useSession";
-import { PhotoPicker, PhotoStrip } from "@/components/Photos";
+import { PhotoPicker, PhotoStrip, VideoStrip } from "@/components/Photos";
 import { MEDIA_ENABLED } from "@/lib/features";
 import type { EdHouse, EdWorker } from "./TaskEditor";
 
@@ -14,7 +14,7 @@ export type EdTicket = {
   house?: { id: string; name: string }; houseId?: string;
   assignedWorkerId?: string | null; assignedWorker?: { id?: string; name: string } | null;
   materialsUsed?: string | null; timeSpentMinutes?: number | null;
-  photoUrl?: string | null; afterPhotoUrl?: string | null;
+  photoUrl?: string | null; afterPhotoUrl?: string | null; mediaData?: { photos?: string[]; videos?: string[] } | null;
 };
 
 const AREAS = ["Bathroom", "Kitchen", "Bedroom", "Living room", "Outdoor", "Other"];
@@ -119,6 +119,14 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
               <PhotoStrip photos={[ticket!.afterPhotoUrl]} size={84} />
             </div>
           )}
+        </div>
+      )}
+
+      {MEDIA_ENABLED && editing && ((ticket!.mediaData?.photos?.length ?? 0) > 0 || (ticket!.mediaData?.videos?.length ?? 0) > 0) && (
+        <div>
+          <label style={S.label}>{tr("After-work photo")}</label>
+          <PhotoStrip photos={ticket!.mediaData?.photos ?? []} size={84} />
+          <VideoStrip videos={ticket!.mediaData?.videos ?? []} />
         </div>
       )}
 

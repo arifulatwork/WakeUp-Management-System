@@ -47,7 +47,7 @@ const DEFAULTS: Record<string, () => Row> = {
     checklistData: {}, createdAt: new Date(), updatedAt: new Date(),
   }),
   maintenanceTicket: () => ({
-    priority: "YELLOW", photoUrl: null, afterPhotoUrl: null, reportedAt: new Date(), assignedWorkerId: null, status: "OPEN",
+    priority: "YELLOW", photoUrl: null, afterPhotoUrl: null, mediaData: null, reportedAt: new Date(), assignedWorkerId: null, status: "OPEN",
     startedAt: null, materialsUsed: null, timeSpentMinutes: null, closedAt: null,
     createdAt: new Date(), updatedAt: new Date(),
   }),

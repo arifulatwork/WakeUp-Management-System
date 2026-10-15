@@ -4,7 +4,12 @@
 - New "Undo close — keep working" button (asks first): a ticket closed by mistake goes back to "In progress" and opens so work can continue. Works offline (queued).
 - Server: new `undoClose` action on `PATCH /api/tickets/:id` (only the worker who closed it, or an office role; refused unless the ticket is Closed; clears materials / time / after-photo; written to the change history). New `GET /api/tickets?mine=1&closed=1`.
 
-Changed: `app/maintenance/page.tsx`, `app/api/tickets/route.ts`, `app/api/tickets/[id]/route.ts`, `lib/i18n.tsx`. No database migration.
+- Photos and videos on a ticket work like the cleaner app: while working (In progress) the worker can add up to 10 photos and 3 videos (6 MB each); saved straight away, offline-safe. While `NEXT_PUBLIC_MEDIA_ENABLED=false` the buttons are visible but greyed out ("Coming soon") and the server refuses uploads. They show in the worker's Done tickets and in the management Ticket editor; undo close keeps them.
+- New `mediaData` column on `MaintenanceTicket` ({photos, videos}); new actions `addPhoto` / `removePhoto` / `addVideo` / `removeVideo`.
+
+Database: run `npx prisma migrate deploy` (new migration `20261015100000_ticket_media`). Demo mode needs nothing.
+
+Changed: `app/maintenance/page.tsx`, `app/api/tickets/route.ts`, `app/api/tickets/[id]/route.ts`, `components/editors/TicketEditor.tsx`, `lib/i18n.tsx`, `lib/mockDb.ts`, `prisma/schema.prisma`. New: `prisma/migrations/20261015100000_ticket_media/`.
 
 # Cleaner app: all jobs together, with history
 
