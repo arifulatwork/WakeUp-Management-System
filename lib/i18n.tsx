@@ -66,6 +66,8 @@ const ROWS: Row[] = [
     "Для менеджерів, координаторів та адміністраторів. Персонал з прибирання та технічного обслуговування користується реєстрацією на телефоні."],
   ["Username", "Utilizador", "Usuario", "Identifiant", "Nome utente", "Ім'я користувача"],
   ["Password", "Palavra-passe", "Contraseña", "Mot de passe", "Password", "Пароль"],
+  ["Show password", "Mostrar palavra-passe", "Mostrar contraseña", "Afficher le mot de passe", "Mostra password", "Показати пароль"],
+  ["Hide password", "Ocultar palavra-passe", "Ocultar contraseña", "Masquer le mot de passe", "Nascondi password", "Приховати пароль"],
   ["Incorrect username or password.", "Utilizador ou palavra-passe incorretos.", "Usuario o contraseña incorrectos.", "Identifiant ou mot de passe incorrect.", "Nome utente o password errati.", "Неправильне ім'я користувача або пароль."],
   ["Signing in…", "A iniciar sessão…", "Iniciando sesión…", "Connexion…", "Accesso in corso…", "Вхід…"],
   ["Demo — one-tap sign in", "Demo — acesso com um toque", "Demo — acceso con un toque", "Démo — connexion en un clic", "Demo — accesso con un tocco", "Демо — вхід одним дотиком"],

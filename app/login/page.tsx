@@ -13,6 +13,7 @@ function LoginForm() {
   const { tr, setLang } = useI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -77,9 +78,31 @@ function LoginForm() {
         onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
 
       <label style={{ ...label, marginTop: 14 }}>{tr("Password")}</label>
-      <input style={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-        autoComplete="current-password"
-        onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
+      <div style={{ position: "relative" }}>
+        <input style={{ ...input, paddingRight: 44 }} type={showPassword ? "text" : "password"} value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+          onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
+        <button type="button" onClick={() => setShowPassword((v) => !v)}
+          aria-label={showPassword ? tr("Hide password") : tr("Show password")}
+          aria-pressed={showPassword}
+          title={showPassword ? tr("Hide password") : tr("Show password")}
+          style={eyeBtn}>
+          {showPassword ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+              <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          )}
+        </button>
+      </div>
 
       {error && <p style={{ color: "var(--red)", fontSize: 12.5, marginTop: 10 }}>{error}</p>}
 
@@ -124,3 +147,4 @@ export default function LoginPage() {
 const label: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 6 };
 const input: React.CSSProperties = { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--line)", fontSize: 14 };
 const btn: React.CSSProperties = { width: "100%", padding: 12, borderRadius: 10, border: "none", background: "var(--ink)", color: "#fff", fontSize: 14, fontWeight: 600, marginTop: 20 };
+const eyeBtn: React.CSSProperties = { position: "absolute", top: 0, right: 0, height: "100%", width: 42, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", color: "var(--ink-soft)", cursor: "pointer", padding: 0 };
