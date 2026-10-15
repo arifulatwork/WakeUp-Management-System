@@ -39,7 +39,8 @@ const RELATIONS: Record<string, Record<string, [string, string]>> = {
 
 const DEFAULTS: Record<string, () => Row> = {
   worker: () => ({ role: "worker", username: null, passwordHash: null, createdAt: new Date() }),
-  house: () => ({ validFrom: null, validUntil: null, keyStatus: "AT_OFFICE", keyUpdatedAt: new Date(), createdAt: new Date(), hasPhoto: false, hasVideo: false, mediaUpdatedAt: null }),
+  house: () => ({ validFrom: null, validUntil: null, keyStatus: "AT_OFFICE", keyUpdatedAt: new Date(), createdAt: new Date(), hasPhoto: false, hasVideo: false, mediaUpdatedAt: null, mode: "SCHOOL", checkInText: null }),
+  houseRoomPhoto: () => ({ position: 0, createdAt: new Date() }),
   houseMedia: () => ({ photo: null, video: null, updatedAt: new Date() }),
   cleaningTask: () => ({
     assignedWorkerId: null, estimatedMinutes: null, priority: "YELLOW", nextCheckIn: null, notes: null,
@@ -297,7 +298,7 @@ function buildSeed(): Tables {
       items: "Dishwasher tablets", status: "FULFILLED", createdAt: new Date(now - 6 * HOUR), fulfilledAt: new Date(now - 5 * HOUR) },
   ];
 
-  return { worker: workers, house: houses, cleaningTask: tasks, maintenanceTicket: tickets, materialRequest: materials, houseMedia, auditLog: [], pushSubscription: [], notification: [] };
+  return { worker: workers, house: houses, cleaningTask: tasks, maintenanceTicket: tickets, materialRequest: materials, houseMedia, houseRoomPhoto: [], auditLog: [], pushSubscription: [], notification: [] };
 }
 
 // ---------- live simulator ----------
@@ -486,6 +487,7 @@ export const mockDb = {
   worker: makeModel(tablesProxy, "worker"),
   house: makeModel(tablesProxy, "house"),
   houseMedia: makeModel(tablesProxy, "houseMedia"),
+  houseRoomPhoto: makeModel(tablesProxy, "houseRoomPhoto"),
   cleaningTask: makeModel(tablesProxy, "cleaningTask"),
   maintenanceTicket: makeModel(tablesProxy, "maintenanceTicket"),
   materialRequest: makeModel(tablesProxy, "materialRequest"),

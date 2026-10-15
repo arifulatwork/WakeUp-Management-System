@@ -83,6 +83,13 @@ model House {
   mediaUpdatedAt DateTime?
   media          HouseMedia?
 
+  // SCHOOL (students group, the house is one single block) | TOURISM (summer, guests).
+  // The same house name can exist once per mode.
+  mode        String    @default("SCHOOL")
+  // Tourism mode: written check-in instructions. Room photos live in HouseRoomPhoto.
+  checkInText String?
+  roomPhotos  HouseRoomPhoto[]
+
   tasks       CleaningTask[]
   tickets     MaintenanceTicket[]
   materialRequests MaterialRequest[]
@@ -97,6 +104,20 @@ model HouseMedia {
   photo     String?
   video     String?
   updatedAt DateTime @updatedAt
+}
+
+// Tourism check-in guide: one photo per room, with a label (e.g. "Kitchen", "Bedroom 1").
+// Stored as data URLs like HouseMedia; move to object storage in production.
+model HouseRoomPhoto {
+  id        String   @id @default(cuid())
+  house     House    @relation(fields: [houseId], references: [id], onDelete: Cascade)
+  houseId   String
+  label     String
+  photo     String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([houseId])
 }
 
 // "Request products or materials" from the cleaner app, and the

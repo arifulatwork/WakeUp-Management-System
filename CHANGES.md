@@ -1,3 +1,13 @@
+# Houses: School / Tourism mode, duplicate check, check-in guide
+
+- **No more duplicate houses.** Creating or renaming a house to a name that already exists *in the same mode* is refused. The editor shows a red warning as you type and disables Save; the server also answers 409 so two people can't create it at the same moment. Capitals, extra spaces and accents are ignored ("villa 1" = "Villa 1").
+- **School / Tourism mode.** Every house now has a mode. The same house can exist twice: once in School mode (students group, one single block, unchanged) and once in Tourism mode (summer). Existing houses become School. The mode shows as a tag in the Super Admin list, the cleaner screen, and in the house pickers of the task / ticket / material pop-ups.
+- **Tourism check-in guide.** Tourism houses get a "Check-in guide" section in the house editor: written instructions plus a photo for each room (name the room, then add its photo; rename or remove later). It opens from a "🔑 Check-in guide" button in the Super Admin house list and as a collapsible section on the cleaner's job screen. Room photos need `NEXT_PUBLIC_MEDIA_ENABLED=true`; the text works either way.
+
+Database: run `npx prisma migrate deploy` (new migration `20261015120000_house_mode_checkin`: `House.mode`, `House.checkInText`, table `HouseRoomPhoto`). Existing duplicates are not deleted, rename or delete them by hand.
+
+New: `components/CheckInGuide.tsx`, `lib/houseMode.ts`, `app/api/houses/[id]/rooms/**`. Changed: `components/editors/HouseEditor.tsx`, `app/api/houses/route.ts`, `app/api/houses/[id]/route.ts`, `app/admin/page.tsx`, `app/cleaner/page.tsx`, `app/coordinator/page.tsx`, `app/ops/page.tsx`, `lib/mockDb.ts`, `lib/i18n.tsx`, `prisma/schema.prisma`.
+
 # Maintenance: review after the work is done
 
 - When maintenance taps "Close ticket" the ticket now goes to **To be verified** (it is no longer closed straight away). Coordinators / managers / admins get a notification ("Repair finished — please check").

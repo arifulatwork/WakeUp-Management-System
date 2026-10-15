@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { parseMedia, writeMedia } from "@/lib/houseMedia";
+import { findDuplicate, normMode, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
 
 // GET /api/houses — house list (cleaner's "My Houses" screen,
 // Cristina's task-assignment dropdown).
@@ -17,12 +18,25 @@ export async function POST(req: NextRequest) {
   const g = await requirePerm(req, "houses.create");
   if (g.error) return g.error;
   const body = await req.json();
-  const { name, address, validFrom, validUntil, keyStatus } = body;
+  const { validFrom, validUntil, keyStatus } = body;
+  const name = String(body.name ?? "").trim();
+  const address = String(body.address ?? "").trim();
+  const mode = normMode(body.mode);
+  const checkInText = body.checkInText ? String(body.checkInText).slice(0, MAX_CHECKIN_TEXT) : null;
 
   if (!name || !address) {
     return NextResponse.json(
       { error: "name and address are required" },
       { status: 400 }
+    );
+  }
+
+  // The same name is allowed once per mode (School + Tourism), never twice in the same mode.
+  const dup = findDuplicate(await db.house.findMany({}), name, mode);
+  if (dup) {
+    return NextResponse.json(
+      { error: "duplicate house", code: "DUPLICATE_HOUSE", existingId: dup.id, mode },
+      { status: 409 }
     );
   }
 
@@ -33,6 +47,8 @@ export async function POST(req: NextRequest) {
     data: {
       name,
       address,
+      mode,
+      checkInText,
       validFrom: validFrom ? new Date(validFrom) : null,
       validUntil: validUntil ? new Date(validUntil) : null,
       ...(keyStatus ? { keyStatus } : {}),

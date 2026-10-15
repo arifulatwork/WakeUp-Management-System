@@ -134,7 +134,7 @@ export default function OpsOverview() {
   const scale = Math.max(480, ...loadRows.map(([, l]) => l.worked + l.planned)); // a full bar = 8 hours
   const hours = (m: number) => `${(m / 60).toFixed(1)} h`;
 
-  const houseOpts = houses.map((h) => ({ id: h.id, name: h.name }));
+  const houseOpts = houses.map((h) => ({ id: h.id, name: h.mode === "TOURISM" ? `${h.name} · ${ev("TOURISM")}` : h.name }));
 
   return (
     <PanelShell title={tr("Operations Overview")} vis={vis} labels={SECTION_LABEL}>

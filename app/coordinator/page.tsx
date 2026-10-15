@@ -83,7 +83,7 @@ export default function CoordinatorView() {
     await api(`/api/houses/${houseId}`, "PATCH", { keyStatus });
     load();
   }
-  const houseOpts = houses.map((h) => ({ id: h.id, name: h.name }));
+  const houseOpts = houses.map((h) => ({ id: h.id, name: h.mode === "TOURISM" ? `${h.name} · ${ev("TOURISM")}` : h.name }));
 
   // "Needs attention" puts the houses where the coordinator has to act on top:
   // 0 a job is waiting to be verified · 1 open problem · 2 key missing ·

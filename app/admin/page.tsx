@@ -10,6 +10,7 @@ import { MATRIX, ROLE_COLUMNS } from "@/lib/permissions";
 import { S, SortTh, useSort } from "@/components/ui";
 import { applyDir, AREA_RANK, cmpText, KEY_RANK, ROLE_RANK } from "@/lib/sort";
 import StaffEditor, { EdStaff } from "@/components/editors/StaffEditor";
+import { ModeBadge, CheckInGuideButton } from "@/components/CheckInGuide";
 import HouseEditor, { EdHouseFull } from "@/components/editors/HouseEditor";
 
 type Worker = {
@@ -246,11 +247,12 @@ export default function StaffAndRoles() {
             <tbody>
               {sortedHouses.map((h) => (
                 <tr key={h.id}>
-                  <td style={td}>{h.name}</td>
+                  <td style={td}>{h.name}<ModeBadge mode={h.mode} /></td>
                   <td style={{ ...td, color: "var(--ink-soft)" }}>{h.address}</td>
                   <td style={td}>{ev(h.keyStatus)}</td>
                   <td style={td}>{h.validUntil ? new Date(h.validUntil).toLocaleDateString(locale) : "—"}</td>
                   <td style={{ ...td, textAlign: "right" }}>
+                    <CheckInGuideButton house={h} />{" "}
                     <button style={S.small} onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>
                   </td>
                 </tr>

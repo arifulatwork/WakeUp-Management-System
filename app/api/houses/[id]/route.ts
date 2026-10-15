@@ -3,11 +3,12 @@ import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { parseMedia, writeMedia } from "@/lib/houseMedia";
+import { findDuplicate, normMode, HOUSE_MODES, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
 
 const KEY_STATES = ["AT_OFFICE", "WITH_CLEANER", "WITH_GUEST", "MISSING"];
 
-// PATCH /api/houses/:id — any of { name, address, keyStatus, validFrom, validUntil }.
+// PATCH /api/houses/:id — any of { name, address, mode, checkInText, keyStatus, validFrom, validUntil }.
 // validFrom/validUntil = null (or "") makes it a permanent house again.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json();
@@ -37,6 +38,28 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   if ("validFrom" in body) data.validFrom = body.validFrom ? new Date(body.validFrom) : null;
   if ("validUntil" in body) data.validUntil = body.validUntil ? new Date(body.validUntil) : null;
+
+  if ("mode" in body) {
+    if (!HOUSE_MODES.includes(body.mode)) return NextResponse.json({ error: "invalid mode" }, { status: 400 });
+    data.mode = body.mode;
+  }
+  if ("checkInText" in body) data.checkInText = body.checkInText ? String(body.checkInText).slice(0, MAX_CHECKIN_TEXT) : null;
+
+  // Renaming or switching mode must not collide with another house of the same name + mode.
+  if (data.name !== undefined || data.mode !== undefined) {
+    const current = await db.house.findUnique({ where: { id: params.id } });
+    if (current) {
+      const dup = findDuplicate(
+        await db.house.findMany({}),
+        String(data.name ?? current.name),
+        normMode(data.mode ?? current.mode),
+        params.id,
+      );
+      if (dup) {
+        return NextResponse.json({ error: "duplicate house", code: "DUPLICATE_HOUSE", existingId: dup.id }, { status: 409 });
+      }
+    }
+  }
 
   const media = parseMedia(body);
   if (media.error) return NextResponse.json({ error: media.error }, { status: 400 });
@@ -72,6 +95,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     await db.maintenanceTicket.deleteMany({ where: { houseId: params.id } });
     await db.materialRequest.deleteMany({ where: { houseId: params.id } });
     await db.houseMedia.deleteMany({ where: { houseId: params.id } });
+    await db.houseRoomPhoto.deleteMany({ where: { houseId: params.id } });
     await db.house.delete({ where: { id: params.id } });
     await logAudit(req, "house", params.id, "delete", "Deleted house {name} and its tasks, tickets and requests", { name: doomed?.name ?? params.id });
     return NextResponse.json({ ok: true });

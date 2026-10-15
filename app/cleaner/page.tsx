@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { PhotoPicker, PhotoStrip, VideoPicker, VideoStrip } from "@/components/Photos";
 import AppFooter from "@/components/AppFooter";
 import { HouseThumb, HouseGallery } from "@/components/HouseMedia";
+import { CheckInGuideBody, ModeBadge } from "@/components/CheckInGuide";
 import { DONE_TASK, PRIORITY_RANK, taskWhen, cmpText, dayKey } from "@/lib/sort";
 import { MEDIA_ENABLED } from "@/lib/features";
 
@@ -372,11 +373,17 @@ export default function CleanerApp() {
       <main style={wrap}>
         {toastEl}
         <button style={backBtn} onClick={() => setActiveTask(null)}>&larr; {tr("Back")}</button>
-        <h1 style={{ fontSize: 17, margin: "10px 0 2px" }}>{activeTask.house.name}</h1>
+        <h1 style={{ fontSize: 17, margin: "10px 0 2px" }}>{activeTask.house.name}<ModeBadge mode={activeTask.house.mode} /></h1>
         <p style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14 }}>
           {activeTask.cleaningTypes.map(ev).join(", ")} · {activeTask.scheduledTime}
         </p>
         <HouseGallery houseId={activeTask.houseId} house={activeTask.house} />
+        {activeTask.house.mode === "TOURISM" && (
+          <details style={{ marginBottom: 12 }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: 13.5 }}>🔑 {tr("Check-in guide")}</summary>
+            <div style={{ marginTop: 8 }}><CheckInGuideBody houseId={activeTask.houseId} text={activeTask.house.checkInText} /></div>
+          </details>
+        )}
         <HouseStatus house={tasks.find((t) => t.id === activeTask.id)?.house ?? activeTask.house} ready={activeTask.status === "APPROVED"} />
         {activeTask.notes && (
           <p style={{ fontSize: 12, background: "#FAF3D6", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
