@@ -21,6 +21,7 @@ type Task = {
   priority?: string;
   cleaningTypes: string[];
   notes?: string | null;
+  completedAt?: string | null;
   materialsNeeded?: string | null;
   nextCheckIn?: string | null;
   house: { name: string; address: string; keyStatus?: string; openIssues?: { area: string; description: string; priority: string; status: string }[]; hasPhoto?: boolean; hasVideo?: boolean; mediaUpdatedAt?: string | null };
@@ -46,7 +47,8 @@ export default function CleanerApp() {
   const [materialsSubmitting, setMaterialsSubmitting] = useState(false);
   const [materialsDone, setMaterialsDone] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const { tr, ev } = useI18n();
+  const { tr, ev, locale } = useI18n();
+  const [historyLimit, setHistoryLimit] = useState(15);
   const router = useRouter();
 
   // A short message at the top when the server refused something (instead of failing silently).
@@ -364,6 +366,8 @@ export default function CleanerApp() {
     const checklist = activeTask.checklistData?.checklist ?? [];
     // A job must be started before it can be ticked off or marked ready.
     const notStarted = activeTask.status === "ASSIGNED" || activeTask.status === "SCHEDULED";
+    // Approved / completed jobs are history: look, but no more ticking, photos or "mark ready".
+    const locked = activeTask.status === "APPROVED" || activeTask.status === "COMPLETED";
     return (
       <main style={wrap}>
         {toastEl}
@@ -395,20 +399,24 @@ export default function CleanerApp() {
 
         <div style={{ marginTop: 12 }}>
           {checklist.map((item, i) => (
-            <button key={i} style={{ ...checkRow, ...(notStarted ? { opacity: 0.55 } : {}) }} disabled={notStarted} onClick={() => toggleCheck(activeTask, i)}>
+            <button key={i} style={{ ...checkRow, ...(notStarted ? { opacity: 0.55 } : {}) }} disabled={notStarted || locked} onClick={() => toggleCheck(activeTask, i)}>
               <span style={checkbox(item.done)}>{item.done ? "✓" : ""}</span>
               {tr(item.label)}
             </button>
           ))}
         </div>
 
-        <PhotoPicker showWhenOff label={`📷 ${tr("Add before/after photo")}`} style={ghostBtn} onPhoto={(p) => addPhoto(activeTask, p)} />
-        <PhotoStrip photos={activeTask.checklistData.photos ?? []} onRemove={(i) => removePhoto(activeTask, i)} />
-        <VideoPicker showWhenOff label={`🎥 ${tr("Add before/after video")}`} style={ghostBtn} onVideo={(v) => addVideo(activeTask, v)} />
-        <VideoStrip videos={activeTask.checklistData.videos ?? []} onRemove={(i) => removeVideo(activeTask, i)} />
+        {!locked && <PhotoPicker showWhenOff label={`📷 ${tr("Add before/after photo")}`} style={ghostBtn} onPhoto={(p) => addPhoto(activeTask, p)} />}
+        <PhotoStrip photos={activeTask.checklistData.photos ?? []} onRemove={locked ? undefined : (i) => removePhoto(activeTask, i)} />
+        {!locked && <VideoPicker showWhenOff label={`🎥 ${tr("Add before/after video")}`} style={ghostBtn} onVideo={(v) => addVideo(activeTask, v)} />}
+        <VideoStrip videos={activeTask.checklistData.videos ?? []} onRemove={locked ? undefined : (i) => removeVideo(activeTask, i)} />
         <button style={issueBtn} onClick={() => setReportingIssue(true)}>⚠ {tr("Report damage / issue")}</button>
         <button style={ghostBtn} onClick={() => setRequestingMaterials(true)}>📦 {tr("Request products / materials")}</button>
-        {activeTask.status === "TO_BE_VERIFIED" ? (
+        {locked ? (
+          <p style={{ fontSize: 12.5, fontWeight: 700, color: "var(--green-dark)", textAlign: "center", margin: "14px 0 0" }}>
+            ✓ {tr(activeTask.status === "APPROVED" ? "Confirmed ready for check-in" : "Marked ready")}
+          </p>
+        ) : activeTask.status === "TO_BE_VERIFIED" ? (
           <button style={ghostBtn} onClick={() => undoReady(activeTask)}>
             ↩ {tr("Undo ready — keep cleaning")}
           </button>
@@ -423,14 +431,16 @@ export default function CleanerApp() {
   }
 
   // --- House list screen ---
-  // Order a cleaner actually works in: the job in progress first, then what's
-  // next by day + time (urgent first if two share a time), finished jobs last.
-  // Finished jobs from earlier days are history: hide them. Jobs for later days go under "Upcoming".
+  // One list with everything the cleaner was ever given, in the order they work in:
+  //   Today     the job in progress first, then what is next by day + time (urgent first if two share a
+  //             time), jobs already marked ready today last; unfinished jobs from earlier days stay here too.
+  //   Upcoming  jobs for later days.
+  //   History   jobs marked ready / approved on earlier days, newest first (nothing is hidden any more).
   const today = dayKey(new Date());
   const dk = (t: Task) => dayKey(t.scheduledDate);
-  const visible = tasks.filter((t) => !(DONE_TASK.includes(t.status) && dk(t) < today));
-  const sortedTasks = [...visible].sort((a, b) => {
-    const done = (t: Task) => (DONE_TASK.includes(t.status) ? 1 : 0);
+  const isDone = (t: Task) => DONE_TASK.includes(t.status);
+  const sortedTasks = tasks.filter((t) => !(isDone(t) && dk(t) < today)).sort((a, b) => {
+    const done = (t: Task) => (isDone(t) ? 1 : 0);
     const current = (t: Task) => (t.status === "IN_PROGRESS" ? 0 : 1);
     return (
       done(a) - done(b) ||
@@ -441,6 +451,8 @@ export default function CleanerApp() {
   });
   const todays = sortedTasks.filter((t) => dk(t) <= today); // today + anything overdue and unfinished
   const upcoming = sortedTasks.filter((t) => dk(t) > today).sort((a, b) => cmpText(taskWhen(a), taskWhen(b)));
+  const history = tasks.filter((t) => isDone(t) && dk(t) < today).sort((a, b) => cmpText(taskWhen(b), taskWhen(a)));
+  const visible = tasks;
 
   const card = (task: Task) => (
     <button key={task.id} style={houseCard} onClick={() => setActiveTask(task)}>
@@ -453,6 +465,11 @@ export default function CleanerApp() {
         <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 3 }}>
           {dk(task) !== today ? `${dk(task)} · ` : ""}{task.scheduledTime} · {task.cleaningTypes.map(ev).join(", ")}
         </div>
+        {isDone(task) && task.completedAt && (
+          <div style={{ fontSize: 11, color: "var(--green-dark)", fontWeight: 600, marginTop: 2 }}>
+            ✓ {tr("Marked ready")} · {new Date(task.completedAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
         <HouseChips house={task.house} />
         <a
           href={`https://maps.google.com/?q=${encodeURIComponent(task.house.address)}`}
@@ -479,6 +496,15 @@ export default function CleanerApp() {
         <>
           <p style={{ fontSize: 11.5, fontWeight: 700, color: "var(--ink-soft)", margin: "16px 0 8px" }}>{tr("Upcoming")}</p>
           {upcoming.map(card)}
+        </>
+      )}
+      {history.length > 0 && (
+        <>
+          <p style={{ fontSize: 11.5, fontWeight: 700, color: "var(--ink-soft)", margin: "16px 0 8px" }}>{tr("History")} ({history.length})</p>
+          {history.slice(0, historyLimit).map(card)}
+          {history.length > historyLimit && (
+            <button style={ghostBtn} onClick={() => setHistoryLimit((n) => n + 15)}>{tr("Show more")}</button>
+          )}
         </>
       )}
       {visible.length === 0 && (

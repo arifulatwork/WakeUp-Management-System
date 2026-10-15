@@ -54,7 +54,8 @@ export async function PATCH(
   const houseName = async () => (await db.house.findUnique({ where: { id: task.houseId } }))?.name ?? "";
   const refused =
     (body.action === "undoReady" && !["TO_BE_VERIFIED", "COMPLETED"].includes(task.status)) ||
-    (body.action === "unapprove" && task.status !== "APPROVED");
+    (body.action === "unapprove" && task.status !== "APPROVED") ||
+    (body.action === "complete" && task.status === "APPROVED");
   if (AUDITED[body.action] && !refused) await audit(AUDITED[body.action]);
 
   // A job has to be started before it can be ticked off or marked ready.
@@ -169,6 +170,8 @@ export async function PATCH(
     }
 
     case "complete": {
+      // A stale screen or a replayed offline tap must never undo an approval.
+      if (task.status === "APPROVED") return NextResponse.json(task);
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: {

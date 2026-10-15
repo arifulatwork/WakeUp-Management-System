@@ -1,3 +1,12 @@
+# Cleaner app: all jobs together, with history
+
+- The cleaner's list no longer hides finished jobs from earlier days. One screen, in order: Today (job in progress first, then by time, jobs already marked ready last) → Upcoming → History (jobs marked ready / approved on earlier days, newest first, "Show more" after 15).
+- Finished jobs show "✓ Marked ready · hh:mm".
+- Opening an approved / completed job is read-only: no ticking, photo buttons or "Mark ready" (it shows "Confirmed ready for check-in").
+- Server: "mark ready" on an already approved job is ignored, so a stale screen or replayed offline tap can never undo an approval.
+
+Changed: `app/cleaner/page.tsx`, `app/api/tasks/[id]/route.ts`, `lib/i18n.tsx`. No database migration.
+
 # Coordinator: review before approving + undo approval
 
 - The Coordinator's "Review & confirm" now opens the same review pop-up the Manager uses (new shared `components/TaskReview.tsx`): checklist ticks, timing, task notes, photos/videos (when media is on) and the automatic check. Nothing is approved until "Confirm ready for check-in" is pressed there; "Send back" is in the same pop-up.
