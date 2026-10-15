@@ -49,7 +49,13 @@ input, select, textarea { font-family: inherit; }
 }
 .panel-burger { display: none; width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: #fff; font-size: 17px; align-items: center; justify-content: center; }
 .panel-content { max-width: 1180px; margin: 0 auto; padding: 20px 24px 90px; }
+.panel-content.wide { max-width: 1600px; }
 .panel-scrim { display: none; }
+/* Masonry-style dashboard: independent vertical stacks that reflow with the screen width.
+   Cards flow top-to-bottom in a stack (no dead space) and stacks wrap on narrow screens. */
+.panel-masonry { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 18px; align-items: start; }
+.panel-stack { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.panel-stack > .panel-card { margin-bottom: 0 !important; } /* spacing comes from the gap only */
 .panel-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); overflow: hidden; }
 .panel-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 

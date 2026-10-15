@@ -22,12 +22,13 @@ const NAV = [
   { href: "/ops", label: "Ops Overview", icon: "📊" },
 ];
 
-export default function PanelShell({ title, subtitle, actions, vis, labels, children }: {
+export default function PanelShell({ title, subtitle, actions, vis, labels, wide, children }: {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;          // buttons on the right of the title bar
   vis?: SectionVisibility<any>;       // when given, a show/hide bar is shown under the title
   labels?: Record<string, string>;    // section key -> label (English; translated here)
+  wide?: boolean;                     // let the content use the full width instead of the 1180px column
   children: React.ReactNode;
 }) {
   const { tr, ev } = useI18n();
@@ -97,7 +98,7 @@ export default function PanelShell({ title, subtitle, actions, vis, labels, chil
           {actions && <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
         </header>
 
-        <div className="panel-content">
+        <div className={"panel-content" + (wide ? " wide" : "")}>
           {vis && labels && <SectionToggles vis={vis} labels={labels} />}
           {vis?.none && <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>{tr("Everything is hidden. Use the buttons above to show a section.")}</p>}
           {children}

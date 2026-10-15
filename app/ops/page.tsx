@@ -137,7 +137,7 @@ export default function OpsOverview() {
   const houseOpts = houses.map((h) => ({ id: h.id, name: h.mode === "TOURISM" ? `${h.name} · ${ev("TOURISM")}` : h.name }));
 
   return (
-    <PanelShell title={tr("Operations Overview")} vis={vis} labels={SECTION_LABEL}>
+    <PanelShell title={tr("Operations Overview")} vis={vis} labels={SECTION_LABEL} wide>
       {shown.stats && (
         <StatGrid>
           <StatCard n={activeHouses} label={tr("Houses with activity")} />
@@ -152,7 +152,13 @@ export default function OpsOverview() {
 
       <MaintenanceReview tickets={tickets} onChanged={load} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 18, alignItems: "start" }}>
+      {/* Two independent stacks instead of one row-based grid: each card sits directly
+          under the previous one in its own column, so a tall card (tickets) can never
+          push a card in the next row down and leave empty space. On narrow screens the
+          stacks wrap into a single column (tickets → workload → materials → keys). */}
+      <div className="panel-masonry">
+       {(shown.tickets || shown.workload) && (
+        <div className="panel-stack">
         {/* ---- maintenance tickets ---- */}
         {shown.tickets && (
           <PanelCard title={tr("Open maintenance tickets")} action={<button style={S.smallDark} onClick={() => setTicketEd({ ticket: null })}>+ {tr("Report an Issue")}</button>}>
@@ -191,6 +197,37 @@ export default function OpsOverview() {
             {openTickets.length === 0 && <p style={empty}>{tr("None right now.")}</p>}
           </PanelCard>
         )}
+
+        {/* ---- workload ---- */}
+        {shown.workload && (
+          <PanelCard title={tr("Workload today (hours)")}>
+            {loadRows.length > 0 && (
+              <div style={{ display: "flex", gap: 12, fontSize: 10.5, color: "var(--ink-soft)", marginBottom: 8 }}>
+                <span><span style={{ ...dot, background: "var(--green-dark)" }} /> {tr("worked")}</span>
+                <span><span style={{ ...dot, background: "#C9DDB0" }} /> {tr("planned")}</span>
+              </div>
+            )}
+            {loadRows.map(([name, l]) => (
+              <div key={name} style={row}>
+                <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                  <span>{name}</span>
+                  <span style={{ fontWeight: 700 }}>{hours(l.worked)} {tr("worked")}</span>
+                </div>
+                <div style={{ display: "flex", width: "100%", height: 10, borderRadius: 6, background: "#EEE", overflow: "hidden" }}>
+                  <div style={{ width: `${(l.worked / scale) * 100}%`, background: "var(--green-dark)" }} />
+                  <div style={{ width: `${(l.planned / scale) * 100}%`, background: "#C9DDB0" }} />
+                </div>
+                <div style={sub}>{hours(l.planned)} {tr("planned")} · {l.open} {tr("open")}</div>
+              </div>
+            ))}
+            {loadRows.length === 0 && <p style={empty}>{tr("No assignments yet.")}</p>}
+          </PanelCard>
+        )}
+        </div>
+       )}
+
+       {(shown.materials || shown.keys) && (
+        <div className="panel-stack">
 
         {/* ---- material requests ---- */}
         {shown.materials && (
@@ -240,32 +277,9 @@ export default function OpsOverview() {
             {houses.length === 0 && <p style={empty}>{tr("No houses yet.")}</p>}
           </PanelCard>
         )}
+        </div>
+       )}
 
-        {/* ---- workload ---- */}
-        {shown.workload && (
-          <PanelCard title={tr("Workload today (hours)")}>
-            {loadRows.length > 0 && (
-              <div style={{ display: "flex", gap: 12, fontSize: 10.5, color: "var(--ink-soft)", marginBottom: 8 }}>
-                <span><span style={{ ...dot, background: "var(--green-dark)" }} /> {tr("worked")}</span>
-                <span><span style={{ ...dot, background: "#C9DDB0" }} /> {tr("planned")}</span>
-              </div>
-            )}
-            {loadRows.map(([name, l]) => (
-              <div key={name} style={row}>
-                <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                  <span>{name}</span>
-                  <span style={{ fontWeight: 700 }}>{hours(l.worked)} {tr("worked")}</span>
-                </div>
-                <div style={{ display: "flex", width: "100%", height: 10, borderRadius: 6, background: "#EEE", overflow: "hidden" }}>
-                  <div style={{ width: `${(l.worked / scale) * 100}%`, background: "var(--green-dark)" }} />
-                  <div style={{ width: `${(l.planned / scale) * 100}%`, background: "#C9DDB0" }} />
-                </div>
-                <div style={sub}>{hours(l.planned)} {tr("planned")} · {l.open} {tr("open")}</div>
-              </div>
-            ))}
-            {loadRows.length === 0 && <p style={empty}>{tr("No assignments yet.")}</p>}
-          </PanelCard>
-        )}
       </div>
 
       {ticketEd && <TicketEditor ticket={ticketEd.ticket} houses={houseOpts} workers={workers} onClose={() => setTicketEd(null)} onSaved={saved} />}
