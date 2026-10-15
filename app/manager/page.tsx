@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
 import TicketEditor from "@/components/editors/TicketEditor";
 import TaskReview from "@/components/TaskReview";
+import MaintenanceReview from "@/components/MaintenanceReview";
 import { S, SortTh, useSort } from "@/components/ui";
 import { applyDir, cmpText, dayKey, PRIORITY_RANK, TASK_STATUS_RANK, taskWhen } from "@/lib/sort";
 
@@ -34,7 +35,7 @@ export default function ManagerDashboard() {
   const { tr, ev, locale } = useI18n();
   const [ticketEd, setTicketEd] = useState(false);
   const [houses, setHouses] = useState<HouseInfo[]>([]);
-  const [tickets, setTickets] = useState<{ houseId?: string; status: string }[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]) // open tickets (house, worker, media…) — also feeds the review card;
   // The task being reviewed before approval (Approve opens this pop-up; nothing is approved until "Confirm approve").
   const [reviewing, setReviewing] = useState<Task | null>(null);
   const [workers, setWorkers] = useState<EdWorker[]>([]);
@@ -140,6 +141,8 @@ export default function ManagerDashboard() {
           <StatCard n={counts.approved} label={tr("Approved")} color="#4F7A26" />
         </StatGrid>
       )}
+
+      <MaintenanceReview tickets={tickets} onChanged={load} />
 
       {vis.shown.tasks && (
         <PanelCard title={tr("Tasks")} flush>

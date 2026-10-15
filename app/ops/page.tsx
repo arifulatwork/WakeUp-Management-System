@@ -11,6 +11,7 @@ import { S, StatusBadge, PriorityDot, TicketSortBar } from "@/components/ui";
 import { PhotoStrip } from "@/components/Photos";
 import { cmpText, dayKey, KEY_RANK, sortTickets, TicketSort } from "@/lib/sort";
 import TicketEditor, { EdTicket } from "@/components/editors/TicketEditor";
+import MaintenanceReview from "@/components/MaintenanceReview";
 import HouseEditor, { EdHouseFull } from "@/components/editors/HouseEditor";
 import MaterialEditor, { EdMaterial } from "@/components/editors/MaterialEditor";
 import { EdWorker } from "@/components/editors/TaskEditor";
@@ -148,6 +149,8 @@ export default function OpsOverview() {
           <StatCard n={houses.filter((h) => h.keyStatus === "MISSING").length} label={tr("Keys missing")} color="#C1503C" />
         </StatGrid>
       )}
+
+      <MaintenanceReview tickets={tickets} onChanged={load} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 18, alignItems: "start" }}>
         {/* ---- maintenance tickets ---- */}

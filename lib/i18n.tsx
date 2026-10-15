@@ -168,6 +168,9 @@ const ROWS: Row[] = [
   // ---- maintenance app ----
   ["Add after-work video", "Adicionar vídeo depois do trabalho", "Añadir vídeo después del trabajo", "Ajouter une vidéo après le travail", "Aggiungi video dopo il lavoro", "Додати відео після роботи"],
   ["Review", "Rever", "Revisar", "Vérifier", "Verifica", "Перевірити"],
+  ["Maintenance to review", "Manutenção para verificar", "Mantenimiento por revisar", "Maintenance à vérifier", "Manutenzione da verificare", "Технічні роботи на перевірці"],
+  ["Work finished by the maintenance team — confirm it or send it back.", "Trabalho terminado pela manutenção — confirme ou devolva.", "Trabajo terminado por mantenimiento: confírmalo o devuélvelo.", "Travail terminé par la maintenance — confirmez-le ou renvoyez-le.", "Lavoro finito dalla manutenzione — conferma o rimanda indietro.", "Роботу виконала технічна служба — підтвердіть або поверніть."],
+  ["Nothing waiting for review.", "Nada a aguardar verificação.", "Nada pendiente de revisión.", "Rien en attente de vérification.", "Niente in attesa di verifica.", "Нічого не очікує перевірки."],
   ["Waiting for review", "A aguardar verificação", "Pendiente de revisión", "En attente de vérification", "In attesa di verifica", "Очікує перевірки"],
   ["Confirm fixed", "Confirmar resolvido", "Confirmar resuelto", "Confirmer la réparation", "Conferma risolto", "Підтвердити виправлення"],
   ["Maintenance finished this ticket — please check the work.", "A manutenção terminou este pedido — verifique o trabalho.", "Mantenimiento terminó este ticket: revisa el trabajo.", "La maintenance a terminé ce ticket — vérifiez le travail.", "La manutenzione ha finito questo ticket — verifica il lavoro.", "Технічна служба завершила заявку — перевірте роботу."],

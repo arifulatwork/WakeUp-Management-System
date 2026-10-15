@@ -17,6 +17,7 @@ import TicketEditor, { EdTicket } from "@/components/editors/TicketEditor";
 import HouseEditor, { EdHouseFull } from "@/components/editors/HouseEditor";
 import MaterialEditor from "@/components/editors/MaterialEditor";
 import TaskReview from "@/components/TaskReview";
+import MaintenanceReview from "@/components/MaintenanceReview";
 
 type Task = EdTask & { house: { id: string; name: string } };
 type Ticket = EdTicket & { house: { id: string; name: string } };
@@ -133,6 +134,8 @@ export default function CoordinatorView() {
           <StatCard n={keysMissing} label={tr("Keys missing")} color="#C1503C" />
         </StatGrid>
       )}
+
+      <MaintenanceReview tickets={tickets} onChanged={load} />
 
       {vis.shown.houses && (
       <PanelCard
