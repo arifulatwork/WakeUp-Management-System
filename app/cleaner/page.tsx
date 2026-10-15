@@ -21,6 +21,8 @@ type Task = {
   priority?: string;
   cleaningTypes: string[];
   notes?: string | null;
+  materialsNeeded?: string | null;
+  nextCheckIn?: string | null;
   house: { name: string; address: string; keyStatus?: string; openIssues?: { area: string; description: string; priority: string; status: string }[]; hasPhoto?: boolean; hasVideo?: boolean; mediaUpdatedAt?: string | null };
   checklistData: { checklist: { label: string; done: boolean }[]; photos?: string[]; videos?: string[] };
 };
@@ -375,6 +377,13 @@ export default function CleanerApp() {
         {activeTask.notes && (
           <p style={{ fontSize: 12, background: "#FAF3D6", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
             <b>{tr("Note")}:</b> {tr(activeTask.notes)}
+          </p>
+        )}
+
+        {(activeTask.materialsNeeded || activeTask.nextCheckIn) && (
+          <p style={{ fontSize: 12, background: "#EEF3F8", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
+            {activeTask.materialsNeeded && <><b>{tr("Materials needed")}:</b> {activeTask.materialsNeeded}<br /></>}
+            {activeTask.nextCheckIn && <><b>{tr("Next check-in")}:</b> {dayKey(activeTask.nextCheckIn)}</>}
           </p>
         )}
 

@@ -239,6 +239,7 @@ export async function PATCH(
       if (f.priority) data.priority = f.priority;
       if ("notes" in f) data.notes = f.notes || null;
       if ("materialsNeeded" in f) data.materialsNeeded = f.materialsNeeded || null;
+      if ("nextCheckIn" in f) data.nextCheckIn = f.nextCheckIn ? new Date(f.nextCheckIn) : null;
 
       if (f.status) {
         data.status = f.status;

@@ -16,6 +16,7 @@ type Ticket = {
   priority: string;
   status: string;
   reportedAt: string;
+  startedAt?: string | null;
   photoUrl?: string | null;
   house: { name: string };
   reportedBy: { name: string };
@@ -36,6 +37,17 @@ export default function MaintenanceApp() {
     load();
   }, []);
 
+  // Time spent = now minus the moment "Start intervention" was tapped. Filled in for the worker,
+  // who can still change it before closing.
+  useEffect(() => {
+    if (active?.status === "IN_PROGRESS" && active.startedAt) {
+      const mins = Math.max(1, Math.round((Date.now() - new Date(active.startedAt).getTime()) / 60000));
+      setMinutes(String(mins));
+    } else {
+      setMinutes("");
+    }
+  }, [active?.id, active?.status, active?.startedAt]);
+
   async function load() {
     const res = await fetch("/api/tickets?open=1");
     setTickets(await res.json());
@@ -53,7 +65,10 @@ export default function MaintenanceApp() {
   async function act(ticket: Ticket, action: string, extra: Record<string, unknown> = {}) {
     const optimisticStatus = nextStatus[action] ?? ticket.status;
     if (action === "close") setAfterPhoto(null);
-    setActive(optimisticStatus === "CLOSED" || optimisticStatus === "REJECTED" ? null : { ...ticket, status: optimisticStatus });
+    setActive(optimisticStatus === "CLOSED" || optimisticStatus === "REJECTED" ? null : {
+      ...ticket, status: optimisticStatus,
+      ...(action === "start" ? { startedAt: new Date().toISOString() } : {}), // works offline too
+    });
 
     const result = await queueFetch(`/api/tickets/${ticket.id}`, {
       method: "PATCH",
@@ -99,6 +114,7 @@ export default function MaintenanceApp() {
             <input style={input} value={materials} onChange={(e) => setMaterials(e.target.value)} placeholder={tr("e.g. pipe seal, wrench")} />
             <label style={{ ...label, marginTop: 10 }}>{tr("Time spent (minutes)")}</label>
             <input style={input} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="45" />
+            {active.startedAt && <p style={{ fontSize: 11, color: "var(--ink-soft)", margin: "0 0 6px" }}>{tr("Time is calculated from the start time — you can change it.")}</p>}
             {afterPhoto ? (
               <PhotoStrip photos={[afterPhoto]} size={96} onRemove={() => setAfterPhoto(null)} />
             ) : (

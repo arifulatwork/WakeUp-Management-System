@@ -1,3 +1,13 @@
+# Spec review fixes
+
+- Task form: new cleaning type "Extraordinary"; new fields "Next check-in" (date) and "Products / materials needed". Both are saved on create AND edit (edit used to ignore the check-in date) and shown to the cleaner on the job screen.
+- New issue form (Manager / Coordinator / Ops): photo button added (shown greyed out "Coming soon" while media is off).
+- Maintenance app: "Time spent" is filled in automatically from the moment "Start intervention" was tapped (worker can still change it; works offline).
+- Manager screen: date under the time, new "Timing" column and review line (start → finish · real minutes / estimate, red when over), and a "Report an Issue" button.
+- Ops screen: "Houses with activity" now counts houses (was counting tasks); "Overdue work" now uses the scheduled day AND time (before, a job counted as overdue after 12:00 whatever its time) and no longer counts jobs already handed in for verification; the workload card is now a simple hours bar chart per person (worked today vs still planned, 8 h = full bar).
+
+Changed: `app/manager/page.tsx`, `app/ops/page.tsx`, `app/maintenance/page.tsx`, `app/cleaner/page.tsx`, `app/api/tasks/[id]/route.ts`, `components/editors/TaskEditor.tsx`, `components/editors/TicketEditor.tsx`, `lib/i18n.tsx`, `lib/auditText.ts`. No database migration needed.
+
 # Cleaner app: house status + photo/video visibility
 
 - Cleaner job screen now has a "House status" box: key status, open maintenance problems (area, description, status) and "Confirmed ready for check-in" once the coordinator approved. Updates live when a ticket is opened/closed or the key status changes.

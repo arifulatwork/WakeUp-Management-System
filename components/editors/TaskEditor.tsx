@@ -15,10 +15,11 @@ export type EdTask = {
   scheduledDate: string; scheduledTime: string; cleaningTypes: string[];
   assignedWorkerId?: string | null; assignedWorker?: { id?: string; name: string } | null;
   estimatedMinutes?: number | null; notes?: string | null;
+  nextCheckIn?: string | null; materialsNeeded?: string | null;
   checklistData?: { checklist?: { label: string; done: boolean }[]; photos?: string[] };
 };
 
-const TYPES = ["GENERAL", "CHECKOUT", "DEEP_CLEAN", "OUTDOOR", "BEDSHEET_CHANGE"];
+const TYPES = ["GENERAL", "CHECKOUT", "DEEP_CLEAN", "EXTRAORDINARY", "OUTDOOR", "BEDSHEET_CHANGE"];
 const STATUSES = ["SCHEDULED", "ASSIGNED", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "TO_BE_VERIFIED", "APPROVED", "WITH_ISSUE"];
 const DEFAULT_ITEMS = [
   "Linen & bed sheets changed", "Bathroom & toilet disinfected", "Kitchen & appliances cleaned", "Trash emptied",
@@ -43,6 +44,8 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
   const [priority, setPriority] = useState(task?.priority ?? "YELLOW");
   const [minutes, setMinutes] = useState(task?.estimatedMinutes ? String(task.estimatedMinutes) : "");
   const [notes, setNotes] = useState(task?.notes ?? "");
+  const [nextCheck, setNextCheck] = useState(task?.nextCheckIn ? toDateInput(task.nextCheckIn) : "");
+  const [materialsNeeded, setMaterialsNeeded] = useState(task?.materialsNeeded ?? "");
   const [status, setStatus] = useState(task?.status ?? "SCHEDULED");
   const [items, setItems] = useState<{ label: string; done: boolean }[]>(
     task?.checklistData?.checklist ?? DEFAULT_ITEMS.map((label) => ({ label, done: false }))
@@ -66,6 +69,8 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
         houseId, scheduledTime: time, cleaningTypes: types, assignedWorkerId: workerId || null,
         estimatedMinutes: minutes ? Number(minutes) : null, priority, notes: notes.trim() || null,
         scheduledDate: fromDateInput(date),
+        nextCheckIn: nextCheck ? fromDateInput(nextCheck) : null,
+        materialsNeeded: materialsNeeded.trim() || null,
       };
       if (editing) {
         await api(`/api/tasks/${task!.id}`, "PATCH", { action: "update", fields: { ...common, status, checklist: items } });
@@ -132,6 +137,9 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
       <label style={S.label}>{tr("Estimated minutes")}</label>
       <input style={S.input} type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="60" />
 
+      <label style={S.label}>{tr("Next check-in")}</label>
+      <input style={S.input} type="date" value={nextCheck} onChange={(e) => setNextCheck(e.target.value)} />
+
       {editing && (
         <>
           <label style={S.label}>{tr("Status")}</label>
@@ -143,6 +151,9 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
 
       <label style={S.label}>{tr("Notes")}</label>
       <textarea style={{ ...S.input, height: 60 }} value={notes} onChange={(e) => setNotes(e.target.value)} />
+
+      <label style={S.label}>{tr("Products / materials needed")}</label>
+      <input style={S.input} value={materialsNeeded} onChange={(e) => setMaterialsNeeded(e.target.value)} />
 
       {MEDIA_ENABLED && editing && photos.length > 0 && (
         <>

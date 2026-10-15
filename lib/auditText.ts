@@ -15,7 +15,7 @@ type Tr = (s: string, vars?: Vars) => string;
 export const AUDIT_FIELD_LABELS: Record<string, string> = {
   houseId: "House", scheduledDate: "Date", scheduledTime: "Time", cleaningTypes: "Cleaning types",
   assignedWorkerId: "Assigned to", estimatedMinutes: "Estimated minutes", priority: "Priority",
-  notes: "Notes", materialsNeeded: "Materials needed", status: "Status", checklist: "Checklist",
+  notes: "Notes", materialsNeeded: "Materials needed", nextCheckIn: "Next check-in", status: "Status", checklist: "Checklist",
   area: "Area", description: "Description", materialsUsed: "Materials used", timeSpentMinutes: "Time spent",
   items: "Items", name: "Name", address: "Address", keyStatus: "Key status", validFrom: "Valid from",
   validUntil: "Valid until", language: "Language", role: "Role", username: "Username", password: "Password",

@@ -6,12 +6,13 @@ import { useEffect, useState } from "react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useI18n } from "@/lib/i18n";
 import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
+import TicketEditor from "@/components/editors/TicketEditor";
 import { Modal, S, SortTh, useSort } from "@/components/ui";
 import { PhotoStrip } from "@/components/Photos";
 import { HouseGallery } from "@/components/HouseMedia";
 import { checkReadiness, REASON_TEXT } from "@/lib/readiness";
 import { MEDIA_ENABLED } from "@/lib/features";
-import { applyDir, cmpText, PRIORITY_RANK, TASK_STATUS_RANK, taskWhen } from "@/lib/sort";
+import { applyDir, cmpText, dayKey, PRIORITY_RANK, TASK_STATUS_RANK, taskWhen } from "@/lib/sort";
 
 const SECTIONS = ["stats", "tasks"] as const;
 const SECTION_LABEL: Record<(typeof SECTIONS)[number], string> = { stats: "Overview", tasks: "Tasks" };
@@ -26,12 +27,15 @@ type Task = EdTask & {
   cleaningTypes: string[];
   house: { name: string };
   assignedWorker: { name: string } | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
 };
 
 export default function ManagerDashboard() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const vis = useSectionVisibility("managerSections", SECTIONS);
-  const { tr, ev } = useI18n();
+  const { tr, ev, locale } = useI18n();
+  const [ticketEd, setTicketEd] = useState(false);
   const [houses, setHouses] = useState<HouseInfo[]>([]);
   const [tickets, setTickets] = useState<{ houseId?: string; status: string }[]>([]);
   // The task being reviewed before approval (Approve opens this pop-up; nothing is approved until "Confirm approve").
@@ -72,6 +76,17 @@ export default function ManagerDashboard() {
     load();
   }
 
+  // Quality & timing: when the cleaner started / finished and how long it really took vs the estimate.
+  const hhmm = (v: Date) => v.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  const timing = (t: Task) => {
+    if (!t.startedAt) return null;
+    const start = new Date(t.startedAt);
+    const end = t.completedAt ? new Date(t.completedAt) : new Date();
+    const mins = Math.max(0, Math.round((+end - +start) / 60000));
+    const est = t.estimatedMinutes ?? 0;
+    return { text: `${hhmm(start)} → ${t.completedAt ? hhmm(end) : "…"} · ${mins}${est ? ` / ${est}` : ""} min`, over: est > 0 && mins > est };
+  };
+
   const counts = {
     scheduled: tasks.filter((t) => t.status === "SCHEDULED" || t.status === "ASSIGNED").length,
     issue: tasks.filter((t) => t.status === "WITH_ISSUE").length,
@@ -104,7 +119,12 @@ export default function ManagerDashboard() {
       title={tr("Cleaning Tasks — Live")}
       vis={vis}
       labels={SECTION_LABEL}
-      actions={<button style={S.navDark} onClick={() => setTaskEd({ task: null })}>+ {tr("New task")}</button>}
+      actions={
+        <>
+          <button style={S.navDark} onClick={() => setTaskEd({ task: null })}>+ {tr("New task")}</button>
+          <button style={S.nav} onClick={() => setTicketEd(true)}>+ {tr("Report an Issue")}</button>
+        </>
+      }
     >
       {vis.shown.stats && (
         <StatGrid>
@@ -126,6 +146,7 @@ export default function ManagerDashboard() {
                 <SortTh label={tr("Priority")} k="priority" sort={sort} style={th} />
                 <SortTh label={tr("Assigned to")} k="assigned" sort={sort} style={th} />
                 <SortTh label={tr("Status")} k="status" sort={sort} style={th} />
+                <th style={th}>{tr("Timing")}</th>
                 <th style={th} />
               </tr>
             </thead>
@@ -134,10 +155,13 @@ export default function ManagerDashboard() {
                 <tr key={t.id}>
                   <td style={td}>{t.house.name}</td>
                   <td style={td}>{t.cleaningTypes.map(ev).join(", ")}</td>
-                  <td style={td}>{t.scheduledTime}</td>
+                  <td style={td}>{t.scheduledTime}<div style={{ fontSize: 10.5, color: "var(--ink-soft)" }}>{dayKey(t.scheduledDate)}</div></td>
                   <td style={td}><PriorityDot p={t.priority} /></td>
                   <td style={td}>{t.assignedWorker?.name ?? "—"}</td>
                   <td style={td}><StatusBadge status={t.status} /></td>
+                  <td style={{ ...td, fontSize: 11.5, whiteSpace: "nowrap", color: timing(t)?.over ? "#B3472E" : "var(--ink)", fontWeight: timing(t)?.over ? 700 : 400 }}>
+                    {timing(t)?.text ?? "—"}
+                  </td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>
                     <button style={{ ...approveBtn, background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", marginRight: 6 }} onClick={() => setTaskEd({ task: t })}>
                       {tr("Edit")}
@@ -174,6 +198,11 @@ export default function ManagerDashboard() {
               <b>{t.house.name}</b> · {t.scheduledTime} · {t.cleaningTypes.map(ev).join(", ")}
             </p>
             <p style={{ fontSize: 12, color: "var(--ink-soft)", margin: 0 }}>{t.assignedWorker?.name ?? tr("Unassigned")}</p>
+            {timing(t) && (
+              <p style={{ fontSize: 12, margin: "4px 0 0", color: timing(t)!.over ? "#B3472E" : "var(--ink-soft)", fontWeight: timing(t)!.over ? 700 : 400 }}>
+                ⏱ {tr("Timing")}: {timing(t)!.text}
+              </p>
+            )}
 
             <div style={{ fontSize: 12.5, margin: "12px 0 4px", padding: "8px 10px", borderRadius: 9, fontWeight: 600,
               background: r.ok ? "var(--green-bg)" : "var(--red-bg)", color: r.ok ? "#4F7A26" : "#B3472E" }}>
@@ -218,6 +247,14 @@ export default function ManagerDashboard() {
           </Modal>
         );
       })()}
+
+      {ticketEd && (
+        <TicketEditor
+          ticket={null} houses={houses} workers={workers}
+          onClose={() => setTicketEd(false)}
+          onSaved={() => { setTicketEd(false); load(); }}
+        />
+      )}
 
       {taskEd && (
         <TaskEditor

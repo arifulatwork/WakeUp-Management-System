@@ -5,7 +5,7 @@ import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { useCan } from "@/lib/useSession";
-import { PhotoStrip } from "@/components/Photos";
+import { PhotoPicker, PhotoStrip } from "@/components/Photos";
 import { MEDIA_ENABLED } from "@/lib/features";
 import type { EdHouse, EdWorker } from "./TaskEditor";
 
@@ -38,6 +38,7 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
   const [workerId, setWorkerId] = useState(ticket?.assignedWorkerId ?? (ticket?.assignedWorker as any)?.id ?? "");
   const [materials, setMaterials] = useState(ticket?.materialsUsed ?? "");
   const [minutes, setMinutes] = useState(ticket?.timeSpentMinutes ? String(ticket.timeSpentMinutes) : "");
+  const [photo, setPhoto] = useState<string | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -59,7 +60,7 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
           },
         });
       } else {
-        await api("/api/tickets", "POST", { houseId, area, priority, description: description.trim(), reportedById: me });
+        await api("/api/tickets", "POST", { houseId, area, priority, description: description.trim(), photoUrl: photo, reportedById: me });
       }
       onSaved();
     } catch (e) {
@@ -95,6 +96,14 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
       <label style={S.label}>{tr("What's wrong?")}</label>
       <textarea style={{ ...S.input, height: 70 }} value={description} onChange={(e) => setDescription(e.target.value)}
         placeholder={tr("e.g. Leaking pipe under the sink")} />
+
+      {!editing && (
+        photo ? (
+          <PhotoStrip photos={[photo]} size={84} onRemove={() => setPhoto(null)} />
+        ) : (
+          <PhotoPicker showWhenOff label={`📷 ${tr("Attach photo")}`} style={S.ghost} onPhoto={setPhoto} />
+        )
+      )}
 
       {MEDIA_ENABLED && editing && (ticket!.photoUrl || ticket!.afterPhotoUrl) && (
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
