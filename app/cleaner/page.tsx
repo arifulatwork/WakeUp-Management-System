@@ -25,7 +25,7 @@ type Task = {
   completedAt?: string | null;
   materialsNeeded?: string | null;
   nextCheckIn?: string | null;
-  house: { name: string; address: string; keyStatus?: string; openIssues?: { area: string; description: string; priority: string; status: string }[]; hasPhoto?: boolean; hasVideo?: boolean; mediaUpdatedAt?: string | null };
+  house: { name: string; address: string; keyStatus?: string; mode?: string; checkInText?: string | null; openIssues?: { area: string; description: string; priority: string; status: string }[]; hasPhoto?: boolean; hasVideo?: boolean; mediaUpdatedAt?: string | null };
   checklistData: { checklist: { label: string; done: boolean }[]; photos?: string[]; videos?: string[] };
 };
 
