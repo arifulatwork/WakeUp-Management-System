@@ -3,6 +3,7 @@
 // For production, upload to object storage (S3 / R2 / Supabase) and store the
 // returned URL instead — the rest of the app only ever reads "a URL".
 export const MAX_PHOTOS_PER_TASK = 10;
+export const MAX_VIDEOS_PER_TASK = 3;
 const MAX_CHARS = 900_000; // ≈ 650 KB of image
 
 export function isValidPhoto(v: unknown): v is string {

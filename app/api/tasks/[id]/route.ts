@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requirePerm, actingWorkerId, currentSession } from "@/lib/guard";
 import { logAudit, changedFields } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
-import { isValidPhoto, MAX_PHOTOS_PER_TASK } from "@/lib/photoValidation";
+import { isValidPhoto, isValidVideo, MAX_PHOTOS_PER_TASK, MAX_VIDEOS_PER_TASK } from "@/lib/photoValidation";
 import { MEDIA_ENABLED } from "@/lib/features";
 import type { Perm } from "@/lib/permissions";
 
@@ -35,7 +35,7 @@ export async function PATCH(
 
   // A cleaner / maintenance worker may only touch a job that is assigned to THEM.
   // (Office roles keep full access, including "open the app as this worker".)
-  const FIELD_ACTIONS = ["start", "toggleCheck", "setCheck", "complete", "markIssue", "undoReady", "addPhoto", "removePhoto"];
+  const FIELD_ACTIONS = ["start", "toggleCheck", "setCheck", "complete", "markIssue", "undoReady", "addPhoto", "removePhoto", "addVideo", "removeVideo"];
   if (FIELD_ACTIONS.includes(body.action)) {
     const who = await currentSession(req);
     if (who?.role === "worker" && task.assignedWorkerId !== who.workerId) {
@@ -130,6 +130,37 @@ export async function PATCH(
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { checklistData: { ...data, photos } },
+      });
+      return NextResponse.json(updated);
+    }
+
+    // Before/after videos from the cleaner's phone. Same rules as photos; stored next to them in checklistData.videos.
+    case "addVideo": {
+      if (!MEDIA_ENABLED) return NextResponse.json({ error: "videos are switched off" }, { status: 403 });
+      if (!isValidVideo(body.video)) {
+        return NextResponse.json({ error: "invalid or too large video" }, { status: 400 });
+      }
+      const data = (task.checklistData as any) ?? { checklist: [], photos: [] };
+      const videos: string[] = [...(data.videos ?? [])];
+      if (videos.length >= MAX_VIDEOS_PER_TASK) {
+        return NextResponse.json({ error: "too many videos" }, { status: 409 });
+      }
+      videos.push(body.video);
+      const updated = await db.cleaningTask.update({
+        where: { id: params.id },
+        data: { checklistData: { ...data, videos } },
+      });
+      return NextResponse.json(updated);
+    }
+
+    case "removeVideo": {
+      if (!MEDIA_ENABLED) return NextResponse.json({ error: "videos are switched off" }, { status: 403 });
+      const data = (task.checklistData as any) ?? { checklist: [], photos: [] };
+      const videos: string[] = [...(data.videos ?? [])];
+      if (typeof body.index === "number" && videos[body.index] !== undefined) videos.splice(body.index, 1);
+      const updated = await db.cleaningTask.update({
+        where: { id: params.id },
+        data: { checklistData: { ...data, videos } },
       });
       return NextResponse.json(updated);
     }

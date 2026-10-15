@@ -24,6 +24,25 @@ export async function GET(req: NextRequest) {
     orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
   });
 
+  // The cleaner's app also shows the HOUSE's condition: attach each house's open maintenance
+  // problems (not closed, not rejected). The key status already comes with the house.
+  if (workerId) {
+    const open = await db.maintenanceTicket.findMany({
+      where: { status: { not: "CLOSED" } },
+      orderBy: [{ reportedAt: "asc" }],
+    });
+    const byHouse = new Map<string, { area: string; description: string; priority: string; status: string }[]>();
+    for (const t of open as any[]) {
+      if (t.status === "REJECTED") continue;
+      const list = byHouse.get(t.houseId) ?? [];
+      list.push({ area: t.area, description: t.description, priority: t.priority, status: t.status });
+      byHouse.set(t.houseId, list);
+    }
+    return NextResponse.json(
+      tasks.map((t: any) => ({ ...t, house: { ...t.house, openIssues: byHouse.get(t.houseId) ?? [] } }))
+    );
+  }
+
   return NextResponse.json(tasks);
 }
 

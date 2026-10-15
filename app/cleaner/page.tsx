@@ -6,7 +6,7 @@ import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { queueFetch } from "@/lib/offlineQueue";
 import { useI18n } from "@/lib/i18n";
 import { useRouter } from "next/navigation";
-import { PhotoPicker, PhotoStrip } from "@/components/Photos";
+import { PhotoPicker, PhotoStrip, VideoPicker, VideoStrip } from "@/components/Photos";
 import AppFooter from "@/components/AppFooter";
 import { HouseThumb, HouseGallery } from "@/components/HouseMedia";
 import { DONE_TASK, PRIORITY_RANK, taskWhen, cmpText, dayKey } from "@/lib/sort";
@@ -21,8 +21,8 @@ type Task = {
   priority?: string;
   cleaningTypes: string[];
   notes?: string | null;
-  house: { name: string; address: string; hasPhoto?: boolean; hasVideo?: boolean; mediaUpdatedAt?: string | null };
-  checklistData: { checklist: { label: string; done: boolean }[]; photos?: string[] };
+  house: { name: string; address: string; keyStatus?: string; openIssues?: { area: string; description: string; priority: string; status: string }[]; hasPhoto?: boolean; hasVideo?: boolean; mediaUpdatedAt?: string | null };
+  checklistData: { checklist: { label: string; done: boolean }[]; photos?: string[]; videos?: string[] };
 };
 
 const AREAS = ["Bathroom", "Kitchen", "Bedroom", "Living room", "Outdoor", "Other"];
@@ -83,7 +83,7 @@ export default function CleanerApp() {
   useLiveRefresh(() => {
     const id = localStorage.getItem("workerId");
     if (id && navigator.onLine) loadTasks(id);
-  }, { models: ["cleaningTask", "house"] });
+  }, { models: ["cleaningTask", "house", "maintenanceTicket"] });
 
   // Every mutation below goes through queueFetch instead of raw fetch:
   // if there's no signal (common inside a house), the action is saved
@@ -173,6 +173,22 @@ export default function CleanerApp() {
     setActiveTask((a) => (a && a.id === task.id ? patch(a) : a));
     setTasks((ts) => ts.map((t) => (t.id === task.id ? patch(t) : t)));
     const r = await queueFetch(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ action: "removePhoto", index }) });
+    if (!r.ok) { showError(tr("Could not save. Please try again.")); if (workerId) loadTasks(workerId); }
+  }
+
+  async function addVideo(task: Task, video: string) {
+    const patch = (t: Task): Task => ({ ...t, checklistData: { ...t.checklistData, videos: [...(t.checklistData.videos ?? []), video] } });
+    setActiveTask((a) => (a && a.id === task.id ? patch(a) : a));
+    setTasks((ts) => ts.map((t) => (t.id === task.id ? patch(t) : t)));
+    const r = await queueFetch(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ action: "addVideo", video }) });
+    if (!r.ok) { showError(tr("Could not save. Please try again.")); if (workerId) loadTasks(workerId); }
+  }
+
+  async function removeVideo(task: Task, index: number) {
+    const patch = (t: Task): Task => ({ ...t, checklistData: { ...t.checklistData, videos: (t.checklistData.videos ?? []).filter((_, i) => i !== index) } });
+    setActiveTask((a) => (a && a.id === task.id ? patch(a) : a));
+    setTasks((ts) => ts.map((t) => (t.id === task.id ? patch(t) : t)));
+    const r = await queueFetch(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ action: "removeVideo", index }) });
     if (!r.ok) { showError(tr("Could not save. Please try again.")); if (workerId) loadTasks(workerId); }
   }
 
@@ -284,7 +300,7 @@ export default function CleanerApp() {
         {issuePhoto ? (
           <PhotoStrip photos={[issuePhoto]} size={96} onRemove={() => setIssuePhoto(null)} />
         ) : (
-          <PhotoPicker label={`📷 ${tr("Attach photo")}`} style={ghostBtn} onPhoto={setIssuePhoto} />
+          <PhotoPicker showWhenOff label={`📷 ${tr("Attach photo")}`} style={ghostBtn} onPhoto={setIssuePhoto} />
         )}
         <button
           style={{ ...primaryBtn, opacity: issueDesc.trim() ? 1 : 0.5 }}
@@ -355,6 +371,7 @@ export default function CleanerApp() {
           {activeTask.cleaningTypes.map(ev).join(", ")} · {activeTask.scheduledTime}
         </p>
         <HouseGallery houseId={activeTask.houseId} house={activeTask.house} />
+        <HouseStatus house={tasks.find((t) => t.id === activeTask.id)?.house ?? activeTask.house} ready={activeTask.status === "APPROVED"} />
         {activeTask.notes && (
           <p style={{ fontSize: 12, background: "#FAF3D6", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
             <b>{tr("Note")}:</b> {tr(activeTask.notes)}
@@ -376,8 +393,10 @@ export default function CleanerApp() {
           ))}
         </div>
 
-        <PhotoPicker label={`📷 ${tr("Add before/after photo")}`} style={ghostBtn} onPhoto={(p) => addPhoto(activeTask, p)} />
+        <PhotoPicker showWhenOff label={`📷 ${tr("Add before/after photo")}`} style={ghostBtn} onPhoto={(p) => addPhoto(activeTask, p)} />
         <PhotoStrip photos={activeTask.checklistData.photos ?? []} onRemove={(i) => removePhoto(activeTask, i)} />
+        <VideoPicker showWhenOff label={`🎥 ${tr("Add before/after video")}`} style={ghostBtn} onVideo={(v) => addVideo(activeTask, v)} />
+        <VideoStrip videos={activeTask.checklistData.videos ?? []} onRemove={(i) => removeVideo(activeTask, i)} />
         <button style={issueBtn} onClick={() => setReportingIssue(true)}>⚠ {tr("Report damage / issue")}</button>
         <button style={ghostBtn} onClick={() => setRequestingMaterials(true)}>📦 {tr("Request products / materials")}</button>
         {activeTask.status === "TO_BE_VERIFIED" ? (
@@ -425,6 +444,7 @@ export default function CleanerApp() {
         <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 3 }}>
           {dk(task) !== today ? `${dk(task)} · ` : ""}{task.scheduledTime} · {task.cleaningTypes.map(ev).join(", ")}
         </div>
+        <HouseChips house={task.house} />
         <a
           href={`https://maps.google.com/?q=${encodeURIComponent(task.house.address)}`}
           target="_blank"
@@ -462,6 +482,49 @@ export default function CleanerApp() {
       )}
       <AppFooter />
     </main>
+  );
+}
+
+// What state is the HOUSE in (not the cleaning job)? Key status + open maintenance problems.
+function HouseStatus({ house, ready }: { house: Task["house"]; ready?: boolean }) {
+  const { tr, ev } = useI18n();
+  const issues = house.openIssues ?? [];
+  const keyBad = house.keyStatus === "MISSING";
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "9px 11px", marginBottom: 12, background: "#fff" }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--ink-soft)", marginBottom: 6 }}>{tr("House status")}</div>
+      <div style={{ fontSize: 12.5, marginBottom: 6, color: keyBad ? "var(--red)" : "var(--ink)", fontWeight: keyBad ? 700 : 500 }}>
+        🔑 {tr("Key status")}: {house.keyStatus ? ev(house.keyStatus) : "—"}
+      </div>
+      {ready && <div style={{ fontSize: 12.5, marginBottom: 6, color: "var(--green-dark)", fontWeight: 600 }}>✓ {tr("Confirmed ready for check-in")}</div>}
+      {issues.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: "var(--green-dark)" }}>✓ {tr("No open issues")}</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--red)", marginBottom: 3 }}>⚠ {tr("Open issues")} ({issues.length})</div>
+          {issues.map((it, i) => (
+            <div key={i} style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2 }}>
+              • {tr(it.area)} — {it.description} <span style={{ opacity: 0.7 }}>({ev(it.status)})</span>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Small warning chips on the house list: only shown when something is wrong.
+function HouseChips({ house }: { house: Task["house"] }) {
+  const { tr } = useI18n();
+  const n = house.openIssues?.length ?? 0;
+  const keyBad = house.keyStatus === "MISSING";
+  if (!n && !keyBad) return null;
+  const chip: React.CSSProperties = { fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "var(--red-bg)", color: "var(--red)" };
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "5px 0" }}>
+      {keyBad && <span style={chip}>🔑 {tr("Key is missing")}</span>}
+      {n > 0 && <span style={chip}>⚠ {tr("Open issues")} ({n})</span>}
+    </div>
   );
 }
 

@@ -5,12 +5,24 @@ import { compressImage, readVideo } from "@/lib/photos";
 import { useI18n } from "@/lib/i18n";
 import { MEDIA_ENABLED } from "@/lib/features";
 
+// Greyed-out, untappable button shown while media is switched off, so people can see the feature is planned.
+function ComingSoonButton({ label, style }: { label: string; style?: React.CSSProperties }) {
+  const { tr } = useI18n();
+  return (
+    <button type="button" disabled aria-disabled="true" style={{ ...style, opacity: 0.5, cursor: "not-allowed" }}>
+      {label} · {tr("Coming soon")}
+    </button>
+  );
+}
+
 // Button that opens the camera / gallery. On a phone, "accept=image/*" offers
 // "Take photo" or "Photo library"; on a laptop it opens a file chooser.
-export function PhotoPicker({ label, onPhoto, style }: {
+export function PhotoPicker({ label, onPhoto, style, showWhenOff }: {
   label: string;
   onPhoto: (dataUrl: string) => void;
   style?: React.CSSProperties;
+  // When photos are switched off, show the button greyed out with "Coming soon" instead of hiding it.
+  showWhenOff?: boolean;
 }) {
   const { tr } = useI18n();
   const ref = useRef<HTMLInputElement>(null);
@@ -31,7 +43,10 @@ export function PhotoPicker({ label, onPhoto, style }: {
     setBusy(false);
   }
 
-  if (!MEDIA_ENABLED) return null; // photos & videos are switched off (lib/features.ts)
+  if (!MEDIA_ENABLED) {
+    // photos & videos are switched off (lib/features.ts)
+    return showWhenOff ? <ComingSoonButton label={label} style={style} /> : null;
+  }
   return (
     <>
       <input ref={ref} type="file" accept="image/*" onChange={pick} style={{ display: "none" }} />
@@ -44,10 +59,12 @@ export function PhotoPicker({ label, onPhoto, style }: {
 }
 
 // Same idea for a video (camera / gallery). Videos are not re-compressed, so they have a size limit.
-export function VideoPicker({ label, onVideo, style }: {
+export function VideoPicker({ label, onVideo, style, showWhenOff }: {
   label: string;
   onVideo: (dataUrl: string) => void;
   style?: React.CSSProperties;
+  // When videos are switched off, show the button greyed out with "Coming soon" instead of hiding it.
+  showWhenOff?: boolean;
 }) {
   const { tr } = useI18n();
   const ref = useRef<HTMLInputElement>(null);
@@ -68,7 +85,10 @@ export function VideoPicker({ label, onVideo, style }: {
     setBusy(false);
   }
 
-  if (!MEDIA_ENABLED) return null; // photos & videos are switched off (lib/features.ts)
+  if (!MEDIA_ENABLED) {
+    // photos & videos are switched off (lib/features.ts)
+    return showWhenOff ? <ComingSoonButton label={label} style={style} /> : null;
+  }
   return (
     <>
       <input ref={ref} type="file" accept="video/mp4,video/webm,video/quicktime" onChange={pick} style={{ display: "none" }} />
@@ -124,5 +144,30 @@ export function PhotoStrip({ photos, onRemove, size = 64 }: {
         </div>
       )}
     </>
+  );
+}
+
+// Row of video players (task videos). Pass onRemove to show ×.
+export function VideoStrip({ videos, onRemove }: { videos: string[]; onRemove?: (index: number) => void }) {
+  const { tr } = useI18n();
+  if (!MEDIA_ENABLED || !videos.length) return null;
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
+      {videos.map((src, i) => (
+        <div key={i} style={{ position: "relative" }}>
+          <video src={src} controls preload="metadata" style={{ width: 160, height: 110, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)", background: "#000", display: "block" }} />
+          {onRemove && (
+            <button
+              type="button"
+              aria-label={tr("Remove video")}
+              onClick={() => onRemove(i)}
+              style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", border: "none", background: "#111", color: "#fff", fontSize: 12, lineHeight: "20px", cursor: "pointer", padding: 0 }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
