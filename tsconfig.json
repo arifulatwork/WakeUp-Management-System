@@ -13,7 +13,6 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "target": "es2017",
-    "baseUrl": ".",
     "paths": { "@/*": ["./*"] },
     "plugins": [{ "name": "next" }]
   },
