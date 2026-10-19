@@ -1,7 +1,7 @@
 "use client";
 
 import FieldHeader from "@/components/FieldHeader";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { queueFetch } from "@/lib/offlineQueue";
 import { useI18n } from "@/lib/i18n";
@@ -107,31 +107,51 @@ export default function CleanerApp() {
     if (workerId) loadTasks(workerId);
   }
 
+  // Ticks are saved one after another (never in parallel), and only the LAST server reply is
+  // applied. Before, each tap's reply replaced the whole screen with a copy that did not yet
+  // contain the other taps, so boxes jumped back and forth when ticking quickly.
+  const checkQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const checksInFlight = useRef(0);
+
   async function toggleCheck(task: Task, index: number) {
     // Optimistic local change first — works even fully offline.
     const current = activeTask?.checklistData?.checklist ?? [];
     const done = !current[index]?.done;
     const next = current.map((item, i) => (i === index ? { ...item, done } : item));
-    setActiveTask({ ...task, checklistData: { ...task.checklistData, checklist: next } });
+    setActiveTask((a) => (a ? { ...a, checklistData: { ...a.checklistData, checklist: next } } : a));
 
     // Sends the wanted value (done = true/false), not "flip it", so a repeated or
     // replayed request can never undo a tick.
-    const result = await queueFetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ action: "setCheck", index, done }),
-    });
-    if (!result.queued) {
-      if (!result.ok) {
-        // The server said no: go back to what it has, never replace the job with an error.
-        setActiveTask((a) => (a && a.id === task.id ? task : a));
-        showError(tr("Could not save. Please try again."));
-        if (workerId) loadTasks(workerId);
-        return;
+    checksInFlight.current++;
+    const save = async () => {
+      try {
+        const result = await queueFetch(`/api/tasks/${task.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ action: "setCheck", index, done }),
+        });
+        if (result.queued) return;
+        if (!result.ok) {
+          // The server said no: undo just this box, keep the other taps.
+          setActiveTask((a) => {
+            if (!a || a.id !== task.id) return a;
+            const list = (a.checklistData?.checklist ?? []).map((item, i) => (i === index ? { ...item, done: !done } : item));
+            return { ...a, checklistData: { ...a.checklistData, checklist: list } };
+          });
+          showError(tr("Could not save. Please try again."));
+          return;
+        }
+        const updated = await result.json();
+        // Only the last save in the row has seen every tap; earlier replies are stale.
+        if (checksInFlight.current === 1) {
+          // The server's reply has no "house" attached, so keep the one we already have.
+          setActiveTask((a) => (a && a.id === task.id ? { ...updated, house: updated.house ?? a.house ?? task.house } : a));
+        }
+      } finally {
+        checksInFlight.current--;
       }
-      const updated = await result.json();
-      // The server's reply has no "house" attached, so keep the one we already have.
-      setActiveTask((a) => ({ ...updated, house: updated.house ?? a?.house ?? task.house }));
-    }
+    };
+    checkQueue.current = checkQueue.current.then(save, save);
+    await checkQueue.current;
   }
 
   async function markReady(task: Task) {
