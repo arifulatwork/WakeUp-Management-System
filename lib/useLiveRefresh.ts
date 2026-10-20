@@ -69,7 +69,7 @@ export function useLiveRefresh(load: () => void, opts: { models?: string[] } = {
       if (document.visibilityState === "hidden") return; // catch up when the tab comes back
       latest.current();
     };
-    const soon = () => { clearTimeout(debounce); debounce = setTimeout(run, 200); };
+    const soon = () => { clearTimeout(debounce); debounce = setTimeout(run, 40); };
     const startPoll = (connected: boolean) => { clearInterval(poll); poll = setInterval(run, connected ? 60_000 : 8_000); };
 
     const onChange = (models: string[]) => {

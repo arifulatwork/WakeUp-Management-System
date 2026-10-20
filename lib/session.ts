@@ -33,14 +33,16 @@ function fromBase64Url(b64url: string): Uint8Array {
   return arr;
 }
 
-async function hmacKey() {
-  return crypto.subtle.importKey(
+// Imported once and reused (it used to be re-imported on every single request).
+let keyPromise: Promise<CryptoKey> | null = null;
+function hmacKey() {
+  return (keyPromise ??= crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(SECRET),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"]
-  );
+  ));
 }
 
 export async function createSession(payload: Omit<SessionPayload, "exp">): Promise<string> {

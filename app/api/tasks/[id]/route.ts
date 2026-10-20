@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { slimAny } from "@/lib/mediaSlim";
+
+// Every answer goes through slimAny: photos / videos are returned as short URLs, not megabytes of base64.
+const json = (v: any, init?: ResponseInit) => NextResponse.json(slimAny(v), init);
 import { db } from "@/lib/db";
 import { requirePerm, actingWorkerId, currentSession } from "@/lib/guard";
 import { logAudit, changedFields } from "@/lib/audit";
@@ -31,7 +35,7 @@ export async function PATCH(
 
   const task = await db.cleaningTask.findUnique({ where: { id: params.id } });
   if (!task) {
-    return NextResponse.json({ error: "task not found" }, { status: 404 });
+    return json({ error: "task not found" }, { status: 404 });
   }
 
   // A cleaner / maintenance worker may only touch a job that is assigned to THEM.
@@ -40,7 +44,7 @@ export async function PATCH(
   if (FIELD_ACTIONS.includes(body.action)) {
     const who = await currentSession(req);
     if (who?.role === "worker" && task.assignedWorkerId !== who.workerId) {
-      return NextResponse.json({ error: "this job is not assigned to you" }, { status: 403 });
+      return json({ error: "this job is not assigned to you" }, { status: 403 });
     }
   }
 
@@ -61,20 +65,20 @@ export async function PATCH(
   // A job has to be started before it can be ticked off or marked ready.
   const NOT_STARTED = ["ASSIGNED", "SCHEDULED"];
   if ((body.action === "complete" || body.action === "toggleCheck" || body.action === "setCheck") && NOT_STARTED.includes(task.status)) {
-    return NextResponse.json({ error: "start the job first" }, { status: 409 });
+    return json({ error: "start the job first" }, { status: 409 });
   }
 
   switch (body.action) {
     case "start": {
       // Starting again must not reopen a job that is already finished or waiting for review.
       if (!NOT_STARTED.includes(task.status) && task.status !== "ON_HOLD") {
-        return NextResponse.json(task);
+        return json(task);
       }
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { status: "IN_PROGRESS", startedAt: new Date() },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     case "toggleCheck": {
@@ -90,7 +94,7 @@ export async function PATCH(
         where: { id: params.id },
         data: { checklistData: { ...data, checklist } },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     // Sets one checklist item to an exact value (safe to repeat; unlike toggleCheck it can't flip back).
@@ -104,30 +108,30 @@ export async function PATCH(
         where: { id: params.id },
         data: { checklistData: { ...data, checklist } },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     // Before/after photos from the cleaner's phone (and removal, by them or a reviewer).
     case "addPhoto": {
-      if (!MEDIA_ENABLED) return NextResponse.json({ error: "photos are switched off" }, { status: 403 });
+      if (!MEDIA_ENABLED) return json({ error: "photos are switched off" }, { status: 403 });
       if (!isValidPhoto(body.photo)) {
-        return NextResponse.json({ error: "invalid or too large photo" }, { status: 400 });
+        return json({ error: "invalid or too large photo" }, { status: 400 });
       }
       const data = (task.checklistData as any) ?? { checklist: [], photos: [] };
       const photos: string[] = [...(data.photos ?? [])];
       if (photos.length >= MAX_PHOTOS_PER_TASK) {
-        return NextResponse.json({ error: "too many photos" }, { status: 409 });
+        return json({ error: "too many photos" }, { status: 409 });
       }
       photos.push(body.photo);
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { checklistData: { ...data, photos } },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     case "removePhoto": {
-      if (!MEDIA_ENABLED) return NextResponse.json({ error: "photos are switched off" }, { status: 403 });
+      if (!MEDIA_ENABLED) return json({ error: "photos are switched off" }, { status: 403 });
       const data = (task.checklistData as any) ?? { checklist: [], photos: [] };
       const photos: string[] = [...(data.photos ?? [])];
       if (typeof body.index === "number" && photos[body.index] !== undefined) photos.splice(body.index, 1);
@@ -135,30 +139,30 @@ export async function PATCH(
         where: { id: params.id },
         data: { checklistData: { ...data, photos } },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     // Before/after videos from the cleaner's phone. Same rules as photos; stored next to them in checklistData.videos.
     case "addVideo": {
-      if (!MEDIA_ENABLED) return NextResponse.json({ error: "videos are switched off" }, { status: 403 });
+      if (!MEDIA_ENABLED) return json({ error: "videos are switched off" }, { status: 403 });
       if (!isValidVideo(body.video)) {
-        return NextResponse.json({ error: "invalid or too large video" }, { status: 400 });
+        return json({ error: "invalid or too large video" }, { status: 400 });
       }
       const data = (task.checklistData as any) ?? { checklist: [], photos: [] };
       const videos: string[] = [...(data.videos ?? [])];
       if (videos.length >= MAX_VIDEOS_PER_TASK) {
-        return NextResponse.json({ error: "too many videos" }, { status: 409 });
+        return json({ error: "too many videos" }, { status: 409 });
       }
       videos.push(body.video);
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { checklistData: { ...data, videos } },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     case "removeVideo": {
-      if (!MEDIA_ENABLED) return NextResponse.json({ error: "videos are switched off" }, { status: 403 });
+      if (!MEDIA_ENABLED) return json({ error: "videos are switched off" }, { status: 403 });
       const data = (task.checklistData as any) ?? { checklist: [], photos: [] };
       const videos: string[] = [...(data.videos ?? [])];
       if (typeof body.index === "number" && videos[body.index] !== undefined) videos.splice(body.index, 1);
@@ -166,12 +170,12 @@ export async function PATCH(
         where: { id: params.id },
         data: { checklistData: { ...data, videos } },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     case "complete": {
       // A stale screen or a replayed offline tap must never undo an approval.
-      if (task.status === "APPROVED") return NextResponse.json(task);
+      if (task.status === "APPROVED") return json(task);
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: {
@@ -182,7 +186,7 @@ export async function PATCH(
       });
       // Tell the coordinators / managers a house is waiting for them.
       pushAsync({ roles: STAFF_ROLES }, "task_review", { house: await houseName() }, `review-${params.id}`);
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     case "approve": {
@@ -190,20 +194,20 @@ export async function PATCH(
         where: { id: params.id },
         data: { status: "APPROVED" },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     // Approved by mistake (or changed your mind)? Back to "To be verified" so it can be reviewed
     // again, approved properly or sent back to the cleaner. Only for office roles (tasks.review).
     case "unapprove": {
       if (task.status !== "APPROVED") {
-        return NextResponse.json({ error: "task is not approved" }, { status: 409 });
+        return json({ error: "task is not approved" }, { status: 409 });
       }
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { status: "TO_BE_VERIFIED" },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     case "markIssue": {
@@ -211,19 +215,19 @@ export async function PATCH(
         where: { id: params.id },
         data: { status: "WITH_ISSUE" },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     // The cleaner took back "ready for check-in" before anyone verified it.
     case "undoReady": {
       if (!["TO_BE_VERIFIED", "COMPLETED"].includes(task.status)) {
-        return NextResponse.json({ error: "task is not waiting for verification" }, { status: 409 });
+        return json({ error: "task is not waiting for verification" }, { status: 409 });
       }
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { status: "IN_PROGRESS", completedAt: null, completedByWorkerId: null },
       });
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     // Manager/coordinator rejects a finished job -> back to the cleaner.
@@ -239,7 +243,7 @@ export async function PATCH(
       if (task.assignedWorkerId) {
         pushAsync({ workerIds: [task.assignedWorkerId] }, "task_back", { house: await houseName() }, `back-${params.id}`);
       }
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     // Full edit from the Manager / Coordinator / Admin screens.
@@ -298,11 +302,11 @@ export async function PATCH(
         pushAsync({ workerIds: [newWorker] }, "task_new",
           { house: updated.house?.name ?? "", time: updated.scheduledTime ?? task.scheduledTime }, `job-${params.id}`);
       }
-      return NextResponse.json(updated);
+      return json(updated);
     }
 
     default:
-      return NextResponse.json({ error: "unknown action" }, { status: 400 });
+      return json({ error: "unknown action" }, { status: 400 });
   }
 }
 
@@ -313,8 +317,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   try {
     await db.cleaningTask.delete({ where: { id: params.id } });
     await logAudit(req, "task", params.id, "delete", "Deleted task");
-    return NextResponse.json({ ok: true });
+    return json({ ok: true });
   } catch {
-    return NextResponse.json({ error: "task not found" }, { status: 404 });
+    return json({ error: "task not found" }, { status: 404 });
   }
 }

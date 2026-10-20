@@ -54,7 +54,7 @@ export default function OpsOverview() {
   // from updating, and nothing is served from a browser cache after an edit.
   const load = useCallback(async () => {
     const get = async (url: string) => {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { cache: "no-cache" });
       if (!res.ok) throw new Error(url);
       return res.json();
     };

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifySession, SESSION_COOKIE, SessionPayload } from "@/lib/session";
 import { can, Perm } from "@/lib/permissions";
+import { cachedValue } from "@/lib/serverCache";
 
 // Server-side enforcement. Hiding a button is not security — every route that
 // changes or exposes management data calls requirePerm().
@@ -15,7 +16,9 @@ export type FullSession = SessionPayload & { area?: string; language?: string };
 export async function currentSession(req: NextRequest): Promise<FullSession | null> {
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return null;
-  const worker = await db.worker.findUnique({ where: { id: session.workerId } });
+  // Read from memory; the database is asked again only after the Worker table was written to
+  // (role change, rename, delete), so a demotion still applies on the very next request.
+  const worker = await cachedValue<any>(`worker:${session.workerId}`, ["worker"], () => db.worker.findUnique({ where: { id: session.workerId } }));
   if (!worker) return null;
   return { ...session, role: worker.role, name: worker.name, area: worker.area, language: worker.language };
 }

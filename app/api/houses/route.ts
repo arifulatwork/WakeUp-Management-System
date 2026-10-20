@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { parseMedia, writeMedia } from "@/lib/houseMedia";
+import { cachedJson } from "@/lib/serverCache";
 import { findDuplicate, normMode, nameKey, isUniqueViolation, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
 
 // GET /api/houses — house list (cleaner's "My Houses" screen,
@@ -10,9 +11,8 @@ import { findDuplicate, normMode, nameKey, isUniqueViolation, MAX_CHECKIN_TEXT }
 // These GETs never read the request, so a production build could freeze them; always read live data.
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const houses = await db.house.findMany({ orderBy: { name: "asc" } });
-  return NextResponse.json(houses);
+export async function GET(req: NextRequest) {
+  return cachedJson(req, "houses", ["house"], () => db.house.findMany({ orderBy: { name: "asc" } }));
 }
 
 // POST /api/houses — admin adds a house. validFrom/validUntil are

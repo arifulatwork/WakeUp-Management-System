@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { requirePerm, actingWorkerId } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
+import { cachedJson } from "@/lib/serverCache";
+import { slimTask } from "@/lib/mediaSlim";
 
 // GET /api/tasks
 //   ?workerId=xxx   -> a cleaner's own assigned tasks (mobile app)
@@ -18,32 +20,38 @@ export async function GET(req: NextRequest) {
     if (g.error) return g.error;
   }
 
-  const tasks = await db.cleaningTask.findMany({
-    where: workerId ? { assignedWorkerId: workerId } : undefined,
-    include: { house: true, assignedWorker: true },
-    orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
-  });
+  // Built once per change (not once per screen per refresh); photos/videos are sent as short URLs.
+  return cachedJson(
+    req,
+    `tasks:${workerId ?? "all"}`,
+    workerId ? ["cleaningTask", "house", "worker", "maintenanceTicket"] : ["cleaningTask", "house", "worker"],
+    async () => {
+      const tasks = await db.cleaningTask.findMany({
+        where: workerId ? { assignedWorkerId: workerId } : undefined,
+        include: { house: true, assignedWorker: true },
+        orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
+      });
 
-  // The cleaner's app also shows the HOUSE's condition: attach each house's open maintenance
-  // problems (not closed, not rejected). The key status already comes with the house.
-  if (workerId) {
-    const open = await db.maintenanceTicket.findMany({
-      where: { status: { not: "CLOSED" } },
-      orderBy: [{ reportedAt: "asc" }],
-    });
-    const byHouse = new Map<string, { area: string; description: string; priority: string; status: string }[]>();
-    for (const t of open as any[]) {
-      if (t.status === "REJECTED") continue;
-      const list = byHouse.get(t.houseId) ?? [];
-      list.push({ area: t.area, description: t.description, priority: t.priority, status: t.status });
-      byHouse.set(t.houseId, list);
+      // The cleaner's app also shows the HOUSE's condition: attach each house's open maintenance
+      // problems (not closed, not rejected). The key status already comes with the house.
+      if (workerId) {
+        const open = await db.maintenanceTicket.findMany({
+          where: { status: { not: "CLOSED" } },
+          orderBy: [{ reportedAt: "asc" }],
+          select: { houseId: true, area: true, description: true, priority: true, status: true }, // no photos needed here
+        });
+        const byHouse = new Map<string, { area: string; description: string; priority: string; status: string }[]>();
+        for (const t of open as any[]) {
+          if (t.status === "REJECTED") continue;
+          const list = byHouse.get(t.houseId) ?? [];
+          list.push({ area: t.area, description: t.description, priority: t.priority, status: t.status });
+          byHouse.set(t.houseId, list);
+        }
+        return tasks.map((t: any) => slimTask({ ...t, house: { ...t.house, openIssues: byHouse.get(t.houseId) ?? [] } }));
+      }
+      return tasks.map(slimTask);
     }
-    return NextResponse.json(
-      tasks.map((t: any) => ({ ...t, house: { ...t.house, openIssues: byHouse.get(t.houseId) ?? [] } }))
-    );
-  }
-
-  return NextResponse.json(tasks);
+  );
 }
 
 // POST /api/tasks — Cristina creates a new cleaning task.

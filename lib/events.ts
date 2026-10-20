@@ -14,10 +14,15 @@ type Bus = { listeners: Set<Listener>; pending: Set<string>; timer: ReturnType<t
 const g = globalThis as unknown as { __wuBus?: Bus };
 const bus = (): Bus => (g.__wuBus ??= { listeners: new Set(), pending: new Set(), timer: null });
 
-// Changes are grouped for 120 ms so a burst of writes becomes one ping.
+// Per-table change counters, bumped IMMEDIATELY on every write (not batched). lib/serverCache.ts
+// compares them to know whether a cached answer is still valid.
+const versions = (): Record<string, number> => ((globalThis as any).__wuVersions ??= {});
+export const modelVersion = (models: string[]) => models.map((m) => versions()[m] ?? 0).join(".");
+
+// Changes are grouped for 30 ms so a burst of writes becomes one ping.
 export function notifyChange(...models: string[]) {
   const b = bus();
-  models.forEach((m) => b.pending.add(m));
+  models.forEach((m) => { versions()[m] = (versions()[m] ?? 0) + 1; b.pending.add(m); });
   if (b.timer) return;
   b.timer = setTimeout(() => {
     const batch = Array.from(b.pending);
@@ -26,7 +31,7 @@ export function notifyChange(...models: string[]) {
     b.listeners.forEach((l) => {
       try { l(batch); } catch { /* a dead connection must not stop the others */ }
     });
-  }, 120);
+  }, 30);
 }
 
 export function subscribe(l: Listener): () => void {

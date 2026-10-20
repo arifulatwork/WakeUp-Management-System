@@ -6,6 +6,8 @@ import { MEDIA_ENABLED } from "@/lib/features";
 import { logAudit } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
 import { maybePurgeTickets } from "@/lib/retention";
+import { cachedJson } from "@/lib/serverCache";
+import { slimTicket } from "@/lib/mediaSlim";
 
 // GET /api/tickets
 //   ?open=1       -> only tickets not yet closed (office screens; includes "to be verified")
@@ -29,7 +31,7 @@ export async function GET(req: NextRequest) {
       include: { house: true, reportedBy: true },
     });
     done.sort((a: any, b: any) => new Date(b.closedAt ?? 0).getTime() - new Date(a.closedAt ?? 0).getTime());
-    return NextResponse.json(done);
+    return NextResponse.json(done.map(slimTicket));
   }
 
   // The maintenance team reads the open queue (their own login); the full history is management only.
@@ -40,19 +42,21 @@ export async function GET(req: NextRequest) {
 
   await maybePurgeTickets(); // six-month cleanup of closed tickets (at most hourly)
 
-  let tickets = await db.maintenanceTicket.findMany({
-    where: openOnly ? { status: { not: "CLOSED" } } : undefined,
-    include: { house: true, reportedBy: true, assignedWorker: true },
-    orderBy: [{ reportedAt: "asc" }],
+  const queue = !!req.nextUrl.searchParams.get("queue");
+  return cachedJson(req, `tickets:${openOnly ? "open" : "all"}:${queue ? "q" : "f"}`, ["maintenanceTicket", "house", "worker"], async () => {
+    let tickets = await db.maintenanceTicket.findMany({
+      where: openOnly ? { status: { not: "CLOSED" } } : undefined,
+      include: { house: true, reportedBy: true, assignedWorker: true },
+      orderBy: [{ reportedAt: "asc" }],
+    });
+
+    // A ticket the worker already handed in is waiting for the office: not part of their queue any more.
+    if (queue) tickets = tickets.filter((t: any) => t.status !== "TO_BE_VERIFIED");
+
+    const priorityRank: Record<string, number> = { RED: 0, ORANGE: 1, YELLOW: 2 };
+    tickets.sort((a: { priority: string }, b: { priority: string }) => priorityRank[a.priority] - priorityRank[b.priority]);
+    return tickets.map(slimTicket);
   });
-
-  // A ticket the worker already handed in is waiting for the office: not part of their queue any more.
-  if (req.nextUrl.searchParams.get("queue")) tickets = tickets.filter((t: any) => t.status !== "TO_BE_VERIFIED");
-
-  const priorityRank: Record<string, number> = { RED: 0, ORANGE: 1, YELLOW: 2 };
-  tickets.sort((a: { priority: string }, b: { priority: string }) => priorityRank[a.priority] - priorityRank[b.priority]);
-
-  return NextResponse.json(tickets);
 }
 
 // POST /api/tickets — this is what the cleaner's "Report Issue" button

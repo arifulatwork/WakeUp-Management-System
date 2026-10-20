@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { verifySession, SESSION_COOKIE } from "@/lib/session";
 import { renderEnglish } from "@/lib/auditText";
+import { cachedValue } from "@/lib/serverCache";
 
 // AUDIT TRAIL — who changed what, and when.
 //
@@ -20,12 +21,12 @@ export async function actorFor(req: NextRequest | null, fallbackWorkerId?: strin
     if (req) {
       const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
       if (session) {
-        const w = await db.worker.findUnique({ where: { id: session.workerId } });
+        const w = await cachedValue<any>(`worker:${session.workerId}`, ["worker"], () => db.worker.findUnique({ where: { id: session.workerId } }));
         if (w) return { id: w.id as string, name: w.name as string, role: w.role as string };
       }
     }
     if (fallbackWorkerId) {
-      const w = await db.worker.findUnique({ where: { id: fallbackWorkerId } });
+      const w = await cachedValue<any>(`worker:${fallbackWorkerId}`, ["worker"], () => db.worker.findUnique({ where: { id: fallbackWorkerId } }));
       if (w) return { id: w.id as string, name: w.name as string, role: w.role as string };
     }
   } catch {

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requirePerm, actingWorkerId } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
+import { cachedJson } from "@/lib/serverCache";
 
 // GET /api/materials — ?pending=1 for just open requests (Manager/Ops),
 // otherwise everything.
@@ -10,12 +11,13 @@ export async function GET(req: NextRequest) {
   const g = await requirePerm(req, "data.read");
   if (g.error) return g.error;
   const pendingOnly = req.nextUrl.searchParams.get("pending");
-  const requests = await db.materialRequest.findMany({
-    where: pendingOnly ? { status: "PENDING" } : undefined,
-    include: { house: true, requestedBy: true },
-    orderBy: { createdAt: "desc" },
-  });
-  return NextResponse.json(requests);
+  return cachedJson(req, `materials:${pendingOnly ? "pending" : "all"}`, ["materialRequest", "house", "worker"], () =>
+    db.materialRequest.findMany({
+      where: pendingOnly ? { status: "PENDING" } : undefined,
+      include: { house: true, requestedBy: true },
+      orderBy: { createdAt: "desc" },
+    })
+  );
 }
 
 // POST /api/materials — the cleaner's "Request products / materials" button.

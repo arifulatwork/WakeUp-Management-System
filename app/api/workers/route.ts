@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { db, DEMO_MODE } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { requirePerm } from "@/lib/guard";
+import { cachedJson } from "@/lib/serverCache";
 
 // POST /api/workers — the Super Admin adds a staff member WITH their login.
 // Body: { name, language, area, username, password }
@@ -54,9 +55,9 @@ export async function POST(req: NextRequest) {
 // These GETs never read the request, so a production build could freeze them; always read live data.
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const workers = await db.worker.findMany({
-    orderBy: { createdAt: "desc" },
+export async function GET(req: NextRequest) {
+  return cachedJson(req, "workers", ["worker"], async () => {
+    const workers = await db.worker.findMany({ orderBy: { createdAt: "desc" } });
+    return workers.map(({ passwordHash, ...w }: { passwordHash?: string }) => w);
   });
-  return NextResponse.json(workers.map(({ passwordHash, ...w }: { passwordHash?: string }) => w));
 }
