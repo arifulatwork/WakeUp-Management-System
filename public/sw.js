@@ -15,7 +15,7 @@
 //    Safari, which doesn't support the Background Sync API this
 //    service worker would otherwise need for queued writes).
 
-const CACHE_NAME = "wakeup-shell-v4";
+const CACHE_NAME = "wakeup-shell-v5"; // bumped: clears the old cache that held stale page code
 const APP_SHELL = [
   "/",
   "/login",
@@ -57,6 +57,11 @@ self.addEventListener("fetch", (event) => {
 
   // The live-update stream never ends: caching it would hang the page. Let it through untouched.
   if (url.pathname === "/api/events") return;
+
+  // The app's own code and dev/hot-reload files (/_next/...) are never cached here. Serving
+  // them cache-first kept the browser on OLD page code after every change, so edits only
+  // showed after clearing the cache. The browser's normal HTTP cache already handles them.
+  if (url.pathname.startsWith("/_next/")) return;
 
   // Network-first for pages and GET API calls, cache as fallback.
   if (request.mode === "navigate" || url.pathname.startsWith("/api/")) {
