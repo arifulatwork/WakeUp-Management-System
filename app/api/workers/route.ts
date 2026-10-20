@@ -51,6 +51,9 @@ export async function POST(req: NextRequest) {
 
 // GET /api/workers — list staff (dashboards use it to assign tasks and show workload).
 // Requires a login (middleware); password hashes are never sent.
+// These GETs never read the request, so a production build could freeze them; always read live data.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const workers = await db.worker.findMany({
     orderBy: { createdAt: "desc" },

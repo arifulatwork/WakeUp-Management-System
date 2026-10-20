@@ -50,15 +50,22 @@ export default function OpsOverview() {
   const [matEd, setMatEd] = useState<{ request: MaterialReq | null } | null>(null);
   const [houseEd, setHouseEd] = useState<{ house: EdHouseFull | null } | null>(null);
 
+  // Each list loads on its own: one slow or failing request can no longer stop the others
+  // from updating, and nothing is served from a browser cache after an edit.
   const load = useCallback(async () => {
-    const [tRes, kRes, mRes, hRes, wRes] = await Promise.all([
-      fetch("/api/tasks"), fetch("/api/tickets"), fetch("/api/materials"), fetch("/api/houses"), fetch("/api/workers"),
+    const get = async (url: string) => {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(url);
+      return res.json();
+    };
+    const [t, k, m, h, w] = await Promise.allSettled([
+      get("/api/tasks"), get("/api/tickets"), get("/api/materials"), get("/api/houses"), get("/api/workers"),
     ]);
-    setTasks(await tRes.json());
-    setTickets(await kRes.json());
-    setMaterials(await mRes.json());
-    setHouses(await hRes.json());
-    setWorkers(await wRes.json());
+    if (t.status === "fulfilled") setTasks(t.value);
+    if (k.status === "fulfilled") setTickets(k.value);
+    if (m.status === "fulfilled") setMaterials(m.value);
+    if (h.status === "fulfilled") setHouses(h.value);
+    if (w.status === "fulfilled") setWorkers(w.value);
   }, []);
 
   useEffect(() => {

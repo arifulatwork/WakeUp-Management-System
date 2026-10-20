@@ -59,7 +59,9 @@ export default function ManagerDashboard() {
     if (kRes.ok) setTickets(await kRes.json());
   }
 
-  async function sendBack(id: string) {
+  async function sendBack(id: string, status?: string) {
+    // Sending back an already-approved job reopens it for the cleaner, so ask first.
+    if (status === "APPROVED" && !window.confirm(tr("Send this approved job back to the cleaner?"))) return;
     await fetch(`/api/tasks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -186,12 +188,12 @@ export default function ManagerDashboard() {
                       </button>
                     )}
                     {t.status === "TO_BE_VERIFIED" && (
-                      <>
-                        <button style={approveBtn} onClick={() => setReviewing(t)}>{tr("Approve")}</button>
-                        <button style={{ ...approveBtn, background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", marginLeft: 6 }} onClick={() => sendBack(t.id)}>
-                          {tr("Send back")}
-                        </button>
-                      </>
+                      <button style={approveBtn} onClick={() => setReviewing(t)}>{tr("Approve")}</button>
+                    )}
+                    {["TO_BE_VERIFIED", "COMPLETED", "APPROVED"].includes(t.status) && (
+                      <button style={{ ...approveBtn, background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", marginLeft: 6 }} onClick={() => sendBack(t.id, t.status)}>
+                        {tr("Send back")}
+                      </button>
                     )}
                   </td>
                 </tr>

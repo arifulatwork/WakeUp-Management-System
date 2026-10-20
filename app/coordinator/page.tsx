@@ -73,6 +73,11 @@ export default function CoordinatorView() {
     await api(`/api/tasks/${id}`, "PATCH", { action });
     load();
   }
+  // Send a finished job back to the cleaner (asks first if it was already approved).
+  async function sendBack(id: string, status: string) {
+    if (status === "APPROVED" && !window.confirm(tr("Send this approved job back to the cleaner?"))) return;
+    await patchTask(id, "reopen");
+  }
   // Approved by mistake / changed your mind: back to "To be verified" (asks first).
   async function undoApproval(id: string) {
     if (!window.confirm(tr("Take back the approval? The job goes back to To be verified."))) return;
@@ -208,8 +213,10 @@ export default function CoordinatorView() {
                     {t.status === "TO_BE_VERIFIED" && (
                       <>
                         <button style={S.smallDark} onClick={() => setReviewing(t)}>{tr("Review & confirm")}</button>
-                        <button style={S.small} onClick={() => patchTask(t.id, "reopen")}>{tr("Send back")}</button>
                       </>
+                    )}
+                    {["TO_BE_VERIFIED", "COMPLETED", "APPROVED"].includes(t.status) && (
+                      <button style={S.small} onClick={() => sendBack(t.id, t.status)}>{tr("Send back")}</button>
                     )}
                     {t.status === "APPROVED" && (
                       <>

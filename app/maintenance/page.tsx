@@ -21,6 +21,7 @@ type Ticket = {
   materialsUsed?: string | null;
   timeSpentMinutes?: number | null;
   photoUrl?: string | null;
+  assignedWorkerId?: string | null;
   mediaData?: { photos?: string[]; videos?: string[] } | null;
   house: { name: string };
   reportedBy: { name: string };
@@ -227,7 +228,7 @@ export default function MaintenanceApp() {
           <PhotoStrip photos={t.mediaData?.photos ?? []} size={56} />
           <VideoStrip videos={t.mediaData?.videos ?? []} />
           {/* Only until the office has confirmed it; after that the office sends it back if needed. */}
-          {t.status === "TO_BE_VERIFIED" && (
+          {t.status === "TO_BE_VERIFIED" && t.assignedWorkerId && (
             <button style={{ ...ghostBtn, marginTop: 8, padding: 8, fontSize: 12 }} onClick={() => undoClose(t)}>
               ↩ {tr("Undo close — keep working")}
             </button>

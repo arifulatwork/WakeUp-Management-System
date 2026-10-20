@@ -7,6 +7,9 @@ import { findDuplicate, normMode, nameKey, isUniqueViolation, MAX_CHECKIN_TEXT }
 
 // GET /api/houses — house list (cleaner's "My Houses" screen,
 // Cristina's task-assignment dropdown).
+// These GETs never read the request, so a production build could freeze them; always read live data.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const houses = await db.house.findMany({ orderBy: { name: "asc" } });
   return NextResponse.json(houses);

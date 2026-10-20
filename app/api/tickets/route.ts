@@ -24,7 +24,8 @@ export async function GET(req: NextRequest) {
     if (!me) return NextResponse.json({ error: "sign in required" }, { status: 401 });
     await maybePurgeTickets();
     const done = await db.maintenanceTicket.findMany({
-      where: { status: { in: ["TO_BE_VERIFIED", "CLOSED"] }, assignedWorkerId: me },
+      // Also tickets nobody was assigned to (e.g. status set from the office Edit dialog), so they never vanish.
+      where: { status: { in: ["TO_BE_VERIFIED", "CLOSED"] }, OR: [{ assignedWorkerId: me }, { assignedWorkerId: null }] },
       include: { house: true, reportedBy: true },
     });
     done.sort((a: any, b: any) => new Date(b.closedAt ?? 0).getTime() - new Date(a.closedAt ?? 0).getTime());
