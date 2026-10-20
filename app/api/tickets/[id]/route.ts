@@ -178,11 +178,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return json(updated);
     }
     // Closed by mistake -> back to "In progress" with the same worker, so they can carry on and
-    // close it again properly. The closing details (materials, time) are cleared; photos and videos stay.
+    // close it again properly. The closing details (materials, time) and photos/videos are kept, so the time never jumps.
     case "undoClose": {
       const updated = await db.maintenanceTicket.update({
         where: { id: params.id },
-        data: { status: "IN_PROGRESS", closedAt: null, materialsUsed: null, timeSpentMinutes: null },
+        data: { status: "IN_PROGRESS", closedAt: null }, // keep materialsUsed + timeSpentMinutes
         include: { house: true, reportedBy: true },
       });
       return json(updated);

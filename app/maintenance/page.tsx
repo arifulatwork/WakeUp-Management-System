@@ -47,13 +47,19 @@ export default function MaintenanceApp() {
   // Time spent = now minus the moment "Start intervention" was tapped. Filled in for the worker,
   // who can still change it before closing.
   useEffect(() => {
-    if (active?.status === "IN_PROGRESS" && active.startedAt) {
+    if (active?.status !== "IN_PROGRESS") { setMinutes(""); return; }
+    if (active.timeSpentMinutes) {
+      // Closed and taken back: restore what the worker had entered instead of recalculating
+      // (recalculating would also count the time the ticket sat closed).
+      setMinutes(String(active.timeSpentMinutes));
+    } else if (active.startedAt) {
       const mins = Math.max(1, Math.round((Date.now() - new Date(active.startedAt).getTime()) / 60000));
       setMinutes(String(mins));
     } else {
       setMinutes("");
     }
-  }, [active?.id, active?.status, active?.startedAt]);
+    setMaterials(active.materialsUsed ?? "");
+  }, [active?.id, active?.status, active?.startedAt, active?.timeSpentMinutes]);
 
   async function load() {
     const res = await fetch("/api/tickets?open=1&queue=1");
@@ -128,7 +134,7 @@ export default function MaintenanceApp() {
       load();
       return;
     }
-    const back = { ...ticket, status: "IN_PROGRESS", closedAt: null, materialsUsed: null, timeSpentMinutes: null };
+    const back = { ...ticket, status: "IN_PROGRESS", closedAt: null }; // keeps materials + time
     setDone((d) => d.filter((t) => t.id !== ticket.id)); // instantly, also offline
     setActive(r.queued ? back : { ...back, ...(await r.json()) });
     load();
@@ -167,7 +173,7 @@ export default function MaintenanceApp() {
             <input style={input} value={materials} onChange={(e) => setMaterials(e.target.value)} placeholder={tr("e.g. pipe seal, wrench")} />
             <label style={{ ...label, marginTop: 10 }}>{tr("Time spent (minutes)")}</label>
             <input style={input} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="45" />
-            {active.startedAt && <p style={{ fontSize: 11, color: "var(--ink-soft)", margin: "0 0 6px" }}>{tr("Time is calculated from the start time — you can change it.")}</p>}
+            {active.startedAt && !active.timeSpentMinutes && <p style={{ fontSize: 11, color: "var(--ink-soft)", margin: "0 0 6px" }}>{tr("Time is calculated from the start time — you can change it.")}</p>}
             {/* Same as the cleaner app: buttons stay visible but greyed out ("Coming soon") while media is off. */}
             <PhotoPicker showWhenOff label={`📷 ${tr("Attach after-work photo")}`} style={ghostBtn} onPhoto={(p) => addMedia(active, "photos", p)} />
             <PhotoStrip photos={active.mediaData?.photos ?? []} onRemove={(i) => removeMedia(active, "photos", i)} />
