@@ -1,3 +1,24 @@
+# Notifications: every task / ticket change reaches the cleaner or maintenance worker
+
+Everything below is saved in the bell (and sent to the phone when push is set up), in the recipient's language. The person who made the change is not notified about their own action.
+
+**Cleaner**
+- Job assigned (create or edit): already worked, unchanged.
+- **New:** job details edited (house, date, time, cleaning types, priority, notes, materials, checklist, status) -> "Job updated".
+- **New:** job given to someone else -> the previous cleaner gets "Job removed from you".
+- **New:** job deleted (not yet finished) -> "Job cancelled".
+- **New:** office approves the job -> "Job approved".
+- Sent back by the office: already worked ("Job sent back").
+
+**Maintenance**
+- New issue reported: already worked (whole maintenance team).
+- **New:** ticket assigned to a worker in the office edit -> "Repair assigned to you"; taken away -> "Repair removed from you"; details edited -> "Repair updated".
+- **New:** ticket reopened by the office -> whole maintenance team gets "Repair back in the queue".
+- **New:** ticket deleted -> assigned worker (or the whole team if nobody has it yet) gets "Repair deleted".
+- **New:** maintenance accepts a ticket -> the reporter gets "Issue taken". Rejects -> see below.
+
+Changed: `app/api/tasks/[id]/route.ts`, `app/api/tickets/[id]/route.ts`, `lib/pushText.ts`. No database migration.
+
 # Maintenance: rejecting a ticket no longer disappears silently
 
 - **Reporter is notified.** When maintenance rejects a ticket, the person who reported it gets "Issue not taken" (6 languages). The coordinators / managers / admins get "Ticket rejected" so someone decides what happens next. The person who pressed Reject is not notified.

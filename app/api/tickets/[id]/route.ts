@@ -83,6 +83,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         where: { id: params.id },
         data: { status: "ACCEPTED", assignedWorkerId: body.workerId ?? null },
       });
+      // Tell the person who reported it that maintenance took it.
+      if (ticket.reportedById && ticket.reportedById !== body.workerId) {
+        const house = await db.house.findUnique({ where: { id: ticket.houseId } });
+        pushAsync({ workerIds: [ticket.reportedById] }, "ticket_accepted", { house: house?.name ?? "" }, `accepted-${params.id}`);
+      }
       return json(updated);
     }
     case "reject": {
@@ -157,6 +162,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         where: { id: params.id },
         data: { status: "OPEN", closedAt: null, assignedWorkerId: null },
       });
+      // Back in the queue: the maintenance team (and the worker who had it) must see it again.
+      const house = await db.house.findUnique({ where: { id: ticket.houseId } });
+      pushAsync({ roles: ["worker"], area: "MAINTENANCE", excludeWorkerId: body.workerId }, "ticket_reopened",
+        { house: house?.name ?? "", room: ticket.area ?? "" }, `ticket-reopened-${params.id}`);
       return json(updated);
     }
     case "addPhoto":
@@ -219,6 +228,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         data,
         include: { house: true, reportedBy: true, assignedWorker: true },
       });
+      // Every change reaches the maintenance worker's bell: assigned, taken away, or details edited.
+      const newWorker = ("assignedWorkerId" in data ? data.assignedWorkerId : ticket.assignedWorkerId) as string | null;
+      const msg = { house: updated.house?.name ?? "", room: updated.area ?? "" };
+      if (newWorker !== ticket.assignedWorkerId) {
+        if (newWorker) pushAsync({ workerIds: [newWorker], excludeWorkerId: body.workerId }, "ticket_assigned", msg, `ticket-assign-${params.id}`);
+        if (ticket.assignedWorkerId) pushAsync({ workerIds: [ticket.assignedWorkerId], excludeWorkerId: body.workerId }, "ticket_unassigned", msg, `ticket-gone-${params.id}`);
+      } else if (newWorker && ["houseId", "area", "description", "priority", "status"].some((k) => k in data && String(data[k]) !== String((ticket as any)[k]))) {
+        pushAsync({ workerIds: [newWorker], excludeWorkerId: body.workerId }, "ticket_changed", msg, `ticket-changed-${params.id}`);
+      }
       await logAudit(req, "ticket", params.id, "update",
         f.status ? "Edited ticket ({fields}) · status {from} → {to}" : "Edited ticket ({fields})",
         { fields: changedFields(f), ...(f.status ? { from: ticket.status, to: f.status } : {}) });
@@ -234,7 +252,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const g = await requirePerm(req, "tickets.delete");
   if (g.error) return g.error;
   try {
+    const gone = await db.maintenanceTicket.findUnique({ where: { id: params.id }, include: { house: true } });
     await db.maintenanceTicket.delete({ where: { id: params.id } });
+    // Deleted tickets must not just vanish: the assigned worker (or, if nobody has it yet, the whole team) is told.
+    if (gone && gone.status !== "CLOSED") {
+      const target = gone.assignedWorkerId ? { workerIds: [gone.assignedWorkerId] } : { roles: ["worker"], area: "MAINTENANCE" };
+      pushAsync(target, "ticket_deleted", { house: gone.house?.name ?? "" }, `ticket-deleted-${params.id}`);
+    }
     await logAudit(req, "ticket", params.id, "delete", "Deleted ticket");
     return json({ ok: true });
   } catch {

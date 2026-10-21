@@ -76,6 +76,46 @@ export const PUSH_TEXT = {
       "{house}: un ticket di manutenzione è stato rifiutato. Riaprilo o riassegnalo.", "{house}: тікет технічної служби відхилено. Відновіть або перепризначте.",
     ],
   },
+  task_changed: {
+    title: ["Job updated", "Tarefa atualizada", "Tarea actualizada", "Tâche modifiée", "Attività aggiornata", "Завдання оновлено"],
+    body: ["{house} at {time}: details changed.", "{house} às {time}: os detalhes mudaram.", "{house} a las {time}: han cambiado los detalles.", "{house} à {time} : les détails ont changé.", "{house} alle {time}: i dettagli sono cambiati.", "{house} на {time}: деталі змінено."],
+  },
+  task_unassigned: {
+    title: ["Job removed from you", "Tarefa retirada", "Tarea retirada", "Tâche retirée", "Attività rimossa", "Завдання знято"],
+    body: ["{house} was given to someone else.", "{house} foi atribuída a outra pessoa.", "{house} se asignó a otra persona.", "{house} a été confiée à quelqu'un d'autre.", "{house} è stata assegnata a qualcun altro.", "{house} передано іншій особі."],
+  },
+  task_deleted: {
+    title: ["Job cancelled", "Tarefa cancelada", "Tarea cancelada", "Tâche annulée", "Attività annullata", "Завдання скасовано"],
+    body: ["{house} at {time} was cancelled.", "{house} às {time} foi cancelada.", "{house} a las {time} se canceló.", "{house} à {time} a été annulée.", "{house} alle {time} è stata annullata.", "{house} на {time} скасовано."],
+  },
+  task_approved: {
+    title: ["Job approved ✓", "Tarefa aprovada ✓", "Tarea aprobada ✓", "Tâche validée ✓", "Attività approvata ✓", "Завдання схвалено ✓"],
+    body: ["{house} was checked and approved.", "{house} foi verificada e aprovada.", "{house} fue revisada y aprobada.", "{house} a été vérifiée et validée.", "{house} è stata verificata e approvata.", "{house} перевірено та схвалено."],
+  },
+  ticket_assigned: {
+    title: ["Repair assigned to you", "Reparação atribuída a si", "Reparación asignada a ti", "Réparation qui vous est assignée", "Riparazione assegnata a te", "Вам призначено ремонт"],
+    body: ["{house}: {room}", "{house}: {room}", "{house}: {room}", "{house} : {room}", "{house}: {room}", "{house}: {room}"],
+  },
+  ticket_changed: {
+    title: ["Repair updated", "Reparação atualizada", "Reparación actualizada", "Réparation modifiée", "Riparazione aggiornata", "Ремонт оновлено"],
+    body: ["{house}: details changed.", "{house}: os detalhes mudaram.", "{house}: han cambiado los detalles.", "{house} : les détails ont changé.", "{house}: i dettagli sono cambiati.", "{house}: деталі змінено."],
+  },
+  ticket_unassigned: {
+    title: ["Repair removed from you", "Reparação retirada", "Reparación retirada", "Réparation retirée", "Riparazione rimossa", "Ремонт знято"],
+    body: ["{house}: given to someone else.", "{house}: atribuída a outra pessoa.", "{house}: asignada a otra persona.", "{house} : confiée à quelqu'un d'autre.", "{house}: assegnata a qualcun altro.", "{house}: передано іншій особі."],
+  },
+  ticket_deleted: {
+    title: ["Repair deleted", "Reparação eliminada", "Reparación eliminada", "Réparation supprimée", "Riparazione eliminata", "Ремонт видалено"],
+    body: ["{house}: this ticket no longer exists.", "{house}: este ticket já não existe.", "{house}: este ticket ya no existe.", "{house} : ce ticket n'existe plus.", "{house}: questo ticket non esiste più.", "{house}: цього тікета більше немає."],
+  },
+  ticket_reopened: {
+    title: ["Repair back in the queue", "Reparação de volta à fila", "Reparación de vuelta en la cola", "Réparation de retour dans la file", "Riparazione di nuovo in coda", "Ремонт повернуто в чергу"],
+    body: ["{house}: {room}", "{house}: {room}", "{house}: {room}", "{house} : {room}", "{house}: {room}", "{house}: {room}"],
+  },
+  ticket_accepted: {
+    title: ["Issue taken", "Problema aceite", "Incidencia aceptada", "Problème pris en charge", "Problema preso in carico", "Проблему прийнято"],
+    body: ["{house}: maintenance is on it.", "{house}: a manutenção está a tratar disso.", "{house}: mantenimiento se está ocupando.", "{house} : la maintenance s'en occupe.", "{house}: la manutenzione se ne sta occupando.", "{house}: технічна служба вже працює над цим."],
+  },
   key_missing: {
     title: ["Key missing", "Chave em falta", "Falta una llave", "Clé manquante", "Chiave mancante", "Ключ відсутній"],
     body: [

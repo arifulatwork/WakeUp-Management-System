@@ -194,6 +194,9 @@ export async function PATCH(
         where: { id: params.id },
         data: { status: "APPROVED" },
       });
+      if (task.assignedWorkerId) {
+        pushAsync({ workerIds: [task.assignedWorkerId] }, "task_approved", { house: await houseName() }, `approved-${params.id}`);
+      }
       return json(updated);
     }
 
@@ -296,11 +299,21 @@ export async function PATCH(
         f.status ? "Edited task ({fields}) · status {from} → {to}" : "Edited task ({fields})",
         { fields: changedFields(f), ...(f.status ? { from: task.status, to: f.status } : {}) }
       );
-      // Newly assigned to somebody? Tell them.
-      const newWorker = data.assignedWorkerId as string | undefined;
-      if (newWorker && newWorker !== task.assignedWorkerId) {
-        pushAsync({ workerIds: [newWorker] }, "task_new",
-          { house: updated.house?.name ?? "", time: updated.scheduledTime ?? task.scheduledTime }, `job-${params.id}`);
+      // Every change reaches the cleaner's bell: newly assigned, taken away, or details edited.
+      const newWorker = ("assignedWorkerId" in data ? data.assignedWorkerId : task.assignedWorkerId) as string | null;
+      const msg = { house: updated.house?.name ?? "", time: updated.scheduledTime ?? task.scheduledTime };
+      if (newWorker !== task.assignedWorkerId) {
+        if (newWorker) pushAsync({ workerIds: [newWorker], excludeWorkerId: body.workerId }, "task_new", msg, `job-${params.id}`);
+        if (task.assignedWorkerId) pushAsync({ workerIds: [task.assignedWorkerId], excludeWorkerId: body.workerId }, "task_unassigned", msg, `job-gone-${params.id}`);
+      } else if (newWorker) {
+        const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+        const detailsChanged =
+          ["houseId", "scheduledDate", "scheduledTime", "cleaningTypes", "priority", "notes", "materialsNeeded", "estimatedMinutes", "nextCheckIn", "status"]
+            .some((k) => k in data && !same(data[k], (task as any)[k])) ||
+          (Array.isArray(f.checklist) && !same(
+            f.checklist.map((i: any) => String(i.label).trim()),
+            (((task.checklistData as any)?.checklist) ?? []).map((i: any) => i.label)));
+        if (detailsChanged) pushAsync({ workerIds: [newWorker], excludeWorkerId: body.workerId }, "task_changed", msg, `job-changed-${params.id}`);
       }
       return json(updated);
     }
@@ -315,7 +328,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const g = await requirePerm(req, "tasks.delete");
   if (g.error) return g.error;
   try {
+    const gone = await db.cleaningTask.findUnique({ where: { id: params.id }, include: { house: true } });
     await db.cleaningTask.delete({ where: { id: params.id } });
+    // A job that disappears must not just vanish from the cleaner's list: say it was cancelled.
+    if (gone?.assignedWorkerId && !["APPROVED", "COMPLETED"].includes(gone.status)) {
+      pushAsync({ workerIds: [gone.assignedWorkerId] }, "task_deleted", { house: gone.house?.name ?? "", time: gone.scheduledTime ?? "" }, `job-deleted-${params.id}`);
+    }
     await logAudit(req, "task", params.id, "delete", "Deleted task");
     return json({ ok: true });
   } catch {
