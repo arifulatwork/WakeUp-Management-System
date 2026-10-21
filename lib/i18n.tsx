@@ -233,6 +233,7 @@ const ROWS: Row[] = [
   ["Keys missing", "Chaves em falta", "Llaves desaparecidas", "Clés manquantes", "Chiavi mancanti", "Відсутні ключі"],
   ["Staff workload (open tasks)", "Carga da equipa (tarefas em aberto)", "Carga del personal (tareas abiertas)", "Charge du personnel (tâches ouvertes)", "Carico del personale (attività aperte)", "Навантаження персоналу (відкриті завдання)"],
   ["None right now.", "Nenhum de momento.", "Ninguno por ahora.", "Aucun pour le moment.", "Nessuno al momento.", "Наразі немає."],
+  ["Rejected tickets", "Tickets rejeitados", "Tickets rechazados", "Tickets refusés", "Ticket rifiutati", "Відхилені тікети"],
   ["No assignments yet.", "Ainda sem atribuições.", "Aún sin asignaciones.", "Aucune affectation pour l'instant.", "Nessuna assegnazione per ora.", "Призначень поки немає."],
   ["Nothing pending.", "Nada pendente.", "Nada pendiente.", "Rien en attente.", "Niente in sospeso.", "Нічого в очікуванні."],
   ["Mark fulfilled", "Marcar como entregue", "Marcar como atendida", "Marquer comme traitée", "Segna come evasa", "Позначити виконаним"],

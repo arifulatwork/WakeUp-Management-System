@@ -1,3 +1,11 @@
+# Maintenance: rejecting a ticket no longer disappears silently
+
+- **Reporter is notified.** When maintenance rejects a ticket, the person who reported it gets "Issue not taken" (6 languages). The coordinators / managers / admins get "Ticket rejected" so someone decides what happens next. The person who pressed Reject is not notified.
+- **Rejected tickets stay visible.** New **"Rejected tickets"** card on the Ops screen with **Reopen** (back to the open queue) and **Edit**.
+- Rejecting also clears the assigned worker, so a reopened ticket starts clean.
+
+Changed: `app/api/tickets/[id]/route.ts`, `app/ops/page.tsx`, `lib/pushText.ts`, `lib/i18n.tsx`. No database migration.
+
 # Houses: School / Tourism mode, duplicate check, check-in guide
 
 - **No more duplicate houses.** Creating or renaming a house to a name that already exists *in the same mode* is refused. The editor shows a red warning as you type and disables Save; the server also answers 409 so two people can't create it at the same moment. Capitals, extra spaces and accents are ignored ("villa 1" = "Villa 1").

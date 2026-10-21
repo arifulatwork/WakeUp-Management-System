@@ -94,6 +94,7 @@ export default function OpsOverview() {
   const completedToday = tasks.filter((t) => finished.includes(t.status) && new Date(t.scheduledDate).toDateString() === today).length;
   const openTasks = tasks.filter((t) => !finished.includes(t.status)).length;
   const openTickets = sortTickets(tickets.filter((t) => !["CLOSED", "REJECTED"].includes(t.status)), ticketSort);
+  const rejectedTickets = tickets.filter((t) => t.status === "REJECTED");
   const urgent = openTickets.filter((t) => t.priority === "RED").length;
   // Overdue = the scheduled day AND time have passed and the cleaner has not finished.
   // (Dates are stored at noon, so the time of day has to be added here. A job already
@@ -202,6 +203,26 @@ export default function OpsOverview() {
               </div>
             ))}
             {openTickets.length === 0 && <p style={empty}>{tr("None right now.")}</p>}
+          </PanelCard>
+        )}
+
+        {/* ---- rejected tickets: kept visible so a rejection never just vanishes ---- */}
+        {shown.tickets && rejectedTickets.length > 0 && (
+          <PanelCard title={tr("Rejected tickets")}>
+            {rejectedTickets.map((t) => (
+              <div key={t.id} style={row}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, width: "100%" }}>
+                  <PriorityDot p={t.priority} />
+                  <b style={{ flex: 1, minWidth: 0 }}>{t.house.name}</b>
+                  <StatusBadge status={t.status} />
+                </div>
+                <div style={sub}>{tr(t.area)} — {tr(t.description)}</div>
+                <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+                  <button style={S.smallDark} onClick={() => ticketStatus(t.id, "reopen")}>{tr("Reopen")}</button>
+                  <button style={S.small} onClick={() => setTicketEd({ ticket: t })}>{tr("Edit")}</button>
+                </div>
+              </div>
+            ))}
           </PanelCard>
         )}
 

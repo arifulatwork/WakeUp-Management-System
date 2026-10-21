@@ -60,6 +60,22 @@ export const PUSH_TEXT = {
       "{house}: il problema che hai segnalato è stato chiuso.", "{house}: проблему, про яку ви повідомили, закрито.",
     ],
   },
+  ticket_rejected: {
+    title: ["Issue not taken", "Problema não aceite", "Incidencia rechazada", "Problème refusé", "Problema rifiutato", "Проблему відхилено"],
+    body: [
+      "{house}: maintenance rejected the issue you reported.", "{house}: a manutenção rejeitou o problema que reportou.",
+      "{house}: mantenimiento rechazó la incidencia que comunicaste.", "{house} : la maintenance a refusé le problème que vous avez signalé.",
+      "{house}: la manutenzione ha rifiutato il problema che hai segnalato.", "{house}: технічна служба відхилила проблему, про яку ви повідомили.",
+    ],
+  },
+  ticket_rejected_office: {
+    title: ["Ticket rejected", "Ticket rejeitado", "Ticket rechazado", "Ticket refusé", "Ticket rifiutato", "Тікет відхилено"],
+    body: [
+      "{house}: a maintenance ticket was rejected. Reopen or reassign it.", "{house}: um ticket de manutenção foi rejeitado. Reabra ou reatribua.",
+      "{house}: se rechazó un ticket de mantenimiento. Reábrelo o reasígnalo.", "{house} : un ticket de maintenance a été refusé. Rouvrez-le ou réassignez-le.",
+      "{house}: un ticket di manutenzione è stato rifiutato. Riaprilo o riassegnalo.", "{house}: тікет технічної служби відхилено. Відновіть або перепризначте.",
+    ],
+  },
   key_missing: {
     title: ["Key missing", "Chave em falta", "Falta una llave", "Clé manquante", "Chiave mancante", "Ключ відсутній"],
     body: [

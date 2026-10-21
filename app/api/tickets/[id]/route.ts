@@ -12,7 +12,7 @@ import { MEDIA_ENABLED } from "@/lib/features";
 
 // PATCH /api/tickets/:id
 //   { action: "accept", workerId }                        -> ACCEPTED, assigned
-//   { action: "reject" }                                   -> REJECTED
+//   { action: "reject" }                                   -> REJECTED; reporter + office are notified
 //   { action: "start" }                                     -> IN_PROGRESS, startedAt now
 //   { action: "close", materialsUsed, timeSpentMinutes }    -> TO_BE_VERIFIED (handed in), closedAt now;
 //     the coordinators / managers are notified to review it
@@ -88,8 +88,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     case "reject": {
       const updated = await db.maintenanceTicket.update({
         where: { id: params.id },
-        data: { status: "REJECTED" },
+        data: { status: "REJECTED", assignedWorkerId: null },
       });
+      // Nobody should find out by the ticket silently vanishing: tell the person who reported it,
+      // and the office (who decide to reopen / reassign it). The person who rejected is not notified.
+      const house = await db.house.findUnique({ where: { id: ticket.houseId } });
+      const msg = { house: house?.name ?? "" };
+      if (ticket.reportedById && ticket.reportedById !== body.workerId) {
+        pushAsync({ workerIds: [ticket.reportedById] }, "ticket_rejected", msg, `rejected-${params.id}`);
+      }
+      pushAsync({ roles: STAFF_ROLES, excludeWorkerId: body.workerId }, "ticket_rejected_office", msg, `rejected-office-${params.id}`);
       return json(updated);
     }
     case "start": {
