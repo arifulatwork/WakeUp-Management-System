@@ -1,3 +1,33 @@
+# Code audit: bugs found and fixed
+
+**Maintenance tickets** (`app/api/tickets/[id]/route.ts`)
+- Any phone could "accept" a ticket that another worker already had (and re-open a closed one). Accept is now atomic: first worker wins, the second gets "already taken".
+- Cleaners could accept / reject / start / close maintenance tickets, and one maintenance worker could close another's. Now only maintenance staff accept/reject; start/close only by the assigned worker (or office).
+- A replayed offline tap could close a ticket twice, reset its start time and send a second "review" notification. Start / close / accept are now safe to repeat.
+- Assigning a worker in the office edit left the ticket "open for everyone". Assigned -> Accepted, un-assigned -> Open (same rule the cleaning jobs use).
+- Invalid status / priority values are refused with a clear 400 instead of being saved or crashing.
+- A ticket sent back with nobody assigned now tells the maintenance team.
+
+**Cleaning jobs** (`app/api/tasks/[id]/route.ts`, `app/api/tickets/route.ts`)
+- Reporting an issue flagged the *latest-dated* job of the house, even weeks ahead, and a job flagged before it was started could not be started. Now only a job due today / overdue / running is flagged, and a flagged job can still be started.
+- "Flag issue" no longer overwrites an approved job.
+- Bad status / priority / dates in the edit form return a 400, not a server error.
+
+**Login & accounts** (`lib/session.ts`, `app/api/auth/login`, `app/api/workers/[id]`)
+- Production no longer runs with the built-in fallback session secret (set `SESSION_SECRET`, otherwise login is refused with a clear error).
+- Login is throttled: 8 wrong passwords per login + address in 15 minutes, then 429. Unknown users now take as long to answer as known ones.
+- Any signed-in user could change ANY worker's language. Now only your own (admin: anyone).
+- Editing a username/password in Admin now trims/lowercases, checks for duplicates and enforces the 8-character minimum like creating one does.
+
+**Offline queue** (`lib/offlineQueue.ts`, `app/maintenance/page.tsx`)
+- A server hiccup (5xx, restart) used to throw the saved action away. Now it is kept and retried; only a real answer removes it (stale entries older than 7 days are dropped).
+- Two replays at once (page load + "online" event + another tab) sent every action twice. Only one replay runs at a time.
+- The maintenance screen now shows "Could not save" and refreshes when the server refuses an action, instead of showing a broken ticket.
+
+**Housekeeping** (`lib/retention.ts`): bell history older than 90 days is removed.
+
+Not changed, worth knowing: ticking checklist items and uploading photos at the same instant can overwrite each other (they share one JSON field); deleting a house runs as separate steps rather than one transaction.
+
 # Notifications: every task / ticket change reaches the cleaner or maintenance worker
 
 Everything below is saved in the bell (and sent to the phone when push is set up), in the recipient's language. The person who made the change is not notified about their own action.

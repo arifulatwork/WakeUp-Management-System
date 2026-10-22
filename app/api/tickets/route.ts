@@ -75,6 +75,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (priority && !["RED", "ORANGE", "YELLOW"].includes(priority)) {
+    return NextResponse.json({ error: "invalid priority" }, { status: 400 });
+  }
   if (photoUrl && !isValidPhoto(photoUrl)) {
     return NextResponse.json({ error: "invalid or too large photo" }, { status: 400 });
   }
@@ -94,8 +97,11 @@ export async function POST(req: NextRequest) {
   // A reported issue also flips the related house's current cleaning
   // task (if one's in progress) to WITH_ISSUE, so Cristina/Manager sees
   // it immediately on the dashboard without cross-referencing tickets.
+  // Only a job that is running now (or due today / overdue) is flagged, never one weeks ahead.
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
   const activeTask = await db.cleaningTask.findFirst({
-    where: { houseId, status: { in: ["IN_PROGRESS", "ASSIGNED", "SCHEDULED"] } },
+    where: { houseId, status: { in: ["IN_PROGRESS", "ASSIGNED", "SCHEDULED"] }, scheduledDate: { lte: endOfToday } },
     orderBy: { scheduledDate: "desc" },
   });
   if (activeTask) {

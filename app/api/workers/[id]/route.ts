@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePerm } from "@/lib/guard";
+import { requirePerm, currentSession } from "@/lib/guard";
+import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 
 // GET /api/workers/:id — read current role fresh from the DB.
@@ -31,6 +32,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (languageOnly) {
     if (!LANGS.includes(language)) {
       return NextResponse.json({ error: "invalid language" }, { status: 400 });
+    }
+    // Your own language only (an admin may change anyone's).
+    const me = await currentSession(req);
+    if (!me) return NextResponse.json({ error: "sign in required" }, { status: 401 });
+    if (me.workerId !== params.id && !can(me.role, "staff.manage")) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     const w = await db.worker.update({ where: { id: params.id }, data: { language } });
     return NextResponse.json({ id: w.id, language: w.language });
@@ -68,7 +75,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
     data.role = role;
   }
-  if (username) data.username = username;
+  if (username) {
+    const uname = String(username).trim().toLowerCase();
+    const taken = await db.worker.findUnique({ where: { username: uname } });
+    if (taken && taken.id !== params.id) return NextResponse.json({ error: "username already taken" }, { status: 409 });
+    data.username = uname;
+  }
+  if (password && String(password).length < 8) {
+    return NextResponse.json({ error: "password must be at least 8 characters" }, { status: 400 });
+  }
   if (password) {
     const bcrypt = (await import("bcryptjs")).default;
     data.passwordHash = await bcrypt.hash(password, 10);

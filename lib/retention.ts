@@ -27,6 +27,8 @@ export async function maybePurgeTickets() {
   g.__lastTicketPurge = t;
   try {
     await purgeOldClosedTickets();
+    // The bell only shows the latest 50; older history rows are removed after 90 days.
+    await db.notification.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 90 * 86400000) } } });
   } catch (e) {
     console.error("[retention] purge failed", e);
   }

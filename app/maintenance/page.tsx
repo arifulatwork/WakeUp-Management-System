@@ -93,6 +93,13 @@ export default function MaintenanceApp() {
       method: "PATCH",
       body: JSON.stringify({ action, workerId, ...extra }),
     });
+    if (!result.queued && !result.ok) {
+      // Refused (e.g. another worker already took this ticket): undo the optimistic change and refresh.
+      setActive(null);
+      setError(tr("Could not save. Please try again."));
+      load();
+      return;
+    }
     if (!result.queued) {
       const updated = await result.json();
       setActive(updated.status === "TO_BE_VERIFIED" || updated.status === "REJECTED" ? null : { ...ticket, ...updated });

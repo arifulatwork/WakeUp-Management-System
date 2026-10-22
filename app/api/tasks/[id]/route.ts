@@ -55,6 +55,7 @@ export async function PATCH(
   };
   const audit = (template: string, p: Record<string, string | number> = {}) =>
     logAudit(req, "task", params.id, body.action, template, p, body.workerId ?? task.assignedWorkerId);
+  const actorId: string | undefined = (await currentSession(req))?.workerId ?? body.workerId;
   const houseName = async () => (await db.house.findUnique({ where: { id: task.houseId } }))?.name ?? "";
   const refused =
     (body.action === "undoReady" && !["TO_BE_VERIFIED", "COMPLETED"].includes(task.status)) ||
@@ -71,7 +72,9 @@ export async function PATCH(
   switch (body.action) {
     case "start": {
       // Starting again must not reopen a job that is already finished or waiting for review.
-      if (!NOT_STARTED.includes(task.status) && task.status !== "ON_HOLD") {
+      // (A job flagged WITH_ISSUE before anyone started it can still be started.)
+      const flaggedNotStarted = task.status === "WITH_ISSUE" && !task.startedAt;
+      if (!NOT_STARTED.includes(task.status) && task.status !== "ON_HOLD" && !flaggedNotStarted) {
         return json(task);
       }
       const updated = await db.cleaningTask.update({
@@ -214,6 +217,8 @@ export async function PATCH(
     }
 
     case "markIssue": {
+      // A stale screen or a replayed offline tap must never undo an approval.
+      if (task.status === "APPROVED") return json(task);
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: { status: "WITH_ISSUE" },
@@ -255,6 +260,14 @@ export async function PATCH(
     //   materialsNeeded, status, checklist: [{label, done}] } }
     case "update": {
       const f = body.fields ?? {};
+      // Clear 400s instead of a database error (500) for values that can never be saved.
+      if (f.status && !["SCHEDULED", "ASSIGNED", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "TO_BE_VERIFIED", "APPROVED", "WITH_ISSUE"].includes(f.status)) {
+        return json({ error: "invalid status" }, { status: 400 });
+      }
+      if (f.priority && !["RED", "ORANGE", "YELLOW"].includes(f.priority)) return json({ error: "invalid priority" }, { status: 400 });
+      for (const k of ["scheduledDate", "nextCheckIn"]) {
+        if (f[k] && Number.isNaN(new Date(f[k]).getTime())) return json({ error: `invalid ${k}` }, { status: 400 });
+      }
       const data: Record<string, unknown> = {};
       if (f.houseId) data.houseId = f.houseId;
       if (f.scheduledDate) data.scheduledDate = new Date(f.scheduledDate);
@@ -303,8 +316,8 @@ export async function PATCH(
       const newWorker = ("assignedWorkerId" in data ? data.assignedWorkerId : task.assignedWorkerId) as string | null;
       const msg = { house: updated.house?.name ?? "", time: updated.scheduledTime ?? task.scheduledTime };
       if (newWorker !== task.assignedWorkerId) {
-        if (newWorker) pushAsync({ workerIds: [newWorker], excludeWorkerId: body.workerId }, "task_new", msg, `job-${params.id}`);
-        if (task.assignedWorkerId) pushAsync({ workerIds: [task.assignedWorkerId], excludeWorkerId: body.workerId }, "task_unassigned", msg, `job-gone-${params.id}`);
+        if (newWorker) pushAsync({ workerIds: [newWorker], excludeWorkerId: actorId }, "task_new", msg, `job-${params.id}`);
+        if (task.assignedWorkerId) pushAsync({ workerIds: [task.assignedWorkerId], excludeWorkerId: actorId }, "task_unassigned", msg, `job-gone-${params.id}`);
       } else if (newWorker) {
         const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
         const detailsChanged =
@@ -313,7 +326,7 @@ export async function PATCH(
           (Array.isArray(f.checklist) && !same(
             f.checklist.map((i: any) => String(i.label).trim()),
             (((task.checklistData as any)?.checklist) ?? []).map((i: any) => i.label)));
-        if (detailsChanged) pushAsync({ workerIds: [newWorker], excludeWorkerId: body.workerId }, "task_changed", msg, `job-changed-${params.id}`);
+        if (detailsChanged) pushAsync({ workerIds: [newWorker], excludeWorkerId: actorId }, "task_changed", msg, `job-changed-${params.id}`);
       }
       return json(updated);
     }

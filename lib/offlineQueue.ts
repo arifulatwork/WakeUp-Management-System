@@ -107,35 +107,66 @@ export async function queueLength(): Promise<number> {
 }
 
 // Replays every queued request in order. Stops and keeps the remaining
-// queue intact if a request still fails for a network reason (so it
-// tries again next time); drops a request only once the server has
-// actually accepted or rejected it.
+// queue intact if the network or the server is unavailable (so it tries
+// again next time); drops a request only once the server has really
+// answered it (accepted, or refused with a 4xx).
+let replaying = false;
+
 export async function replayQueue(): Promise<{ replayed: number; remaining: number }> {
-  let replayed = 0;
-  let queue: QueuedRequest[];
+  // Page load + the 'online' event (+ other tabs) can all start a replay at once; two loops would
+  // send every action twice (and a double "toggle" flips the tick back). Only one runs at a time.
+  if (replaying) return { replayed: 0, remaining: await queueLength() };
+  const lock = typeof navigator !== "undefined" ? (navigator as any).locks : undefined;
+  if (lock?.request) {
+    return lock.request("wakeup-offline-replay", { ifAvailable: true }, async (l: unknown) => {
+      if (!l) return { replayed: 0, remaining: await queueLength() }; // another tab is replaying
+      return runReplay();
+    });
+  }
+  return runReplay();
+}
+
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function runReplay(): Promise<{ replayed: number; remaining: number }> {
+  replaying = true;
   try {
-    queue = await getQueue();
-  } catch {
-    return { replayed: 0, remaining: 0 };
-  }
-
-  for (const entry of queue.sort((a, b) => a.queuedAt - b.queuedAt)) {
+    let replayed = 0;
+    let queue: QueuedRequest[];
     try {
-      const res = await fetch(entry.url, {
-        method: entry.method,
-        headers: { "Content-Type": "application/json" },
-        body: entry.body,
-      });
-      // Not signed in (yet): keep everything queued; it is sent after the next login.
-      if (res.status === 401) break;
-      if (entry.id !== undefined) await removeFromQueue(entry.id);
-      replayed++;
+      queue = await getQueue();
     } catch {
-      // Still offline — stop here, leave the rest queued for next time.
-      break;
+      return { replayed: 0, remaining: 0 };
     }
-  }
 
-  const remaining = await queueLength();
-  return { replayed, remaining };
+    for (const entry of queue.sort((a, b) => a.queuedAt - b.queuedAt)) {
+      // An action that has been failing for a week is stale: drop it so it cannot block the rest forever.
+      if (Date.now() - entry.queuedAt > MAX_AGE_MS) {
+        if (entry.id !== undefined) await removeFromQueue(entry.id);
+        continue;
+      }
+      try {
+        const res = await fetch(entry.url, {
+          method: entry.method,
+          headers: { "Content-Type": "application/json" },
+          body: entry.body,
+        });
+        // Not signed in (yet): keep everything queued; it is sent after the next login.
+        if (res.status === 401) break;
+        // The server is down / restarting / busy (5xx, 408, 429): the action was NOT handled. Keep it
+        // and try again later. Only a real answer (success, or a 4xx such as "not yours") removes it.
+        if (res.status >= 500 || res.status === 408 || res.status === 429) break;
+        if (entry.id !== undefined) await removeFromQueue(entry.id);
+        replayed++;
+      } catch {
+        // Still offline — stop here, leave the rest queued for next time.
+        break;
+      }
+    }
+
+    const remaining = await queueLength();
+    return { replayed, remaining };
+  } finally {
+    replaying = false;
+  }
 }

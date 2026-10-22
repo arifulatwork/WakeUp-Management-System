@@ -36,6 +36,10 @@ function fromBase64Url(b64url: string): Uint8Array {
 // Imported once and reused (it used to be re-imported on every single request).
 let keyPromise: Promise<CryptoKey> | null = null;
 function hmacKey() {
+  // A published build without its own secret would accept cookies anyone can forge: refuse to run.
+  if (!process.env.SESSION_SECRET && process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET is not set. Add a long random value to .env before running in production.");
+  }
   return (keyPromise ??= crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(SECRET),
