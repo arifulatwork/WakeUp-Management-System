@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { MEDIA_ENABLED } from "@/lib/features";
+import { requirePerm } from "@/lib/guard";
 
-// GET /api/houses/:id/rooms/:roomId/photo — the room photo as a real image file (cacheable).
-// Signed-in users only (middleware).
-export async function GET(_req: NextRequest, { params }: { params: { id: string; roomId: string } }) {
-  if (!MEDIA_ENABLED) return new NextResponse("Not found", { status: 404 });
+async function find(params: { id: string; roomId: string }) {
   const row = await db.houseRoomPhoto.findUnique({ where: { id: params.roomId } });
-  const m = row && row.houseId === params.id ? /^data:([^;,]+);base64,([\s\S]*)$/.exec(row.photo) : null;
-  if (!m) return new NextResponse("Not found", { status: 404 });
-  return new NextResponse(new Uint8Array(Buffer.from(m[2], "base64")), {
-    headers: { "Content-Type": m[1], "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" },
-  });
+  return row && row.houseId === params.id ? row : null;
+}
+
+// PATCH /api/houses/:id/rooms/:roomId  { label }
+export async function PATCH(req: NextRequest, { params }: { params: { id: string; roomId: string } }) {
+  const g = await requirePerm(req, "houses.edit");
+  if (g.error) return g.error;
+  if (!(await find(params))) return NextResponse.json({ error: "room not found" }, { status: 404 });
+  const label = String((await req.json().catch(() => ({}))).label ?? "").trim();
+  if (!label) return NextResponse.json({ error: "label required" }, { status: 400 });
+  const row = await db.houseRoomPhoto.update({ where: { id: params.roomId }, data: { label } });
+  return NextResponse.json({ id: row.id, label: row.label, position: row.position });
+}
+
+// DELETE /api/houses/:id/rooms/:roomId
+export async function DELETE(req: NextRequest, { params }: { params: { id: string; roomId: string } }) {
+  const g = await requirePerm(req, "houses.edit");
+  if (g.error) return g.error;
+  if (!(await find(params))) return NextResponse.json({ error: "room not found" }, { status: 404 });
+  await db.houseRoomPhoto.delete({ where: { id: params.roomId } });
+  return NextResponse.json({ ok: true });
 }
