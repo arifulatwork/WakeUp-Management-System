@@ -1,110 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePerm } from "@/lib/guard";
-import { logAudit } from "@/lib/audit";
-import { parseMedia, writeMedia } from "@/lib/houseMedia";
-import { findDuplicate, normMode, nameKey, isUniqueViolation, HOUSE_MODES, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
-import { pushAsync, STAFF_ROLES } from "@/lib/push";
+import { MEDIA_ENABLED } from "@/lib/features";
 
-const KEY_STATES = ["AT_OFFICE", "WITH_CLEANER", "WITH_GUEST", "MISSING"];
+// GET /api/houses/:id/media?kind=photo|video[&v=…]
+// Serves an apartment's photo or video as a real file, so <img>/<video> can use it as a
+// normal URL and the browser caches it (the `v` param changes whenever the media is replaced).
+// Supports Range requests — iPhones will not play a video without them.
+// Signed-in users only (middleware); every role may look, only management may change (PATCH /api/houses/:id).
 
-// PATCH /api/houses/:id — any of { name, address, mode, checkInText, keyStatus, validFrom, validUntil }.
-// validFrom/validUntil = null (or "") makes it a permanent house again.
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const body = await req.json();
-
-  // Changing only the key status is open to coordinators; anything else (name,
-  // address, listing dates) is management.
-  const keyOnly = Object.keys(body).every((k) => k === "keyStatus");
-  const g = await requirePerm(req, keyOnly ? "houses.key" : "houses.edit");
-  if (g.error) return g.error;
-
-  const data: Record<string, unknown> = {};
-
-  if ("keyStatus" in body) {
-    if (!KEY_STATES.includes(body.keyStatus)) {
-      return NextResponse.json({ error: "invalid keyStatus" }, { status: 400 });
-    }
-    data.keyStatus = body.keyStatus;
-    data.keyUpdatedAt = new Date();
-  }
-  if (body.name !== undefined) {
-    if (!String(body.name).trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-    data.name = String(body.name).trim();
-    data.nameKey = nameKey(data.name); // keeps the UNIQUE (nameKey, mode) index in step with the name
-  }
-  if (body.address !== undefined) {
-    if (!String(body.address).trim()) return NextResponse.json({ error: "address required" }, { status: 400 });
-    data.address = String(body.address).trim();
-  }
-  if ("validFrom" in body) data.validFrom = body.validFrom ? new Date(body.validFrom) : null;
-  if ("validUntil" in body) data.validUntil = body.validUntil ? new Date(body.validUntil) : null;
-
-  if ("mode" in body) {
-    if (!HOUSE_MODES.includes(body.mode)) return NextResponse.json({ error: "invalid mode" }, { status: 400 });
-    data.mode = body.mode;
-  }
-  if ("checkInText" in body) data.checkInText = body.checkInText ? String(body.checkInText).slice(0, MAX_CHECKIN_TEXT) : null;
-
-  // Renaming or switching mode must not collide with another house of the same name + mode.
-  if (data.name !== undefined || data.mode !== undefined) {
-    const current = await db.house.findUnique({ where: { id: params.id } });
-    if (current) {
-      const dup = findDuplicate(
-        await db.house.findMany({}),
-        String(data.name ?? current.name),
-        normMode(data.mode ?? current.mode),
-        params.id,
-      );
-      if (dup) {
-        return NextResponse.json({ error: "duplicate house", code: "DUPLICATE_HOUSE", existingId: dup.id }, { status: 409 });
-      }
-    }
-  }
-
-  const media = parseMedia(body);
-  if (media.error) return NextResponse.json({ error: media.error }, { status: 400 });
-
-  try {
-    const before = await db.house.findUnique({ where: { id: params.id } });
-    if (!before) return NextResponse.json({ error: "house not found" }, { status: 404 });
-    if (media.change) Object.assign(data, await writeMedia(params.id, media.change));
-    const house = await db.house.update({ where: { id: params.id }, data });
-    if (keyOnly) {
-      await logAudit(req, "house", params.id, "key", "Key status of {name} → {state}", { name: house.name, state: String(body.keyStatus) });
-    } else {
-      await logAudit(req, "house", params.id, "update", "Edited house {name} ({fields})", { name: house.name, fields: Object.keys(body).join(",") });
-    }
-    // A key that has just gone missing is urgent news for the office.
-    if (data.keyStatus === "MISSING" && before?.keyStatus !== "MISSING") {
-      pushAsync({ roles: STAFF_ROLES }, "key_missing", { house: house.name }, `key-${params.id}`);
-    }
-    return NextResponse.json(house);
-  } catch (e) {
-    // Another save took this name + mode between our check and the update.
-    if (isUniqueViolation(e)) {
-      return NextResponse.json({ error: "duplicate house", code: "DUPLICATE_HOUSE" }, { status: 409 });
-    }
-    return NextResponse.json({ error: "house not found" }, { status: 404 });
-  }
+function decode(dataUrl: string): { mime: string; bytes: Buffer } | null {
+  const m = /^data:([^;,]+)((?:;[^;,]+)*),([\s\S]*)$/.exec(dataUrl);
+  if (!m) return null;
+  const isBase64 = m[2].includes(";base64");
+  return { mime: m[1], bytes: isBase64 ? Buffer.from(m[3], "base64") : Buffer.from(decodeURIComponent(m[3]), "utf8") };
 }
 
-// DELETE /api/houses/:id — removes the house and everything attached to it
-// (tasks, tickets, material requests) so nothing is left pointing at it.
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const g = await requirePerm(req, "houses.delete");
-  if (g.error) return g.error;
-  try {
-    const doomed = await db.house.findUnique({ where: { id: params.id } });
-    await db.cleaningTask.deleteMany({ where: { houseId: params.id } });
-    await db.maintenanceTicket.deleteMany({ where: { houseId: params.id } });
-    await db.materialRequest.deleteMany({ where: { houseId: params.id } });
-    await db.houseMedia.deleteMany({ where: { houseId: params.id } });
-    await db.houseRoomPhoto.deleteMany({ where: { houseId: params.id } });
-    await db.house.delete({ where: { id: params.id } });
-    await logAudit(req, "house", params.id, "delete", "Deleted house {name} and its tasks, tickets and requests", { name: doomed?.name ?? params.id });
-    return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "house not found" }, { status: 404 });
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!MEDIA_ENABLED) return new NextResponse("Not found", { status: 404 }); // switched off (lib/features.ts)
+  const kind = req.nextUrl.searchParams.get("kind") === "video" ? "video" : "photo";
+  const row = await db.houseMedia.findFirst({ where: { houseId: params.id } });
+  const file = row ? decode(row[kind] ?? "") : null;
+  if (!file) return new NextResponse("Not found", { status: 404 });
+
+  const total = file.bytes.length;
+  const headers: Record<string, string> = {
+    "Content-Type": file.mime,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, max-age=3600",
+    "X-Content-Type-Options": "nosniff",
+  };
+
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("range") ?? "");
+  if (range && (range[1] || range[2])) {
+    let start = range[1] ? parseInt(range[1], 10) : Math.max(0, total - parseInt(range[2], 10));
+    let end = range[1] && range[2] ? parseInt(range[2], 10) : total - 1;
+    end = Math.min(end, total - 1);
+    if (start > end || start >= total) {
+      return new NextResponse(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
+    }
+    const chunk = file.bytes.subarray(start, end + 1);
+    return new NextResponse(new Uint8Array(chunk), {
+      status: 206,
+      headers: { ...headers, "Content-Range": `bytes ${start}-${end}/${total}`, "Content-Length": String(chunk.length) },
+    });
   }
+  return new NextResponse(new Uint8Array(file.bytes), { headers: { ...headers, "Content-Length": String(total) } });
 }

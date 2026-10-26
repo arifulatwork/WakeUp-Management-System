@@ -1,30 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePerm } from "@/lib/guard";
-import { logAudit } from "@/lib/audit";
+import { MEDIA_ENABLED } from "@/lib/features";
 
-// PATCH  { label }  renames a room photo; DELETE removes it. Management only.
-async function owned(houseId: string, roomId: string) {
-  const row = await db.houseRoomPhoto.findUnique({ where: { id: roomId } });
-  return row && row.houseId === houseId ? row : null;
-}
-
-export async function PATCH(req: NextRequest, { params }: { params: { id: string; roomId: string } }) {
-  const g = await requirePerm(req, "houses.edit");
-  if (g.error) return g.error;
-  if (!(await owned(params.id, params.roomId))) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const label = String((await req.json()).label ?? "").trim().slice(0, 80);
-  if (!label) return NextResponse.json({ error: "room name required" }, { status: 400 });
-  const row = await db.houseRoomPhoto.update({ where: { id: params.roomId }, data: { label } });
-  return NextResponse.json({ id: row.id, label: row.label, position: row.position });
-}
-
-export async function DELETE(req: NextRequest, { params }: { params: { id: string; roomId: string } }) {
-  const g = await requirePerm(req, "houses.edit");
-  if (g.error) return g.error;
-  if (!(await owned(params.id, params.roomId))) return NextResponse.json({ error: "not found" }, { status: 404 });
-  await db.houseRoomPhoto.delete({ where: { id: params.roomId } });
-  const house = await db.house.findUnique({ where: { id: params.id } });
-  await logAudit(req, "house", params.id, "update", "Edited house {name} ({fields})", { name: house?.name ?? params.id, fields: "checkInPhotos" });
-  return NextResponse.json({ ok: true });
+// GET /api/houses/:id/rooms/:roomId/photo — the room photo as a real image file (cacheable).
+// Signed-in users only (middleware).
+export async function GET(_req: NextRequest, { params }: { params: { id: string; roomId: string } }) {
+  if (!MEDIA_ENABLED) return new NextResponse("Not found", { status: 404 });
+  const row = await db.houseRoomPhoto.findUnique({ where: { id: params.roomId } });
+  const m = row && row.houseId === params.id ? /^data:([^;,]+);base64,([\s\S]*)$/.exec(row.photo) : null;
+  if (!m) return new NextResponse("Not found", { status: 404 });
+  return new NextResponse(new Uint8Array(Buffer.from(m[2], "base64")), {
+    headers: { "Content-Type": m[1], "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" },
+  });
 }

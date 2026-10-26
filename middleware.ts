@@ -16,6 +16,13 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
+  // Already signed in? Don't show the login page again (e.g. after pressing Back): go to "/",
+  // which sends each person to their own screen. Logout clears the cookie first, so it still works.
+  if (pathname === "/login") {
+    const existing = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
+    if (existing) return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.next();
+  }
   if (OPEN_PAGES.includes(pathname) || OPEN_API.includes(pathname)) return NextResponse.next();
 
   // Self sign-up and the quick-login page are gone: accounts are created by the Super Admin.

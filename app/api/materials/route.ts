@@ -1,42 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePerm, actingWorkerId } from "@/lib/guard";
+import { requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
-import { pushAsync, STAFF_ROLES } from "@/lib/push";
-import { cachedJson } from "@/lib/serverCache";
 
-// GET /api/materials — ?pending=1 for just open requests (Manager/Ops),
-// otherwise everything.
-export async function GET(req: NextRequest) {
-  const g = await requirePerm(req, "data.read");
+// PATCH /api/materials/:id
+//   { action: "fulfill" }                        -> sorted
+//   { action: "reopen" }                         -> back to PENDING
+//   { action: "update", fields: { items, houseId } }
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const g = await requirePerm(req, "materials.write");
   if (g.error) return g.error;
-  const pendingOnly = req.nextUrl.searchParams.get("pending");
-  return cachedJson(req, `materials:${pendingOnly ? "pending" : "all"}`, ["materialRequest", "house", "worker"], () =>
-    db.materialRequest.findMany({
-      where: pendingOnly ? { status: "PENDING" } : undefined,
-      include: { house: true, requestedBy: true },
-      orderBy: { createdAt: "desc" },
-    })
-  );
+  const body = await req.json();
+  const { action } = body;
+  const LABELS: Record<string, string> = { fulfill: "Marked request as sorted", reopen: "Reopened request", update: "Edited request" };
+
+  try {
+    if (LABELS[action]) {
+      const exists = await db.materialRequest.findUnique({ where: { id: params.id } });
+      if (!exists) return NextResponse.json({ error: "request not found" }, { status: 404 });
+      await logAudit(req, "material", params.id, action, LABELS[action]);
+    }
+    if (action === "fulfill") {
+      const updated = await db.materialRequest.update({
+        where: { id: params.id },
+        data: { status: "FULFILLED", fulfilledAt: new Date() },
+      });
+      return NextResponse.json(updated);
+    }
+    if (action === "reopen") {
+      const updated = await db.materialRequest.update({
+        where: { id: params.id },
+        data: { status: "PENDING", fulfilledAt: null },
+      });
+      return NextResponse.json(updated);
+    }
+    if (action === "update") {
+      const f = body.fields ?? {};
+      const data: Record<string, unknown> = {};
+      if (f.items && String(f.items).trim()) data.items = String(f.items).trim();
+      if (f.houseId) data.houseId = f.houseId;
+      const updated = await db.materialRequest.update({
+        where: { id: params.id },
+        data,
+        include: { house: true, requestedBy: true },
+      });
+      return NextResponse.json(updated);
+    }
+  } catch {
+    return NextResponse.json({ error: "request not found" }, { status: 404 });
+  }
+  return NextResponse.json({ error: "unknown action" }, { status: 400 });
 }
 
-// POST /api/materials — the cleaner's "Request products / materials" button.
-export async function POST(req: NextRequest) {
-  const { houseId, items, requestedById: claimedRequester } = await req.json();
-  const requestedById = await actingWorkerId(req, claimedRequester);
-  if (!houseId || !items || !requestedById) {
-    return NextResponse.json(
-      { error: "houseId, items and requestedById are required" },
-      { status: 400 }
-    );
+// DELETE /api/materials/:id
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const g = await requirePerm(req, "materials.delete");
+  if (g.error) return g.error;
+  try {
+    await db.materialRequest.delete({ where: { id: params.id } });
+    await logAudit(req, "material", params.id, "delete", "Deleted request");
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: "request not found" }, { status: 404 });
   }
-  const request = await db.materialRequest.create({
-    data: { houseId, items, requestedById },
-    include: { house: true, requestedBy: true },
-  });
-  await logAudit(req, "material", request.id, "create", "Requested materials for {house}",
-    { house: request.house?.name ?? houseId }, requestedById);
-  pushAsync({ roles: STAFF_ROLES, excludeWorkerId: requestedById }, "material_new",
-    { house: request.house?.name ?? "", items: String(items).slice(0, 80) }, `material-${request.id}`);
-  return NextResponse.json(request, { status: 201 });
 }

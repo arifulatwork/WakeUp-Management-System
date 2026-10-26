@@ -55,11 +55,11 @@ function LoginForm() {
     if (user.language) setLang(user.language as Lang, { persist: false });
 
     const next = params.get("next");
-    if (next && next.startsWith("/") && !next.startsWith("//")) router.push(next);
-    else if (user.role === "admin") router.push("/admin");
-    else if (user.role === "manager") router.push("/manager");
-    else if (user.role === "coordinator") router.push("/coordinator");
-    else router.push(user.area === "MAINTENANCE" ? "/maintenance" : "/cleaner");
+    if (next && next.startsWith("/") && !next.startsWith("//")) router.replace(next);
+    else if (user.role === "admin") router.replace("/admin");
+    else if (user.role === "manager") router.replace("/manager");
+    else if (user.role === "coordinator") router.replace("/coordinator");
+    else router.replace(user.area === "MAINTENANCE" ? "/maintenance" : "/cleaner");
   }
 
   return (

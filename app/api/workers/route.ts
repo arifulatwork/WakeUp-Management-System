@@ -1,63 +1,130 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { db, DEMO_MODE } from "@/lib/db";
+import { db } from "@/lib/db";
+import { requirePerm, currentSession } from "@/lib/guard";
+import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { requirePerm } from "@/lib/guard";
-import { cachedJson } from "@/lib/serverCache";
 
-// POST /api/workers — the Super Admin adds a staff member WITH their login.
-// Body: { name, language, area, username, password }
-// (Self sign-up no longer exists: nobody can create themselves an account.)
-export async function POST(req: NextRequest) {
-  const g = await requirePerm(req, "staff.manage");
-  if (g.error) return g.error;
-
-  const body = await req.json();
-  const { name, language, area, password } = body;
-  const username = String(body.username ?? "").trim().toLowerCase();
-
-  if (!name || !language || !area || !username || !password) {
-    return NextResponse.json(
-      { error: "name, language, area, username and password are required" },
-      { status: 400 }
-    );
-  }
-  if (area !== "CLEANING" && area !== "MAINTENANCE") {
-    return NextResponse.json({ error: "invalid area" }, { status: 400 });
-  }
-  if (String(password).length < 8) {
-    return NextResponse.json({ error: "password must be at least 8 characters" }, { status: 400 });
-  }
-  if (await db.worker.findUnique({ where: { username } })) {
-    return NextResponse.json({ error: "username already taken" }, { status: 409 });
-  }
-
-  const worker = await db.worker.create({
-    data: {
-      name, language, area: area as "CLEANING" | "MAINTENANCE",
-      username, passwordHash: await bcrypt.hash(String(password), 10),
-    },
-  });
-
-  // Demo build only: give a new cleaner something to look at straight away.
-  if (DEMO_MODE && area === "CLEANING") {
-    const { seedDemoTasks } = await import("@/lib/mockDb");
-    await seedDemoTasks(worker.id);
-  }
-
-  await logAudit(req, "staff", worker.id, "create", "New staff member onboarded: {name} ({team})", { name: worker.name, team: area }, worker.id);
+// GET /api/workers/:id — read current role fresh from the DB.
+// Pages call this on every load instead of trusting a cached role,
+// so a Super Admin change takes effect the moment the person reloads —
+// no re-onboarding, no redeploy.
+export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const worker = await db.worker.findUnique({ where: { id: params.id } });
+  if (!worker) return NextResponse.json({ error: "not found" }, { status: 404 });
   const { passwordHash, ...safe } = worker;
-  return NextResponse.json(safe, { status: 201 });
+  return NextResponse.json(safe);
 }
 
-// GET /api/workers — list staff (dashboards use it to assign tasks and show workload).
-// Requires a login (middleware); password hashes are never sent.
-// These GETs never read the request, so a production build could freeze them; always read live data.
-export const dynamic = "force-dynamic";
+// PATCH /api/workers/:id — Super Admin reassigns a role, and/or sets
+// login credentials when promoting someone to manager/coordinator/admin.
+// Body: { role?, username?, password? }
+//
+// Requires a valid admin session cookie — this is the fix for the
+// earlier gap where anyone could call this endpoint and self-promote.
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const body = await req.json();
+  const { role, username, password, language } = body;
 
-export async function GET(req: NextRequest) {
-  return cachedJson(req, "workers", ["worker"], async () => {
-    const workers = await db.worker.findMany({ orderBy: { createdAt: "desc" } });
-    return workers.map(({ passwordHash, ...w }: { passwordHash?: string }) => w);
-  });
+  // A person changing their own display language needs no admin rights —
+  // it's the only field that can be changed without an admin session.
+  const LANGS = ["en", "pt", "es", "fr", "it", "uk"];
+  const languageOnly = Object.keys(body).length === 1 && !!language;
+  if (languageOnly) {
+    if (!LANGS.includes(language)) {
+      return NextResponse.json({ error: "invalid language" }, { status: 400 });
+    }
+    // Your own language only (an admin may change anyone's).
+    const me = await currentSession(req);
+    if (!me) return NextResponse.json({ error: "sign in required" }, { status: 401 });
+    if (me.workerId !== params.id && !can(me.role, "staff.manage")) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    const w = await db.worker.update({ where: { id: params.id }, data: { language } });
+    return NextResponse.json({ id: w.id, language: w.language });
+  }
+
+  const g = await requirePerm(req, "staff.manage");
+  if (g.error) return g.error;
+  const session = g.session;
+
+  // Nobody can strip their own Super Admin rights (that could leave nobody in charge).
+  if (role && params.id === session.workerId && role !== "admin") {
+    return NextResponse.json({ error: "you cannot remove your own Super Admin rights" }, { status: 400 });
+  }
+
+  const data: Record<string, unknown> = {};
+  if (language) {
+    if (!LANGS.includes(language)) return NextResponse.json({ error: "invalid language" }, { status: 400 });
+    data.language = language;
+  }
+  if (body.name !== undefined) {
+    if (!String(body.name).trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
+    data.name = String(body.name).trim();
+  }
+  if (body.area !== undefined) {
+    if (body.area !== "CLEANING" && body.area !== "MAINTENANCE") {
+      return NextResponse.json({ error: "invalid area" }, { status: 400 });
+    }
+    data.area = body.area;
+  }
+
+  if (role) {
+    const allowed = ["worker", "manager", "coordinator", "admin"];
+    if (!allowed.includes(role)) {
+      return NextResponse.json({ error: "invalid role" }, { status: 400 });
+    }
+    data.role = role;
+  }
+  if (username) {
+    const uname = String(username).trim().toLowerCase();
+    const taken = await db.worker.findUnique({ where: { username: uname } });
+    if (taken && taken.id !== params.id) return NextResponse.json({ error: "username already taken" }, { status: 409 });
+    data.username = uname;
+  }
+  if (password && String(password).length < 8) {
+    return NextResponse.json({ error: "password must be at least 8 characters" }, { status: 400 });
+  }
+  if (password) {
+    const bcrypt = (await import("bcryptjs")).default;
+    data.passwordHash = await bcrypt.hash(password, 10);
+  }
+
+  const before = await db.worker.findUnique({ where: { id: params.id } });
+  const worker = await db.worker.update({ where: { id: params.id }, data });
+  // Names of changed fields only — never the password itself.
+  const changed = Object.keys(data).map((k) => (k === "passwordHash" ? "password" : k === "area" ? "team" : k)).join(",") || "—";
+  if (role && before?.role !== role) {
+    await logAudit(req, "staff", params.id, "role", "{name}: role {from} → {to}; changed {fields}",
+      { name: worker.name, from: before?.role ?? "worker", to: role, fields: changed });
+  } else {
+    await logAudit(req, "staff", params.id, "update", "{name}: changed {fields}", { name: worker.name, fields: changed });
+  }
+  // Don't leak the hash back to the client.
+  const { passwordHash, ...safe } = worker;
+  return NextResponse.json(safe);
+}
+
+// DELETE /api/workers/:id — admin only. Their jobs go back to "unassigned".
+// Refused if they have reported tickets / material requests, since those
+// records must keep pointing at who raised them (audit trail).
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const g = await requirePerm(req, "staff.manage");
+  if (g.error) return g.error;
+  const session = g.session;
+  if (session.workerId === params.id) {
+    return NextResponse.json({ error: "you cannot delete your own account" }, { status: 400 });
+  }
+  const history =
+    (await db.maintenanceTicket.count({ where: { reportedById: params.id } })) +
+    (await db.materialRequest.count({ where: { requestedById: params.id } }));
+  if (history > 0) {
+    return NextResponse.json({ error: "has history" }, { status: 409 });
+  }
+  await db.cleaningTask.updateMany({ where: { assignedWorkerId: params.id }, data: { assignedWorkerId: null } });
+  await db.cleaningTask.updateMany({ where: { completedByWorkerId: params.id }, data: { completedByWorkerId: null } });
+  await db.maintenanceTicket.updateMany({ where: { assignedWorkerId: params.id }, data: { assignedWorkerId: null } });
+  const gone = await db.worker.findUnique({ where: { id: params.id } });
+  await db.worker.delete({ where: { id: params.id } });
+  await logAudit(req, "staff", params.id, "delete", "Removed staff member {name}", { name: gone?.name ?? params.id });
+  return NextResponse.json({ ok: true });
 }
