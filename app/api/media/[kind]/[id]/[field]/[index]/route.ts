@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: { kind: string
     const t = await db.maintenanceTicket.findUnique({ where: { id: params.id } });
     if (!t) return notFound();
     if (params.field === "photoUrl" || params.field === "afterPhotoUrl") value = i === 0 ? (t as any)[params.field] : null;
-    else if (params.field === "photos" || params.field === "videos") value = ((t.mediaData as any)?.[params.field] ?? [])[i];
+    else if (params.field === "photos" || params.field === "videos" || params.field === "reportVideos") value = ((t.mediaData as any)?.[params.field] ?? [])[i];
     else return notFound();
   } else return notFound();
 

@@ -66,6 +66,7 @@ const DEFAULTS: Record<string, () => Row> = {
   auditLog: () => ({ actorId: null, entityId: null, template: null, params: null, createdAt: new Date() }),
   pushSubscription: () => ({ createdAt: new Date() }),
   notification: () => ({ params: null, url: null, readAt: null, createdAt: new Date() }),
+  appSetting: () => ({ updatedAt: new Date() }),
 };
 
 let idCounter = 1000;
@@ -310,7 +311,7 @@ function buildSeed(): Tables {
       items: "Dishwasher tablets", status: "FULFILLED", createdAt: new Date(now - 6 * HOUR), fulfilledAt: new Date(now - 5 * HOUR) },
   ];
 
-  return { worker: workers, house: houses, cleaningTask: tasks, maintenanceTicket: tickets, materialRequest: materials, houseMedia, houseRoomPhoto: [], auditLog: [], pushSubscription: [], notification: [] };
+  return { worker: workers, house: houses, cleaningTask: tasks, maintenanceTicket: tickets, materialRequest: materials, houseMedia, houseRoomPhoto: [], auditLog: [], pushSubscription: [], notification: [], appSetting: [] };
 }
 
 // ---------- live simulator ----------
@@ -506,6 +507,7 @@ export const mockDb = {
   auditLog: makeModel(tablesProxy, "auditLog"),
   pushSubscription: makeModel(tablesProxy, "pushSubscription"),
   notification: makeModel(tablesProxy, "notification"),
+  appSetting: makeModel(tablesProxy, "appSetting"),
 };
 
 // Demo only: a freshly onboarded cleaner would otherwise open an empty app.

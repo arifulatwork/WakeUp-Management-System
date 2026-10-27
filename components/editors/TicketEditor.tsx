@@ -5,7 +5,7 @@ import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { useCan } from "@/lib/useSession";
-import { PhotoPicker, PhotoStrip, VideoStrip } from "@/components/Photos";
+import { PhotoPicker, PhotoStrip, VideoPicker, VideoStrip } from "@/components/Photos";
 import { MEDIA_ENABLED } from "@/lib/features";
 import type { EdHouse, EdWorker } from "./TaskEditor";
 
@@ -14,7 +14,7 @@ export type EdTicket = {
   house?: { id: string; name: string }; houseId?: string;
   assignedWorkerId?: string | null; assignedWorker?: { id?: string; name: string } | null;
   materialsUsed?: string | null; timeSpentMinutes?: number | null;
-  photoUrl?: string | null; afterPhotoUrl?: string | null; mediaData?: { photos?: string[]; videos?: string[] } | null;
+  photoUrl?: string | null; afterPhotoUrl?: string | null; mediaData?: { photos?: string[]; videos?: string[]; reportVideos?: string[] } | null;
 };
 
 const AREAS = ["Bathroom", "Kitchen", "Bedroom", "Living room", "Outdoor", "Other"];
@@ -39,6 +39,7 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
   const [materials, setMaterials] = useState(ticket?.materialsUsed ?? "");
   const [minutes, setMinutes] = useState(ticket?.timeSpentMinutes ? String(ticket.timeSpentMinutes) : "");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [video, setVideo] = useState<string | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -60,7 +61,7 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
           },
         });
       } else {
-        await api("/api/tickets", "POST", { houseId, area, priority, description: description.trim(), photoUrl: photo, reportedById: me });
+        await api("/api/tickets", "POST", { houseId, area, priority, description: description.trim(), photoUrl: photo, videoUrl: video, reportedById: me });
       }
       onSaved();
     } catch (e) {
@@ -116,6 +117,19 @@ export default function TicketEditor({ ticket, houses, workers, defaultHouseId, 
         ) : (
           <PhotoPicker showWhenOff label={`📷 ${tr("Attach photo")}`} style={S.ghost} onPhoto={setPhoto} />
         )
+      )}
+      {!editing && (
+        video ? (
+          <VideoStrip videos={[video]} onRemove={() => setVideo(null)} />
+        ) : (
+          <VideoPicker showWhenOff label={`🎥 ${tr("Attach video")}`} style={S.ghost} onVideo={setVideo} />
+        )
+      )}
+      {MEDIA_ENABLED && editing && (ticket!.mediaData?.reportVideos?.length ?? 0) > 0 && (
+        <>
+          <label style={S.label}>{tr("Video of the problem")}</label>
+          <VideoStrip videos={ticket!.mediaData!.reportVideos!} />
+        </>
       )}
 
       {MEDIA_ENABLED && editing && (ticket!.photoUrl || ticket!.afterPhotoUrl) && (

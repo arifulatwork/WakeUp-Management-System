@@ -251,3 +251,11 @@ model Notification {
 
   @@index([workerId, createdAt])
 }
+
+// Admin-editable settings (default checklist, extra task fields…). One row per setting,
+// the value is JSON, so a new kind of setting never needs a migration.
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

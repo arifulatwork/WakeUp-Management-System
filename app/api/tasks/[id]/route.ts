@@ -179,6 +179,11 @@ export async function PATCH(
     case "complete": {
       // A stale screen or a replayed offline tap must never undo an approval.
       if (task.status === "APPROVED") return json(task);
+      // The manager asked for before AND after photos on this job: at least two are needed.
+      const cd = (task.checklistData as any) ?? {};
+      if (MEDIA_ENABLED && cd.requireBeforeAfter && (cd.photos ?? []).length < 2) {
+        return json({ error: "before and after photos required" }, { status: 409 });
+      }
       const updated = await db.cleaningTask.update({
         where: { id: params.id },
         data: {
@@ -292,15 +297,26 @@ export async function PATCH(
         data.completedAt = new Date();
       }
 
-      if (Array.isArray(f.checklist)) {
+      if (Array.isArray(f.checklist) || "requireBeforeAfter" in f || "custom" in f) {
         const prev = (task.checklistData as any) ?? {};
-        data.checklistData = {
-          ...prev,
-          photos: prev.photos ?? [],
-          checklist: f.checklist
+        const next: any = { ...prev, photos: prev.photos ?? [] };
+        if (Array.isArray(f.checklist)) {
+          next.checklist = f.checklist
             .filter((i: any) => i && String(i.label).trim())
-            .map((i: any) => ({ label: String(i.label).trim(), done: !!i.done })),
-        };
+            .map((i: any) => ({ label: String(i.label).trim(), done: !!i.done }));
+        }
+        if ("requireBeforeAfter" in f) next.requireBeforeAfter = f.requireBeforeAfter === true;
+        if ("custom" in f) {
+          const custom: Record<string, string> = {};
+          if (f.custom && typeof f.custom === "object" && !Array.isArray(f.custom)) {
+            for (const [k, x] of Object.entries(f.custom).slice(0, 30)) {
+              const val = String(x ?? "").trim().slice(0, 500);
+              if (val) custom[String(k).slice(0, 40)] = val;
+            }
+          }
+          next.custom = custom;
+        }
+        data.checklistData = next;
       }
 
       const updated = await db.cleaningTask.update({

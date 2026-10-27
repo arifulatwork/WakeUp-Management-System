@@ -19,6 +19,7 @@ import { EdWorker } from "@/components/editors/TaskEditor";
 type Task = {
   id: string; houseId: string; status: string; scheduledDate: string; scheduledTime: string;
   estimatedMinutes?: number | null; startedAt?: string | null; completedAt?: string | null;
+  cleaningTypes?: string[]; nextCheckIn?: string | null;
   assignedWorker: { name: string } | null; house: { name: string };
 };
 type Ticket = EdTicket & { house: { id: string; name: string }; reportedBy: { name: string } };
@@ -105,6 +106,12 @@ export default function OpsOverview() {
   // Houses with something happening today or still unfinished (not "number of tasks").
   const todayKey = dayKey(now);
   const activeHouses = new Set(tasks.filter((t) => dayKey(t.scheduledDate) === todayKey || !finished.includes(t.status)).map((t) => t.houseId)).size;
+  // Daily turnover: guests leaving today (a check-out cleaning is planned today) and guests
+  // arriving today (a job whose "next check-in" is today). One house counted once per kind.
+  const checkOutsToday = new Set(tasks.filter((t) => dayKey(t.scheduledDate) === todayKey && (t.cleaningTypes ?? []).includes("CHECKOUT")).map((t) => t.houseId)).size;
+  const checkInsTodayTasks = tasks.filter((t) => t.nextCheckIn && dayKey(t.nextCheckIn) === todayKey);
+  const checkInsToday = new Set(checkInsTodayTasks.map((t) => t.houseId)).size;
+  const checkInsReady = new Set(checkInsTodayTasks.filter((t) => t.status === "APPROVED").map((t) => t.houseId)).size;
   // Requests: whoever has waited longest is first; "fulfilled" shows the latest few.
   const pending = materials.filter((m) => m.status === "PENDING").sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
   const recentDone = materials
@@ -150,6 +157,9 @@ export default function OpsOverview() {
         <StatGrid>
           <StatCard n={activeHouses} label={tr("Houses with activity")} />
           <StatCard n={urgent} label={tr("Urgent problems")} color="#C1503C" />
+          <StatCard n={checkOutsToday} label={tr("Check-outs today")} />
+          <StatCard n={checkInsToday} label={tr("Check-ins today")} />
+          <StatCard n={checkInsReady} label={tr("Check-ins ready")} color="#4F7A26" />
           <StatCard n={completedToday} label={tr("Completed today")} color="#4F7A26" />
           <StatCard n={overdue} label={tr("Overdue work")} color="#D98A33" />
           <StatCard n={openTasks} label={tr("Open tasks")} />

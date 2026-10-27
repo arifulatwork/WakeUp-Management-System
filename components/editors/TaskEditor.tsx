@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, saveError, toDateInput, fromDateInput } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { useCan } from "@/lib/useSession";
 import { PhotoStrip } from "@/components/Photos";
 import { MEDIA_ENABLED } from "@/lib/features";
+import { DEFAULT_CHECKLIST, TaskField } from "@/lib/settingsDefaults";
 
 export type EdHouse = { id: string; name: string };
 export type EdWorker = { id: string; name: string; area: string; role: string };
@@ -17,14 +18,11 @@ export type EdTask = {
   estimatedMinutes?: number | null; notes?: string | null;
   nextCheckIn?: string | null; materialsNeeded?: string | null;
   startedAt?: string | null; completedAt?: string | null;
-  checklistData?: { checklist?: { label: string; done: boolean }[]; photos?: string[]; videos?: string[] };
+  checklistData?: { checklist?: { label: string; done: boolean }[]; photos?: string[]; videos?: string[]; requireBeforeAfter?: boolean; custom?: Record<string, string> };
 };
 
 const TYPES = ["GENERAL", "CHECKOUT", "DEEP_CLEAN", "EXTRAORDINARY", "OUTDOOR", "BEDSHEET_CHANGE"];
 const STATUSES = ["SCHEDULED", "ASSIGNED", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "TO_BE_VERIFIED", "APPROVED", "WITH_ISSUE"];
-const DEFAULT_ITEMS = [
-  "Linen & bed sheets changed", "Bathroom & toilet disinfected", "Kitchen & appliances cleaned", "Trash emptied",
-];
 
 // Create or edit a cleaning task: house, date/time, type(s), who does it,
 // priority, duration, notes, status and the checklist itself.
@@ -49,9 +47,24 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
   const [materialsNeeded, setMaterialsNeeded] = useState(task?.materialsNeeded ?? "");
   const [status, setStatus] = useState(task?.status ?? "SCHEDULED");
   const [items, setItems] = useState<{ label: string; done: boolean }[]>(
-    task?.checklistData?.checklist ?? DEFAULT_ITEMS.map((label) => ({ label, done: false }))
+    task?.checklistData?.checklist ?? DEFAULT_CHECKLIST.map((label) => ({ label, done: false }))
   );
   const [newItem, setNewItem] = useState("");
+  const [requirePhotos, setRequirePhotos] = useState(!!task?.checklistData?.requireBeforeAfter);
+  const [fields, setFields] = useState<TaskField[]>([]);
+  const [custom, setCustom] = useState<Record<string, string>>(task?.checklistData?.custom ?? {});
+
+  // New task: start from the default checklist the Super Admin set. Always: load the extra task fields.
+  useEffect(() => {
+    if (!editing) {
+      fetch("/api/settings/checklist").then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d && Array.isArray(d.items)) setItems(d.items.map((label: string) => ({ label, done: false }))); })
+        .catch(() => {});
+    }
+    fetch("/api/settings/task-fields").then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && Array.isArray(d.fields)) setFields(d.fields); })
+      .catch(() => {});
+  }, []);
   const [photos, setPhotos] = useState<string[]>(task?.checklistData?.photos ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -75,6 +88,8 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
         // Only meaningful for a check-out cleaning; cleared for every other type.
         nextCheckIn: isCheckout && nextCheck ? fromDateInput(nextCheck) : null,
         materialsNeeded: materialsNeeded.trim() || null,
+        requireBeforeAfter: requirePhotos,
+        custom,
       };
       if (editing) {
         await api(`/api/tasks/${task!.id}`, "PATCH", { action: "update", fields: { ...common, status, checklist: items } });
@@ -162,6 +177,29 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
 
       <label style={S.label}>{tr("Products / materials needed")}</label>
       <input style={S.input} value={materialsNeeded} onChange={(e) => setMaterialsNeeded(e.target.value)} />
+
+      {MEDIA_ENABLED && (
+        <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 4px", fontSize: 13 }}>
+          <input type="checkbox" checked={requirePhotos} onChange={(e) => setRequirePhotos(e.target.checked)} />
+          📷 {tr("Require before and after photos")}
+        </label>
+      )}
+
+      {fields.map((f) => (
+        <div key={f.id}>
+          <label style={S.label}>{tr(f.label)}</label>
+          {f.type === "yesno" ? (
+            <select style={S.input} value={custom[f.id] ?? ""} onChange={(e) => setCustom({ ...custom, [f.id]: e.target.value })}>
+              <option value="">—</option>
+              <option value="yes">{tr("Yes")}</option>
+              <option value="no">{tr("No")}</option>
+            </select>
+          ) : (
+            <input style={S.input} type={f.type === "number" ? "number" : "text"} value={custom[f.id] ?? ""}
+              onChange={(e) => setCustom({ ...custom, [f.id]: e.target.value })} />
+          )}
+        </div>
+      ))}
 
       {MEDIA_ENABLED && editing && photos.length > 0 && (
         <>

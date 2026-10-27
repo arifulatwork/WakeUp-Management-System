@@ -35,6 +35,8 @@ export function slimTicket(t: any): any {
     const m = { ...t.mediaData };
     if (m.photos) m.photos = list("ticket", t.id, "photos", m.photos);
     if (m.videos) m.videos = list("ticket", t.id, "videos", m.videos);
+    // video attached by the person who REPORTED the issue (the others are the repair team's after-work media)
+    if (m.reportVideos) m.reportVideos = list("ticket", t.id, "reportVideos", m.reportVideos);
     out.mediaData = m;
   }
   return out;

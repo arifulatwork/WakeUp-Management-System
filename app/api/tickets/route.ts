@@ -5,7 +5,7 @@ import { currentSession, actingWorkerId } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { pushAsync, STAFF_ROLES } from "@/lib/push";
-import { isValidPhoto } from "@/lib/photoValidation";
+import { isValidPhoto, isValidVideo } from "@/lib/photoValidation";
 import { MEDIA_ENABLED } from "@/lib/features";
 import { maybePurgeTickets } from "@/lib/retention";
 
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/tickets — anyone signed in can REPORT an issue.
-// Body: { houseId, area, description, priority?, photoUrl?, reportedById }
+// Body: { houseId, area, description, priority?, photoUrl?, videoUrl?, reportedById }
 export async function POST(req: NextRequest) {
   const b = await req.json().catch(() => ({}));
   const reportedById = await actingWorkerId(req, b.reportedById);
@@ -66,8 +66,18 @@ export async function POST(req: NextRequest) {
     photoUrl = b.photoUrl;
   }
 
+  // A short video of the problem (stored in mediaData.reportVideos, apart from the repair team's own media).
+  let reportVideos: string[] = [];
+  if (MEDIA_ENABLED && b.videoUrl) {
+    if (!isValidVideo(b.videoUrl)) return json({ error: "invalid or too large video" }, { status: 400 });
+    reportVideos = [b.videoUrl];
+  }
+
   const ticket = await db.maintenanceTicket.create({
-    data: { houseId: b.houseId, area, description, priority, photoUrl, reportedById, status: "OPEN" },
+    data: {
+      houseId: b.houseId, area, description, priority, photoUrl, reportedById, status: "OPEN",
+      ...(reportVideos.length ? { mediaData: { photos: [], videos: [], reportVideos } } : {}),
+    },
     include: { house: true, reportedBy: true },
   });
   await logAudit(req, "ticket", ticket.id, "create", "Reported issue at {house}: {area}", { house: house.name, area }, reportedById);

@@ -26,7 +26,7 @@ type Task = {
   materialsNeeded?: string | null;
   nextCheckIn?: string | null;
   house: { name: string; address: string; keyStatus?: string; mode?: string; checkInText?: string | null; openIssues?: { area: string; description: string; priority: string; status: string }[]; hasPhoto?: boolean; hasVideo?: boolean; mediaUpdatedAt?: string | null };
-  checklistData: { checklist: { label: string; done: boolean }[]; photos?: string[]; videos?: string[] };
+  checklistData: { checklist: { label: string; done: boolean }[]; photos?: string[]; videos?: string[]; requireBeforeAfter?: boolean; custom?: Record<string, string> };
 };
 
 const AREAS = ["Bathroom", "Kitchen", "Bedroom", "Living room", "Outdoor", "Other"];
@@ -43,6 +43,8 @@ export default function CleanerApp() {
   const [issueSubmitting, setIssueSubmitting] = useState(false);
   const [issueDone, setIssueDone] = useState(false);
   const [issuePhoto, setIssuePhoto] = useState<string | null>(null);
+  const [issueVideo, setIssueVideo] = useState<string | null>(null);
+  const [taskFields, setTaskFields] = useState<{ id: string; label: string; type: string }[]>([]);
   const [requestingMaterials, setRequestingMaterials] = useState(false);
   const [materialsText, setMaterialsText] = useState("");
   const [materialsSubmitting, setMaterialsSubmitting] = useState(false);
@@ -65,6 +67,8 @@ export default function CleanerApp() {
   ) : null;
 
   useEffect(() => {
+    // Extra task fields defined by the Super Admin (shown read-only on the job).
+    fetch("/api/settings/task-fields").then((r) => (r.ok ? r.json() : null)).then((d) => d && setTaskFields(d.fields ?? [])).catch(() => {});
     const id = localStorage.getItem("workerId");
     setWorkerId(id);
     if (!id) return;
@@ -155,6 +159,11 @@ export default function CleanerApp() {
   }
 
   async function markReady(task: Task) {
+    // Cristina asked for before AND after photos on this job: it cannot be sent without them.
+    if (MEDIA_ENABLED && task.checklistData?.requireBeforeAfter && (task.checklistData.photos ?? []).length < 2) {
+      showError(tr("This job needs a before and an after photo."));
+      return;
+    }
     // Ask before sending a job that looks unfinished (nothing is blocked — some items may not apply).
     const open = (task.checklistData?.checklist ?? []).filter((i) => !i.done).length;
     const noPhoto = MEDIA_ENABLED && !(task.checklistData?.photos ?? []).length;
@@ -228,6 +237,7 @@ export default function CleanerApp() {
         description: issueDesc.trim(),
         priority: issuePriority,
         photoUrl: issuePhoto,
+        videoUrl: issueVideo,
         reportedById: workerId,
       }),
     });
@@ -241,6 +251,7 @@ export default function CleanerApp() {
     setReportingIssue(false);
     setIssueDesc("");
     setIssuePhoto(null);
+    setIssueVideo(null);
     setIssuePriority("YELLOW");
     setIssueArea(AREAS[0]);
     setIssueDone(false);
@@ -327,6 +338,11 @@ export default function CleanerApp() {
         ) : (
           <PhotoPicker showWhenOff label={`📷 ${tr("Attach photo")}`} style={ghostBtn} onPhoto={setIssuePhoto} />
         )}
+        {issueVideo ? (
+          <VideoStrip videos={[issueVideo]} onRemove={() => setIssueVideo(null)} />
+        ) : (
+          <VideoPicker showWhenOff label={`🎥 ${tr("Attach video")}`} style={ghostBtn} onVideo={setIssueVideo} />
+        )}
         <button
           style={{ ...primaryBtn, opacity: issueDesc.trim() ? 1 : 0.5 }}
           disabled={!issueDesc.trim() || issueSubmitting}
@@ -408,6 +424,20 @@ export default function CleanerApp() {
         {activeTask.notes && (
           <p style={{ fontSize: 12, background: "#FAF3D6", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
             <b>{tr("Note")}:</b> {tr(activeTask.notes)}
+          </p>
+        )}
+
+        {MEDIA_ENABLED && activeTask.checklistData.requireBeforeAfter && (
+          <p style={{ fontSize: 12, background: "#FBEDDB", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
+            📷 <b>{tr("Before and after photos are required for this job.")}</b>{" "}
+            ({(activeTask.checklistData.photos ?? []).length}/2)
+          </p>
+        )}
+        {taskFields.some((f) => activeTask.checklistData.custom?.[f.id]) && (
+          <p style={{ fontSize: 12, background: "#EEF3F8", borderRadius: 8, padding: "7px 10px", marginBottom: 12 }}>
+            {taskFields.filter((f) => activeTask.checklistData.custom?.[f.id]).map((f) => (
+              <span key={f.id}><b>{tr(f.label)}:</b> {f.type === "yesno" ? tr(activeTask.checklistData.custom![f.id] === "yes" ? "Yes" : "No") : activeTask.checklistData.custom![f.id]}<br /></span>
+            ))}
           </p>
         )}
 

@@ -22,7 +22,7 @@ type Ticket = {
   timeSpentMinutes?: number | null;
   photoUrl?: string | null;
   assignedWorkerId?: string | null;
-  mediaData?: { photos?: string[]; videos?: string[] } | null;
+  mediaData?: { photos?: string[]; videos?: string[]; reportVideos?: string[] } | null;
   house: { name: string };
   reportedBy: { name: string };
 };
@@ -162,6 +162,7 @@ export default function MaintenanceApp() {
         <PriorityBadge p={active.priority} />
         <div style={{ ...card, marginTop: 10 }}>{tr(active.description)}</div>
         {active.photoUrl && <PhotoStrip photos={[active.photoUrl]} size={110} />}
+        <VideoStrip videos={active.mediaData?.reportVideos ?? []} />
 
         {active.status === "OPEN" && (
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>

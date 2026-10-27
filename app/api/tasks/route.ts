@@ -9,6 +9,17 @@ import { pushAsync } from "@/lib/push";
 const json = (v: any, init?: ResponseInit) => NextResponse.json(slimAny(v), init);
 const PRIORITIES = ["YELLOW", "ORANGE", "RED"];
 
+// { fieldId: value } for the admin-defined extra fields. Only short plain values are kept.
+function cleanCustom(v: any): Record<string, string> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, x] of Object.entries(v).slice(0, 30)) {
+    const val = String(x ?? "").trim().slice(0, 500);
+    if (val) out[String(k).slice(0, 40)] = val;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // GET /api/tasks[?workerId=…]
 //   a cleaner gets only THEIR jobs (the id is taken from the login, whatever the browser sends);
 //   office roles get every job, or one person's jobs with ?workerId=.
@@ -70,7 +81,13 @@ export async function POST(req: NextRequest) {
       notes: b.notes ? String(b.notes).trim() || null : null,
       materialsNeeded: b.materialsNeeded ? String(b.materialsNeeded).trim() || null : null,
       status: assignedWorkerId ? "ASSIGNED" : "SCHEDULED",
-      checklistData: { checklist, photos: [] },
+      checklistData: {
+        checklist, photos: [],
+        // Cristina can ask for before AND after photos on important jobs.
+        ...(b.requireBeforeAfter === true ? { requireBeforeAfter: true } : {}),
+        // Values of the extra fields the Super Admin defined (Admin screen).
+        ...(cleanCustom(b.custom) ? { custom: cleanCustom(b.custom) } : {}),
+      },
     },
     include: { house: true, assignedWorker: true },
   });

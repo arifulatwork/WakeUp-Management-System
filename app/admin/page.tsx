@@ -12,6 +12,7 @@ import { applyDir, AREA_RANK, cmpText, KEY_RANK, ROLE_RANK } from "@/lib/sort";
 import StaffEditor, { EdStaff } from "@/components/editors/StaffEditor";
 import { ModeBadge, CheckInGuideButton } from "@/components/CheckInGuide";
 import HouseEditor, { EdHouseFull } from "@/components/editors/HouseEditor";
+import TaskSettings from "@/components/editors/TaskSettings";
 
 type Worker = {
   id: string;
@@ -31,11 +32,12 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 // Sections the admin can show or hide. Remembered in this browser.
-const SECTIONS = ["stats", "staff", "houses", "history", "roles"] as const;
+const SECTIONS = ["stats", "staff", "houses", "settings", "history", "roles"] as const;
 const SECTION_LABEL: Record<(typeof SECTIONS)[number], string> = {
   stats: "Overview",
   staff: "Staff",
   houses: "Houses",
+  settings: "Cleaning settings",
   history: "Change history",
   roles: "Role permissions",
 };
@@ -259,6 +261,12 @@ export default function StaffAndRoles() {
               ))}
             </tbody>
           </table>
+        </PanelCard>
+      )}
+
+      {shown.settings && (
+        <PanelCard title={tr("Cleaning settings")} flush>
+          <TaskSettings />
         </PanelCard>
       )}
 

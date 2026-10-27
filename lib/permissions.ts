@@ -35,6 +35,7 @@ export const PERMS = {
   "houses.delete": ADMIN,
   // staff
   "staff.manage": ADMIN,
+  "settings.edit": ADMIN,   // default checklist + extra task fields
   "audit.read": ADMIN,      // see the change history    // add / edit / remove staff, roles, logins, passwords
   // reading the all-houses dashboards
   "data.read": OPS,         // every task, every ticket, every material request
@@ -71,4 +72,5 @@ export const MATRIX: { label: string; roles: readonly Role[] }[] = [
   { label: "Delete houses", roles: PERMS["houses.delete"] },
   { label: "Staff, roles, logins & passwords (Admin screen)", roles: PERMS["staff.manage"] },
   { label: "See the change history (who changed what)", roles: PERMS["audit.read"] },
+  { label: "Edit default checklist & extra task fields", roles: PERMS["settings.edit"] },
 ];
