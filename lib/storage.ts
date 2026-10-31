@@ -1,54 +1,72 @@
-// FILE STORAGE — the ONE place that knows where photos / videos are kept.
+// FILE STORAGE — the ONE place that talks to Cloudflare R2 (S3-compatible).
 //
-// STATUS: prepared, NOT wired in yet. Today photos are still saved as base64 text in the
-// database (lib/houseMedia.ts, the task "addPhoto" action, tickets). That is fine for a
-// demo but makes every dashboard heavy. When your Ubuntu / Raspberry Pi server is ready:
+// Flow:
+//   1. the browser converts the file (WebP / WebM) and asks POST /api/media/upload-url for a
+//      short-lived signed PUT link,
+//   2. the browser uploads straight to R2 (the file never passes through your server),
+//   3. the app saves only the small reference "r2:photos/…" in the database,
+//   4. people see the file through GET /api/files/<key>, which checks the login and redirects
+//      to R2 (a signed link, or your public custom domain if you set R2_PUBLIC_BASE_URL).
 //
-//   1. set NEXT_PUBLIC_MEDIA_ENABLED=true and MEDIA_DIR=/some/folder/on/the/server
-//   2. in the routes, call saveFile() instead of storing the data URL, and store the
-//      returned path (e.g. "photos/ab12cd.jpg") in the database
-//   3. serve files with getFile() from a route such as /api/files/[...path]
-//   4. back up the MEDIA_DIR folder regularly
-//
-// Because everything goes through these three functions, moving later to S3 / R2 /
-// MinIO only means rewriting this file.
+// Env vars: see .env.example  (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET).
 
-import { promises as fs } from "fs";
-import path from "path";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
+import { isR2Ref, r2Key } from "@/lib/mediaRef";
 
-const ROOT = process.env.MEDIA_DIR || path.join(process.cwd(), "uploads");
+const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_BASE_URL } = process.env;
 
-const EXT: Record<string, string> = {
-  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
-  "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov",
+export const R2_ENABLED = !!(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET);
+
+let _client: S3Client | null = null;
+function client(): S3Client {
+  if (!R2_ENABLED) throw new Error("R2 is not configured");
+  return (_client ??= new S3Client({
+    region: "auto", // R2 ignores the region, the SDK just needs a value
+    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId: R2_ACCESS_KEY_ID!, secretAccessKey: R2_SECRET_ACCESS_KEY! },
+  }));
+}
+
+export const EXT: Record<string, string> = {
+  "image/webp": "webp",
+  "image/jpeg": "jpg", // only used when an old browser cannot encode WebP
+  "video/webm": "webm",
+  "video/mp4": "mp4", // only used when an old browser cannot encode WebM
 };
 
-// Saves a data URL (data:image/jpeg;base64,...) as a real file. Returns the relative path to store.
-export async function saveFile(kind: "photos" | "videos", dataUrl: string): Promise<string> {
-  const m = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
-  const ext = m ? EXT[m[1]] : undefined;
-  if (!m || !ext) throw new Error("unsupported file");
-  const rel = `${kind}/${crypto.randomBytes(12).toString("hex")}.${ext}`;
-  const full = path.join(ROOT, rel);
-  await fs.mkdir(path.dirname(full), { recursive: true });
-  await fs.writeFile(full, Buffer.from(m[2], "base64"));
-  return rel;
+// Unguessable key, grouped by month: photos/2026-10/<24 hex chars>.webp
+export function newKey(contentType: string): string {
+  const ext = EXT[contentType];
+  if (!ext) throw new Error("unsupported type");
+  const kind = contentType.startsWith("video/") ? "videos" : "photos";
+  const month = new Date().toISOString().slice(0, 7);
+  return `${kind}/${month}/${crypto.randomBytes(12).toString("hex")}.${ext}`;
 }
 
-// Reads a stored file back. Returns null if the path is unsafe or the file is missing.
-export async function getFile(rel: string): Promise<{ bytes: Buffer; ext: string } | null> {
-  const full = path.resolve(ROOT, rel);
-  if (!full.startsWith(path.resolve(ROOT) + path.sep)) return null; // block "../" tricks
-  try {
-    return { bytes: await fs.readFile(full), ext: path.extname(full).slice(1) };
-  } catch {
-    return null;
-  }
+// Link the browser uses to upload ONE file. The Content-Type is part of the signature,
+// so the upload must be sent with exactly the type that was requested.
+export function presignPut(key: string, contentType: string, ttlSeconds = 300): Promise<string> {
+  return getSignedUrl(client(), new PutObjectCommand({ Bucket: R2_BUCKET!, Key: key, ContentType: contentType }), { expiresIn: ttlSeconds });
 }
 
-export async function deleteFile(rel: string): Promise<void> {
-  const full = path.resolve(ROOT, rel);
-  if (!full.startsWith(path.resolve(ROOT) + path.sep)) return;
-  await fs.unlink(full).catch(() => {});
+export function presignGet(key: string, ttlSeconds = 3600): Promise<string> {
+  return getSignedUrl(client(), new GetObjectCommand({ Bucket: R2_BUCKET!, Key: key }), { expiresIn: ttlSeconds });
+}
+
+// Where to send the browser to read a file.
+export async function readUrl(key: string): Promise<{ url: string; permanent: boolean }> {
+  if (R2_PUBLIC_BASE_URL) return { url: `${R2_PUBLIC_BASE_URL.replace(/\/$/, "")}/${key}`, permanent: true };
+  return { url: await presignGet(key), permanent: false };
+}
+
+export async function deleteObject(key: string): Promise<void> {
+  await client().send(new DeleteObjectCommand({ Bucket: R2_BUCKET!, Key: key })).catch(() => {});
+}
+
+// Call this when a photo/video is replaced or removed, so old files do not pile up in the bucket.
+// Ignores anything that is not an R2 reference (old data URLs are just text in the database).
+export async function deleteRef(ref: unknown): Promise<void> {
+  if (R2_ENABLED && isR2Ref(ref)) await deleteObject(r2Key(ref));
 }

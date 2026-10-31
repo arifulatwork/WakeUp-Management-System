@@ -1,8 +1,12 @@
 // Lists used to carry every photo and video as base64 text inside the JSON (megabytes per
-// refresh). Now the lists carry a short URL instead; the browser downloads each file once,
-// caches it for good, and <img src> / <video src> work exactly as before.
-// The file itself is served by app/api/media/[kind]/[id]/[field]/[index]/route.ts.
+// refresh). Now the lists carry a short URL instead; the browser downloads each file once
+// and <img src> / <video src> work as before.
+//
+//   • "r2:photos/…"  (stored in Cloudflare R2)  ->  /api/files/photos/…   (login check + redirect to R2)
+//   • "data:…"       (old base64 rows)          ->  /api/media/<kind>/<id>/<field>/<i>?v=…
+//
 // "?v=" is a fingerprint of the content, so a replaced or removed photo gets a new URL.
+import { isR2Ref, mediaSrc } from "@/lib/mediaRef";
 
 const isData = (s: unknown): s is string => typeof s === "string" && s.startsWith("data:");
 
@@ -14,8 +18,15 @@ function fingerprint(s: string): string {
 }
 const url = (kind: string, id: string, field: string, i: number, s: string) =>
   `/api/media/${kind}/${id}/${field}/${i}?v=${fingerprint(s)}`;
+
+// one value -> something an <img>/<video> can load
+function one(kind: string, id: string, field: string, i: number, p: unknown): unknown {
+  if (isR2Ref(p)) return mediaSrc(p);
+  if (isData(p)) return url(kind, id, field, i, p);
+  return p;
+}
 const list = (kind: string, id: string, field: string, arr: unknown) =>
-  Array.isArray(arr) ? arr.map((p, i) => (isData(p) ? url(kind, id, field, i, p) : p)) : arr;
+  Array.isArray(arr) ? arr.map((p, i) => one(kind, id, field, i, p)) : arr;
 
 export function slimTask(t: any): any {
   const cd = t?.checklistData;
@@ -29,8 +40,8 @@ export function slimTask(t: any): any {
 export function slimTicket(t: any): any {
   if (!t || typeof t !== "object") return t;
   const out = { ...t };
-  if (isData(t.photoUrl)) out.photoUrl = url("ticket", t.id, "photoUrl", 0, t.photoUrl);
-  if (isData(t.afterPhotoUrl)) out.afterPhotoUrl = url("ticket", t.id, "afterPhotoUrl", 0, t.afterPhotoUrl);
+  if (t.photoUrl) out.photoUrl = one("ticket", t.id, "photoUrl", 0, t.photoUrl);
+  if (t.afterPhotoUrl) out.afterPhotoUrl = one("ticket", t.id, "afterPhotoUrl", 0, t.afterPhotoUrl);
   if (t.mediaData && typeof t.mediaData === "object") {
     const m = { ...t.mediaData };
     if (m.photos) m.photos = list("ticket", t.id, "photos", m.photos);

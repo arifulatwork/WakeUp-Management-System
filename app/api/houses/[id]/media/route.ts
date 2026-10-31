@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { MEDIA_ENABLED } from "@/lib/features";
+import { isR2Ref, mediaSrc } from "@/lib/mediaRef";
 
 // GET /api/houses/:id/media?kind=photo|video[&v=…]
-// Serves an apartment's photo or video as a real file, so <img>/<video> can use it as a
-// normal URL and the browser caches it (the `v` param changes whenever the media is replaced).
-// Supports Range requests — iPhones will not play a video without them.
+// Serves an apartment's photo or video. New uploads are an R2 reference -> redirect to
+// /api/files/… (which checks the login and sends the browser to Cloudflare). Old rows hold a
+// base64 data URL -> decoded and served here as before, with Range support (iPhones need it).
 // Signed-in users only (middleware); every role may look, only management may change (PATCH /api/houses/:id).
 
 function decode(dataUrl: string): { mime: string; bytes: Buffer } | null {
@@ -19,7 +20,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!MEDIA_ENABLED) return new NextResponse("Not found", { status: 404 }); // switched off (lib/features.ts)
   const kind = req.nextUrl.searchParams.get("kind") === "video" ? "video" : "photo";
   const row = await db.houseMedia.findFirst({ where: { houseId: params.id } });
-  const file = row ? decode(row[kind] ?? "") : null;
+  const value = row ? row[kind] ?? "" : "";
+
+  if (isR2Ref(value)) {
+    return NextResponse.redirect(new URL(mediaSrc(value), req.url), { status: 302, headers: { "Cache-Control": "private, max-age=300" } });
+  }
+
+  const file = decode(value);
   if (!file) return new NextResponse("Not found", { status: 404 });
 
   const total = file.bytes.length;
@@ -32,9 +39,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("range") ?? "");
   if (range && (range[1] || range[2])) {
-    let start = range[1] ? parseInt(range[1], 10) : Math.max(0, total - parseInt(range[2], 10));
-    let end = range[1] && range[2] ? parseInt(range[2], 10) : total - 1;
-    end = Math.min(end, total - 1);
+    const start = range[1] ? parseInt(range[1], 10) : Math.max(0, total - parseInt(range[2], 10));
+    const end = Math.min(range[1] && range[2] ? parseInt(range[2], 10) : total - 1, total - 1);
     if (start > end || start >= total) {
       return new NextResponse(null, { status: 416, headers: { "Content-Range": `bytes */${total}` } });
     }
