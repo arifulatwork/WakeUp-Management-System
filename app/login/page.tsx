@@ -16,6 +16,10 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Students have no account: they sign in with their group's secret code + their own name.
+  const [mode, setMode] = useState<"staff" | "student">("staff");
+  const [code, setCode] = useState("");
+  const [studentName, setStudentName] = useState("");
 
   const demo = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
 
@@ -45,8 +49,32 @@ function LoginForm() {
       setError(tr("Incorrect username or password."));
       return;
     }
-    const user = await res.json();
+    finishLogin(await res.json());
+  }
 
+  async function handleStudent(c = code, n = studentName) {
+    if (!c.trim() || n.trim().length < 2) return;
+    setLoading(true);
+    setError("");
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/student", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: c, name: n }),
+      });
+    } catch {
+      setLoading(false);
+      setError(tr("No connection. Please try again."));
+      return;
+    }
+    setLoading(false);
+    if (res.status === 429) { setError(tr("Too many attempts. Please wait a few minutes.")); return; }
+    if (!res.ok) { setError(tr("That code is not valid. Ask your coordinator.")); return; }
+    finishLogin(await res.json());
+  }
+
+  function finishLogin(user: any) {
     // The field screens read who is signed in from here; the server uses the login cookie.
     localStorage.setItem("workerId", user.id);
     localStorage.setItem("workerName", user.name);
@@ -59,6 +87,8 @@ function LoginForm() {
     else if (user.role === "admin") router.replace("/admin");
     else if (user.role === "manager") router.replace("/manager");
     else if (user.role === "coordinator") router.replace("/coordinator");
+    else if (user.role === "student") router.replace("/student");
+    else if (user.role === "supplier") router.replace("/supplier");
     else router.replace(user.area === "MAINTENANCE" ? "/maintenance" : "/cleaner");
   }
 
@@ -67,6 +97,47 @@ function LoginForm() {
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
         <Logo height={84} />
       </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+        {(["staff", "student"] as const).map((m) => (
+          <button key={m} type="button" onClick={() => { setMode(m); setError(""); }} aria-pressed={mode === m}
+            style={{ flex: 1, padding: "8px 10px", borderRadius: 999, border: "1px solid var(--line)", fontSize: 12.5, cursor: "pointer",
+              background: mode === m ? "var(--ink)" : "#fff", color: mode === m ? "#fff" : "var(--ink-soft)" }}>
+            {m === "staff" ? tr("Staff") : tr("Student")}
+          </button>
+        ))}
+      </div>
+
+      {mode === "student" ? (
+        <>
+          <h1 style={{ fontSize: 19, marginBottom: 4 }}>{tr("Student sign-in")}</h1>
+          <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 22 }}>
+            {tr("Enter the group code your coordinator gave you and your name.")}
+          </p>
+          <label style={label}>{tr("Group code")}</label>
+          <input style={{ ...input, letterSpacing: 2, textTransform: "uppercase" }} value={code} onChange={(e) => setCode(e.target.value)}
+            autoCapitalize="characters" autoCorrect="off" spellCheck={false} placeholder="XXXX-XXXX"
+            onKeyDown={(e) => e.key === "Enter" && handleStudent()} />
+          <label style={{ ...label, marginTop: 14 }}>{tr("Your name")}</label>
+          <input style={input} value={studentName} onChange={(e) => setStudentName(e.target.value)} autoComplete="name"
+            onKeyDown={(e) => e.key === "Enter" && handleStudent()} />
+          {error && <p style={{ color: "var(--red)", fontSize: 12.5, marginTop: 10 }}>{error}</p>}
+          <button onClick={() => handleStudent()} disabled={loading} style={btn}>
+            {loading ? tr("Signing in…") : tr("Continue")}
+          </button>
+          {demo && (
+            <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
+              <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginBottom: 8 }}>{tr("Demo — one-tap sign in")}</p>
+              {[["AB12CD34", "Lucas Moreau", "Group A"], ["AB12CD34", "Emma Rossi", "Group A"], ["EF56GH78", "Noah Weber", "Group B"]].map(([c, n, g]) => (
+                <button key={n} disabled={loading} onClick={() => handleStudent(c, n)}
+                  style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 6, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--line)", background: "#fff", fontSize: 13 }}>
+                  {n} — {tr("Student")} · {g}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+      <>
       <h1 style={{ fontSize: 19, marginBottom: 4 }}>{tr("Sign in")}</h1>
       <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 22 }}>
         {tr("Sign in with the username and password your administrator gave you.")}
@@ -124,6 +195,7 @@ function LoginForm() {
             ["maria", "Maria", "Cleaning"],
             ["joao", "João", "Cleaning"],
             ["ivan", "Ivan", "Maintenance"],
+            ["rita", "Rita", "Supplier"],
           ].map(([u, name, role]) => (
             <button key={u} disabled={loading} onClick={() => handleSubmit(u, "changeme123")}
               style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 6, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--line)", background: "#fff", fontSize: 13 }}>
@@ -131,6 +203,8 @@ function LoginForm() {
             </button>
           ))}
         </div>
+      )}
+      </>
       )}
     </main>
   );

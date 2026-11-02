@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { cleanOrdering, DEFAULT_ORDERING, OrderingConfig } from "@/lib/ordering";
 import { DEFAULT_CHECKLIST, DEFAULT_TASK_FIELDS, TASK_FIELD_TYPES, TaskField } from "@/lib/settingsDefaults";
 
 // Server-side access to the AppSetting table (one row per setting, JSON value).
@@ -52,3 +53,9 @@ export function cleanFields(v: unknown): TaskField[] | null {
   }
   return out;
 }
+
+// Product ordering rules (who orders, ordering days, cut-off time, approvals) — set by the Administrator.
+export async function getOrdering(): Promise<OrderingConfig> {
+  return cleanOrdering(await read<unknown>("ordering", DEFAULT_ORDERING));
+}
+export const setOrdering = (cfg: OrderingConfig) => write("ordering", cfg);

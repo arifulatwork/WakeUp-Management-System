@@ -14,7 +14,7 @@ import { cachedValue } from "@/lib/serverCache";
 //
 // A failing log write never breaks the real action.
 
-export type AuditEntity = "task" | "ticket" | "material" | "house" | "staff" | "system";
+export type AuditEntity = "task" | "ticket" | "material" | "house" | "staff" | "system" | "group" | "product" | "request" | "order" | "setting";
 
 export async function actorFor(req: NextRequest | null, fallbackWorkerId?: string | null) {
   try {

@@ -11,7 +11,7 @@ import { cachedValue } from "@/lib/serverCache";
 // when a Super Admin demotes someone (or removes them) it takes effect on their
 // very next request instead of whenever their 7-day cookie expires.
 
-export type FullSession = SessionPayload & { area?: string; language?: string };
+export type FullSession = SessionPayload & { area?: string; language?: string; groupId?: string | null };
 
 export async function currentSession(req: NextRequest): Promise<FullSession | null> {
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
@@ -20,7 +20,15 @@ export async function currentSession(req: NextRequest): Promise<FullSession | nu
   // (role change, rename, delete), so a demotion still applies on the very next request.
   const worker = await cachedValue<any>(`worker:${session.workerId}`, ["worker"], () => db.worker.findUnique({ where: { id: session.workerId } }));
   if (!worker) return null;
-  return { ...session, role: worker.role, name: worker.name, area: worker.area, language: worker.language };
+  // A student is only "in" while their group exists and its code is switched on: when the coordinator
+  // turns the code off (or the group is deleted) every student of the group is signed out at once.
+  if (worker.role === "student") {
+    const group = worker.groupId
+      ? await cachedValue<any>(`group:${worker.groupId}`, ["group"], () => db.group.findUnique({ where: { id: worker.groupId } }))
+      : null;
+    if (!group || !group.codeActive) return null;
+  }
+  return { ...session, role: worker.role, name: worker.name, area: worker.area, language: worker.language, groupId: worker.groupId ?? null };
 }
 
 // Who is really performing a field action (start a job, report an issue, request materials…)?
@@ -30,7 +38,7 @@ export async function currentSession(req: NextRequest): Promise<FullSession | nu
 // "open the app as this person" support tool relies on.
 export async function actingWorkerId(req: NextRequest, claimed?: unknown): Promise<string | undefined> {
   const s = await currentSession(req);
-  if (s?.role === "worker") return s.workerId;
+  if (s?.role === "worker" || s?.role === "student") return s.workerId;
   return typeof claimed === "string" && claimed ? claimed : undefined;
 }
 

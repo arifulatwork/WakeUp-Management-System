@@ -8,7 +8,8 @@ import { logAudit } from "@/lib/audit";
 // Signed-in users only (middleware). One-person reads live in /api/workers/[id].
 export async function GET() {
   const workers = await db.worker.findMany({ orderBy: { name: "asc" } });
-  return NextResponse.json(workers.map(({ passwordHash, ...safe }: any) => safe));
+  // Students (group-code sign-in) are not staff: they are listed per group on the Groups & Orders screen.
+  return NextResponse.json(workers.filter((w: any) => w.role !== "student").map(({ passwordHash, ...safe }: any) => safe));
 }
 
 // POST /api/workers — Super Admin adds a staff member (username + password required).
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (area !== "CLEANING" && area !== "MAINTENANCE") return NextResponse.json({ error: "invalid area" }, { status: 400 });
   if (!LANGS.includes(language)) return NextResponse.json({ error: "invalid language" }, { status: 400 });
-  if (!["worker", "coordinator", "manager", "admin"].includes(role)) return NextResponse.json({ error: "invalid role" }, { status: 400 });
+  if (!["worker", "coordinator", "manager", "admin", "supplier"].includes(role)) return NextResponse.json({ error: "invalid role" }, { status: 400 });
   if (!username) return NextResponse.json({ error: "username required" }, { status: 400 });
   if (password.length < 8) return NextResponse.json({ error: "password must be at least 8 characters" }, { status: 400 });
 

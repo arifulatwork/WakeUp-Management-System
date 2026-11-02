@@ -531,6 +531,26 @@ const ROWS: Row[] = [
   ["Saved. New tasks will use these settings.", "Guardado. As novas tarefas usarão estas definições.", "Guardado. Las nuevas tareas usarán estos ajustes.", "Enregistré. Les nouvelles tâches utiliseront ces réglages.", "Salvato. Le nuove attività useranno queste impostazioni.", "Збережено. Нові завдання використовуватимуть ці налаштування."],
   ["Changing these does not alter tasks that already exist; a removed field only disappears from the screens.", "Alterar isto não muda as tarefas existentes; um campo removido só desaparece dos ecrãs.", "Cambiarlo no modifica las tareas existentes; un campo eliminado solo desaparece de las pantallas.", "Cela ne modifie pas les tâches existantes ; un champ supprimé disparaît seulement des écrans.", "Non modifica le attività esistenti; un campo rimosso scompare solo dalle schermate.", "Це не змінює наявні завдання; видалене поле лише зникає з екранів."],
   ["Edit default checklist & extra task fields", "Editar checklist padrão e campos extra", "Editar checklist predeterminada y campos extra", "Modifier la checklist par défaut et les champs supplémentaires", "Modifica checklist predefinita e campi extra", "Редагувати типовий чек-лист і додаткові поля"],
+
+  // ---- product ordering (students / coordinators / suppliers) ----
+  ["Student", "Estudante", "Estudiante", "Étudiant", "Studente", "Студент"],
+  ["Supplier", "Fornecedor", "Proveedor", "Fournisseur", "Fornitore", "Постачальник"],
+  ["Waiting", "Em espera", "En espera", "En attente", "In attesa", "Очікує"],
+  ["Cancelled", "Cancelado", "Cancelado", "Annulé", "Annullato", "Скасовано"],
+  ["Preparing", "Em preparação", "En preparación", "En préparation", "In preparazione", "Готується"],
+  ["Prepared", "Preparado", "Preparado", "Préparé", "Preparato", "Підготовлено"],
+  ["Dispatched", "Expedido", "Enviado", "Expédié", "Spedito", "Відправлено"],
+  ["Delivered", "Entregue", "Entregado", "Livré", "Consegnato", "Доставлено"],
+  ["Unavailable", "Indisponível", "No disponible", "Indisponible", "Non disponibile", "Немає в наявності"],
+  ["My Orders", "As minhas encomendas", "Mis pedidos", "Mes commandes", "I miei ordini", "Мої замовлення"],
+  ["Order Fulfilment", "Preparação de encomendas", "Preparación de pedidos", "Préparation des commandes", "Preparazione ordini", "Виконання замовлень"],
+  ["Groups & Orders", "Grupos e encomendas", "Grupos y pedidos", "Groupes et commandes", "Gruppi e ordini", "Групи та замовлення"],
+  ["Catalogue & Ordering", "Catálogo e encomendas", "Catálogo y pedidos", "Catalogue et commandes", "Catalogo e ordini", "Каталог і замовлення"],
+  ["Group code", "Código do grupo", "Código del grupo", "Code du groupe", "Codice del gruppo", "Код групи"],
+  ["Products", "Produtos", "Productos", "Produits", "Prodotti", "Продукти"],
+  ["Send request", "Enviar pedido", "Enviar pedido", "Envoyer la demande", "Invia richiesta", "Надіслати запит"],
+  ["Student sign-in", "Entrada de estudante", "Acceso de estudiante", "Connexion étudiant", "Accesso studente", "Вхід студента"],
+  ["Group code and your name", "Código do grupo e o seu nome", "Código del grupo y tu nombre", "Code du groupe et votre nom", "Codice del gruppo e il tuo nome", "Код групи та ваше ім'я"],
 ];
 
 const ORDER: Lang[] = ["en", "pt", "es", "fr", "it", "uk"];
@@ -553,6 +573,8 @@ const ENUM_EN: Record<string, string> = {
   AT_OFFICE: "At office", WITH_CLEANER: "With cleaner", WITH_GUEST: "With guest", MISSING: "Missing",
   CLEANING: "Cleaning", MAINTENANCE: "Maintenance",
   worker: "Staff (cleaner/maintenance)", manager: "Manager", coordinator: "Coordinator", admin: "Super Admin",
+  student: "Student", supplier: "Supplier",
+  PENDING: "Waiting", CANCELLED: "Cancelled", PREPARING: "Preparing", PREPARED: "Prepared", DISPATCHED: "Dispatched", DELIVERED: "Delivered", UNAVAILABLE: "Unavailable",
 };
 
 type Ctx = {

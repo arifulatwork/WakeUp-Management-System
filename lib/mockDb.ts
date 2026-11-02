@@ -13,6 +13,7 @@
 import bcrypt from "bcryptjs";
 import { notifyChange } from "./events";
 import { nameKey } from "./houseMode";
+import { dateKey } from "./ordering";
 
 type Row = Record<string, any>;
 type Tables = Record<string, Row[]>;
@@ -22,6 +23,15 @@ const HOUR = 60 * MIN;
 
 // Demo copy of the database's UNIQUE (nameKey, mode) index on House. Throws the same error code Prisma does.
 // There is no await between this check and the write, so two simultaneous saves cannot both pass.
+function assertUnique(rows: Row[], row: Row, fields: string[], ignore?: Row) {
+  for (const f of fields) {
+    if (row[f] != null && rows.some((r) => r !== ignore && r[f] === row[f])) {
+      throw Object.assign(new Error(`Unique constraint failed on the fields: (\`${f}\`)`), { code: "P2002" });
+    }
+  }
+}
+const UNIQUE_FIELDS: Record<string, string[]> = { group: ["nameKey", "accessCode"], dietaryRequirement: ["name"] };
+
 function assertHouseUnique(rows: Row[], row: Row, ignore?: Row) {
   const key = nameKey(row.name);
   if (rows.some((r) => r !== ignore && nameKey(r.name) === key && (r.mode ?? "SCHOOL") === (row.mode ?? "SCHOOL"))) {
@@ -45,10 +55,16 @@ const RELATIONS: Record<string, Record<string, [string, string]>> = {
     house: ["houseId", "house"],
     requestedBy: ["requestedById", "worker"],
   },
+  // product ordering
+  group: { coordinator: ["coordinatorId", "worker"], house: ["houseId", "house"] },
+  studentRequest: { group: ["groupId", "group"], student: ["studentId", "worker"], decidedBy: ["decidedById", "worker"] },
+  requestLine: { product: ["productId", "product"] },
+  order: { group: ["groupId", "group"], createdBy: ["createdById", "worker"] },
+  orderLine: { product: ["productId", "product"] },
 };
 
 const DEFAULTS: Record<string, () => Row> = {
-  worker: () => ({ role: "worker", username: null, passwordHash: null, createdAt: new Date() }),
+  worker: () => ({ role: "worker", username: null, passwordHash: null, groupId: null, dietary: [], createdAt: new Date() }),
   house: () => ({ validFrom: null, validUntil: null, keyStatus: "AT_OFFICE", keyUpdatedAt: new Date(), createdAt: new Date(), hasPhoto: false, hasVideo: false, mediaUpdatedAt: null, mode: "SCHOOL", checkInText: null }),
   houseRoomPhoto: () => ({ position: 0, createdAt: new Date() }),
   houseMedia: () => ({ photo: null, video: null, updatedAt: new Date() }),
@@ -67,6 +83,14 @@ const DEFAULTS: Record<string, () => Row> = {
   pushSubscription: () => ({ createdAt: new Date() }),
   notification: () => ({ params: null, url: null, readAt: null, createdAt: new Date() }),
   appSetting: () => ({ updatedAt: new Date() }),
+  // product ordering
+  group: () => ({ codeActive: true, coordinatorId: null, houseId: null, createdAt: new Date() }),
+  product: () => ({ category: "General", unit: "pcs", brand: null, standardQty: 1, dietaryTags: [], alternatives: [], active: true, createdAt: new Date(), updatedAt: new Date() }),
+  dietaryRequirement: () => ({ description: null, createdAt: new Date() }),
+  studentRequest: () => ({ status: "PENDING", decisionNote: null, decidedById: null, decidedAt: null, createdAt: new Date() }),
+  requestLine: () => ({ exceptionReason: null, lineStatus: "PENDING", approvedQty: null, alternativeName: null, dietaryFlag: null }),
+  order: () => ({ status: "OPEN", note: null, createdAt: new Date(), updatedAt: new Date(), approvedAt: null, preparedAt: null, dispatchedAt: null, deliveredAt: null }),
+  orderLine: () => ({ alternativeName: null, status: "PENDING", preparedQty: null, substituteName: null, missingNote: null, preparedAt: null }),
 };
 
 let idCounter = 1000;
@@ -143,6 +167,7 @@ function makeModel(tables: Tables, name: string) {
     async create(args: Row) {
       const row: Row = { id: newId(name.slice(0, 2)), ...DEFAULTS[name](), ...args.data };
       if (name === "house") assertHouseUnique(tables.house, row);
+      if (UNIQUE_FIELDS[name]) assertUnique(tables[name], row, UNIQUE_FIELDS[name]);
       tables[name].push(row);
       notifyChange(name);
       return withIncludes(row, args.include);
@@ -151,6 +176,7 @@ function makeModel(tables: Tables, name: string) {
       const row = tables[name].find((r) => matches(r, args.where));
       if (!row) throw new Error(`${name} not found`);
       if (name === "house") assertHouseUnique(tables.house, { ...row, ...args.data }, row);
+      if (UNIQUE_FIELDS[name]) assertUnique(tables[name], { ...row, ...args.data }, UNIQUE_FIELDS[name], row);
       Object.assign(row, args.data, { updatedAt: new Date() });
       notifyChange(name);
       return withIncludes(row, args.include);
@@ -229,6 +255,11 @@ function buildSeed(): Tables {
     { id: "w_cristina", name: "Cristina Alves", language: "pt", area: "CLEANING", role: "manager", username: "cristina", passwordHash: pw },
     { id: "w_pedro", name: "Pedro Fonseca", language: "pt", area: "CLEANING", role: "coordinator", username: "pedro", passwordHash: pw },
     { id: "w_giuseppe", name: "Giuseppe Romano", language: "it", area: "CLEANING", role: "admin", username: "giuseppe", passwordHash: pw },
+    // product ordering: warehouse staff + students (students have no password: they join with the group code)
+    { id: "w_rita", name: "Rita Gomes", language: "pt", area: "CLEANING", role: "supplier", username: "rita", passwordHash: pw },
+    { id: "w_lucas", name: "Lucas Moreau", language: "fr", area: "CLEANING", role: "student", groupId: "gr_a", dietary: ["Vegetarian"] },
+    { id: "w_emma", name: "Emma Rossi", language: "it", area: "CLEANING", role: "student", groupId: "gr_a", dietary: [] },
+    { id: "w_noah", name: "Noah Weber", language: "en", area: "CLEANING", role: "student", groupId: "gr_b", dietary: ["Gluten-free"] },
   ].map((w, i) => ({ ...DEFAULTS.worker(), createdAt: new Date(now - (30 - i) * 24 * HOUR), ...w }));
 
   const houses: Row[] = [
@@ -311,7 +342,73 @@ function buildSeed(): Tables {
       items: "Dishwasher tablets", status: "FULFILLED", createdAt: new Date(now - 6 * HOUR), fulfilledAt: new Date(now - 5 * HOUR) },
   ];
 
-  return { worker: workers, house: houses, cleaningTask: tasks, maintenanceTicket: tickets, materialRequest: materials, houseMedia, houseRoomPhoto: [], auditLog: [], pushSubscription: [], notification: [], appSetting: [] };
+  // ---- product ordering demo data ----
+  const today = dateKey();
+  const dietaryRequirement: Row[] = [
+    ["dr_veg", "Vegetarian", "No meat or fish"], ["dr_vgn", "Vegan", "No animal products"],
+    ["dr_glu", "Gluten-free", "No wheat, barley or rye"], ["dr_lac", "Lactose-free", "No dairy lactose"], ["dr_hal", "Halal", "Halal-certified only"],
+  ].map(([id, name, description]) => ({ ...DEFAULTS.dietaryRequirement(), id, name, description }));
+
+  const prod = (id: string, name: string, category: string, unit: string, brand: string, standardQty: number, dietaryTags: string[], alternatives: Row[] = []): Row =>
+    ({ ...DEFAULTS.product(), id, name, category, unit, brand, standardQty, dietaryTags, alternatives });
+  const products: Row[] = [
+    prod("p_bread", "Bread loaf", "Bakery", "loaf", "Padaria Central", 1, ["Vegetarian", "Vegan", "Lactose-free"],
+      [{ id: "a_gfbread", name: "Gluten-free bread", brand: "Schär", dietaryTags: ["Vegetarian", "Vegan", "Lactose-free", "Gluten-free"] }]),
+    prod("p_milk", "Milk 1 L", "Dairy", "L", "Mimosa", 2, ["Vegetarian"],
+      [{ id: "a_oat", name: "Oat drink 1 L", brand: "Oatly", dietaryTags: ["Vegetarian", "Vegan", "Lactose-free"] },
+       { id: "a_lfmilk", name: "Lactose-free milk 1 L", brand: "Mimosa Zero", dietaryTags: ["Vegetarian", "Lactose-free"] }]),
+    prod("p_eggs", "Eggs (6)", "Dairy", "box", "Quinta do Sol", 1, ["Vegetarian", "Gluten-free", "Lactose-free"]),
+    prod("p_pasta", "Pasta 500 g", "Dry goods", "pack", "Barilla", 2, ["Vegetarian", "Vegan", "Lactose-free"],
+      [{ id: "a_gfpasta", name: "Gluten-free pasta 500 g", brand: "Barilla GF", dietaryTags: ["Vegetarian", "Vegan", "Lactose-free", "Gluten-free"] }]),
+    prod("p_rice", "Rice 1 kg", "Dry goods", "kg", "Cigala", 1, ["Vegetarian", "Vegan", "Gluten-free", "Lactose-free"]),
+    prod("p_sauce", "Tomato sauce", "Dry goods", "jar", "Compal", 2, ["Vegetarian", "Vegan", "Gluten-free", "Lactose-free"]),
+    prod("p_cheese", "Cheese slices", "Dairy", "pack", "Terra Nostra", 1, ["Vegetarian", "Gluten-free"]),
+    prod("p_apples", "Apples", "Fruit", "kg", "Local farm", 2, ["Vegetarian", "Vegan", "Gluten-free", "Lactose-free", "Halal"]),
+    prod("p_chicken", "Chicken breast", "Meat", "kg", "Avipronto", 1, ["Gluten-free", "Lactose-free"]),
+    prod("p_cereal", "Breakfast cereal", "Dry goods", "box", "Nestlé", 1, ["Vegetarian"]),
+  ];
+
+  const line = (id: string, requestId: string, productId: string, quantity: number, standardQty: number, o: Row = {}): Row =>
+    ({ ...DEFAULTS.requestLine(), id, requestId, productId, quantity, standardQty, ...o });
+  const reqs: Row[] = [
+    { ...DEFAULTS.studentRequest(), id: "rq_1", groupId: "gr_a", studentId: "w_lucas", orderDate: today, status: "PENDING", createdAt: new Date(now - 40 * MIN) },
+    { ...DEFAULTS.studentRequest(), id: "rq_2", groupId: "gr_a", studentId: "w_emma", orderDate: today, status: "APPROVED",
+      decidedById: "w_pedro", decidedAt: new Date(now - 90 * MIN), createdAt: new Date(now - 120 * MIN) },
+  ];
+  const requestLines: Row[] = [
+    line("rl_1", "rq_1", "p_bread", 1, 1),
+    line("rl_2", "rq_1", "p_milk", 4, 2, { exceptionReason: "Cooking for a group dinner on Friday" }),
+    line("rl_3", "rq_1", "p_pasta", 2, 2),
+    line("rl_4", "rq_2", "p_eggs", 1, 1, { lineStatus: "APPROVED", approvedQty: 1 }),
+    line("rl_5", "rq_2", "p_apples", 2, 2, { lineStatus: "APPROVED", approvedQty: 2 }),
+  ];
+  const orders: Row[] = [
+    { ...DEFAULTS.order(), id: "or_1", groupId: "gr_a", orderDate: today, status: "OPEN", createdById: "w_pedro", createdAt: new Date(now - 90 * MIN) },
+    { ...DEFAULTS.order(), id: "or_2", groupId: "gr_b", orderDate: today, status: "APPROVED", createdById: "w_pedro",
+      createdAt: new Date(now - 3 * HOUR), approvedAt: new Date(now - 2 * HOUR) },
+    { ...DEFAULTS.order(), id: "or_3", groupId: "gr_a", orderDate: "2026-10-26", status: "DELIVERED", createdById: "w_pedro",
+      createdAt: new Date(now - 7 * 24 * HOUR), approvedAt: new Date(now - 7 * 24 * HOUR), preparedAt: new Date(now - 6.9 * 24 * HOUR),
+      dispatchedAt: new Date(now - 6.8 * 24 * HOUR), deliveredAt: new Date(now - 6.7 * 24 * HOUR) },
+  ];
+  const ol = (id: string, orderId: string, productId: string, quantity: number, o: Row = {}): Row =>
+    ({ ...DEFAULTS.orderLine(), id, orderId, productId, quantity, ...o });
+  const orderLines: Row[] = [
+    ol("ol_1", "or_1", "p_eggs", 1), ol("ol_2", "or_1", "p_apples", 2),
+    ol("ol_3", "or_2", "p_bread", 3), ol("ol_4", "or_2", "p_milk", 6), ol("ol_5", "or_2", "p_pasta", 4, { alternativeName: "Gluten-free pasta 500 g" }),
+    ol("ol_6", "or_2", "p_rice", 2), ol("ol_7", "or_2", "p_cheese", 2),
+    ol("ol_8", "or_3", "p_bread", 4, { status: "PREPARED", preparedQty: 4, preparedAt: new Date(now - 6.9 * 24 * HOUR) }),
+    ol("ol_9", "or_3", "p_milk", 8, { status: "PREPARED", preparedQty: 8, preparedAt: new Date(now - 6.9 * 24 * HOUR) }),
+    ol("ol_10", "or_3", "p_cereal", 2, { status: "UNAVAILABLE", missingNote: "Out of stock this week", preparedAt: new Date(now - 6.9 * 24 * HOUR) }),
+  ];
+
+  // Two groups. Codes are shown to the coordinator (Groups & Orders -> Groups). Demo codes: AB12CD34 / EF56GH78.
+  const groups: Row[] = [
+    { ...DEFAULTS.group(), id: "gr_a", name: "Group A — Villa 1", nameKey: nameKey("Group A — Villa 1"), accessCode: "AB12CD34", coordinatorId: "w_pedro", houseId: "h_v1" },
+    { ...DEFAULTS.group(), id: "gr_b", name: "Group B — Villa 2", nameKey: nameKey("Group B — Villa 2"), accessCode: "EF56GH78", coordinatorId: "w_pedro", houseId: "h_v2" },
+  ];
+
+  return { worker: workers, house: houses, cleaningTask: tasks, maintenanceTicket: tickets, materialRequest: materials, houseMedia, houseRoomPhoto: [], auditLog: [], pushSubscription: [], notification: [], appSetting: [],
+    group: groups, product: products, dietaryRequirement, studentRequest: reqs, requestLine: requestLines, order: orders, orderLine: orderLines };
 }
 
 // ---------- live simulator ----------
@@ -483,7 +580,8 @@ export function resetDemo() {
   const fresh = buildSeed();
   // Phones that subscribed to notifications stay subscribed through a demo reset.
   for (const k of Object.keys(fresh)) if (k !== "pushSubscription" && k !== "notification") s.tables[k] = fresh[k];
-  notifyChange("worker", "house", "cleaningTask", "maintenanceTicket", "materialRequest", "auditLog");
+  notifyChange("worker", "house", "cleaningTask", "maintenanceTicket", "materialRequest", "auditLog",
+    "group", "product", "dietaryRequirement", "studentRequest", "requestLine", "order", "orderLine", "appSetting");
 }
 
 // Models read `tables[name]` lazily on every call, so reassigning
@@ -508,6 +606,14 @@ export const mockDb = {
   pushSubscription: makeModel(tablesProxy, "pushSubscription"),
   notification: makeModel(tablesProxy, "notification"),
   appSetting: makeModel(tablesProxy, "appSetting"),
+  // product ordering
+  group: makeModel(tablesProxy, "group"),
+  product: makeModel(tablesProxy, "product"),
+  dietaryRequirement: makeModel(tablesProxy, "dietaryRequirement"),
+  studentRequest: makeModel(tablesProxy, "studentRequest"),
+  requestLine: makeModel(tablesProxy, "requestLine"),
+  order: makeModel(tablesProxy, "order"),
+  orderLine: makeModel(tablesProxy, "orderLine"),
 };
 
 // Demo only: a freshly onboarded cleaner would otherwise open an empty app.

@@ -20,6 +20,10 @@ const NAV = [
   { href: "/manager", label: "Cleaning Tasks — Live", icon: "🧹" },
   { href: "/coordinator", label: "Check-in Readiness", icon: "✅" },
   { href: "/ops", label: "Ops Overview", icon: "📊" },
+  { href: "/group-orders", label: "Groups & Orders", icon: "📦" },
+  { href: "/catalogue", label: "Catalogue & Ordering", icon: "🛒" },
+  { href: "/student", label: "My Orders", icon: "🍽️" },
+  { href: "/supplier", label: "Order Fulfilment", icon: "🚚" },
 ];
 
 export default function PanelShell({ title, subtitle, actions, vis, labels, wide, children }: {

@@ -69,7 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   if (role) {
-    const allowed = ["worker", "manager", "coordinator", "admin"];
+    const allowed = ["worker", "manager", "coordinator", "admin", "supplier"]; // students are never made here: they join with a group code
     if (!allowed.includes(role)) {
       return NextResponse.json({ error: "invalid role" }, { status: 400 });
     }
@@ -116,13 +116,17 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
   const history =
     (await db.maintenanceTicket.count({ where: { reportedById: params.id } })) +
-    (await db.materialRequest.count({ where: { requestedById: params.id } }));
+    (await db.materialRequest.count({ where: { requestedById: params.id } })) +
+    (await db.order.count({ where: { createdById: params.id } })) +
+    (await db.studentRequest.count({ where: { studentId: params.id } }));
   if (history > 0) {
     return NextResponse.json({ error: "has history" }, { status: 409 });
   }
   await db.cleaningTask.updateMany({ where: { assignedWorkerId: params.id }, data: { assignedWorkerId: null } });
   await db.cleaningTask.updateMany({ where: { completedByWorkerId: params.id }, data: { completedByWorkerId: null } });
   await db.maintenanceTicket.updateMany({ where: { assignedWorkerId: params.id }, data: { assignedWorkerId: null } });
+  await db.group.updateMany({ where: { coordinatorId: params.id }, data: { coordinatorId: null } }); // their groups wait for a new coordinator
+  await db.studentRequest.updateMany({ where: { decidedById: params.id }, data: { decidedById: null } });
   const gone = await db.worker.findUnique({ where: { id: params.id } });
   await db.worker.delete({ where: { id: params.id } });
   await logAudit(req, "staff", params.id, "delete", "Removed staff member {name}", { name: gone?.name ?? params.id });

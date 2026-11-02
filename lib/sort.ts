@@ -9,7 +9,7 @@ export const TASK_STATUS_RANK: Record<string, number> = {
   WITH_ISSUE: 0, TO_BE_VERIFIED: 1, IN_PROGRESS: 2, ASSIGNED: 3, SCHEDULED: 4, ON_HOLD: 5, COMPLETED: 6, APPROVED: 7,
 };
 export const KEY_RANK: Record<string, number> = { MISSING: 0, WITH_CLEANER: 1, WITH_GUEST: 2, AT_OFFICE: 3 };
-export const ROLE_RANK: Record<string, number> = { admin: 0, manager: 1, coordinator: 2, worker: 3 };
+export const ROLE_RANK: Record<string, number> = { admin: 0, manager: 1, coordinator: 2, worker: 3, supplier: 4, student: 5 };
 export const AREA_RANK: Record<string, number> = { CLEANING: 0, MAINTENANCE: 1 };
 export const DONE_TASK = ["TO_BE_VERIFIED", "COMPLETED", "APPROVED"];
 

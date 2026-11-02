@@ -23,12 +23,13 @@ type Worker = {
   createdAt: string;
 };
 
-const ROLES = ["worker", "manager", "coordinator", "admin"];
+const ROLES = ["worker", "manager", "coordinator", "admin", "supplier"];
 const ROLE_LABEL: Record<string, string> = {
   worker: "Staff (cleaner/maintenance)",
   manager: "Manager",
   coordinator: "Coordinator",
   admin: "Super Admin",
+  supplier: "Supplier (warehouse)",
 };
 
 // Sections the admin can show or hide. Remembered in this browser.
