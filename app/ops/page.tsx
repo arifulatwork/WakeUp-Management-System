@@ -85,8 +85,17 @@ export default function OpsOverview() {
     await api(`/api/houses/${id}`, "PATCH", { keyStatus });
     load();
   }
+  const [ticketErr, setTicketErr] = useState("");
   async function ticketStatus(id: string, action: string) {
-    await api(`/api/tickets/${id}`, "PATCH", { action });
+    setTicketErr("");
+    try {
+      await api(`/api/tickets/${id}`, "PATCH", { action });
+    } catch (e: any) {
+      // A refused action (e.g. someone else just took the ticket) must never look like a dead button.
+      setTicketErr(e?.status === 401 || e?.status === 403
+        ? tr("You don't have permission to do this.")
+        : tr("This ticket was changed by someone else. The list has been refreshed."));
+    }
     load();
   }
 
@@ -153,6 +162,11 @@ export default function OpsOverview() {
 
   return (
     <PanelShell title={tr("Operations Overview")} vis={vis} labels={SECTION_LABEL} wide>
+      {ticketErr && (
+        <div role="alert" style={{ background: "#FBEAE6", color: "#C1503C", padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 14 }}>
+          {ticketErr}
+        </div>
+      )}
       {shown.stats && (
         <StatGrid>
           <StatCard n={activeHouses} label={tr("Houses with activity")} />
@@ -206,7 +220,12 @@ export default function OpsOverview() {
                   ) : (
                     <>
                       <button style={S.small} onClick={() => setTicketEd({ ticket: t })}>{tr("Edit")}</button>
-                      <button style={S.small} onClick={() => ticketStatus(t.id, "reject")}>{tr("Reject")}</button>
+                      {/* Reject only while nobody has taken it. Once accepted / started, the office takes it back with Reopen. */}
+                      {t.status === "OPEN" ? (
+                        <button style={S.small} onClick={() => ticketStatus(t.id, "reject")}>{tr("Reject")}</button>
+                      ) : (
+                        <button style={S.small} onClick={() => ticketStatus(t.id, "reopen")}>{tr("Reopen")}</button>
+                      )}
                     </>
                   )}
                 </div>
