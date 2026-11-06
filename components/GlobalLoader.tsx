@@ -7,7 +7,8 @@ import { useI18n } from "@/lib/i18n";
 // One loading indicator for the whole app.
 //
 //  - A green bar slides across the top whenever ANY request to the server is running
-//    (reads, saves, deletes, photo uploads) and while a page is opening after a tap on a link.
+//    (reads, saves, deletes, photo uploads), while a page is opening after a tap on a link,
+//    and for a moment after ANY tap on a button, tab or link (instant feedback).
 //  - Saves / deletes / uploads (anything that is not a plain read) also show a small spinner
 //    in the middle, so a tap on a button always gets an answer, even on a slow connection.
 //
@@ -105,6 +106,7 @@ export default function GlobalLoader() {
   const pathname = usePathname();
   const [snap, setSnap] = useState({ reads, writes });
   const [navigating, setNavigating] = useState(false);
+  const [pulse, setPulse] = useState(false);
 
   useEffect(() => {
     const f = () => setSnap({ reads, writes });
@@ -128,13 +130,30 @@ export default function GlobalLoader() {
     return () => document.removeEventListener("click", onClick, true);
   }, []);
   useEffect(() => { setNavigating(false); }, [pathname]);
+
+  // Any tap on a button, link, tab or menu gets an instant answer too, even when it only opens
+  // a form or changes the sort order and sends nothing to the server.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onTap = (e: MouseEvent) => {
+      const el = (e.target as Element | null)?.closest?.(
+        "button, a[href], summary, select, label[for], [role='button'], [role='tab'], [role='menuitem'], input[type='checkbox'], input[type='radio'], input[type='submit']"
+      ) as (HTMLElement & { disabled?: boolean }) | null;
+      if (!el || el.disabled || el.getAttribute("aria-disabled") === "true") return;
+      setPulse(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setPulse(false), 600);
+    };
+    document.addEventListener("click", onTap, true);
+    return () => { document.removeEventListener("click", onTap, true); clearTimeout(timer); };
+  }, []);
   useEffect(() => {
     if (!navigating) return;
     const t = setTimeout(() => setNavigating(false), 10_000); // never stuck
     return () => clearTimeout(t);
   }, [navigating]);
 
-  const bar = useHold(snap.reads + snap.writes > 0 || navigating, MIN_VISIBLE_MS);
+  const bar = useHold(snap.reads + snap.writes > 0 || navigating || pulse, MIN_VISIBLE_MS);
   const spin = useHold(snap.writes > 0, MIN_VISIBLE_MS);
 
   return (
