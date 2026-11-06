@@ -2,6 +2,7 @@ import "./globals.css";
 import OfflineBanner from "@/components/OfflineBanner";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import PushToggle from "@/components/PushToggle";
+import GlobalLoader from "@/components/GlobalLoader";
 import { I18nProvider } from "@/lib/i18n";
 
 export const metadata = {
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <I18nProvider>
+          <GlobalLoader />
           <OfflineBanner />
           {children}
           <PushToggle />
