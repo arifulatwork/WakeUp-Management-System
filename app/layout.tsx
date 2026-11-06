@@ -1,6 +1,5 @@
 import "./globals.css";
 import OfflineBanner from "@/components/OfflineBanner";
-import DemoBadge from "@/components/DemoBadge";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import PushToggle from "@/components/PushToggle";
 import { I18nProvider } from "@/lib/i18n";
@@ -33,7 +32,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <PushToggle />
           <LanguageSwitcher />
-          <DemoBadge />
         </I18nProvider>
       </body>
     </html>

@@ -12,8 +12,7 @@ type Worker = { id: string; name: string; area: string; role: string; language: 
 
 // With a real database this page is OFF unless NEXT_PUBLIC_ALLOW_DEV_LOGIN="true"
 // (handy while testing on Supabase; set it to "false" before real staff use the app).
-const DEV_LOGIN_OPEN =
-  process.env.NEXT_PUBLIC_DEMO_MODE !== "false" || process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true";
+const DEV_LOGIN_OPEN = process.env.NEXT_PUBLIC_ALLOW_DEV_LOGIN === "true";
 
 export default function DevLogin() {
   const [workers, setWorkers] = useState<Worker[]>([]);

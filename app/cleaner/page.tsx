@@ -567,9 +567,6 @@ export default function CleanerApp() {
       {visible.length === 0 && (
         <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>
           <p>{tr("No tasks assigned yet.")}</p>
-          {process.env.NEXT_PUBLIC_DEMO_MODE !== "false" && (
-            <p style={{ marginTop: 10 }}><a href="/login">{tr("Switch demo user")}</a></p>
-          )}
         </div>
       )}
       <AppFooter />

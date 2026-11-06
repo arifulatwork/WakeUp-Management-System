@@ -1,0 +1,7 @@
+Delete these (demo mode is gone), relative to your project root:
+
+  app\api\demo\            (whole folder)
+  components\DemoBadge.tsx
+  lib\mockDb.ts
+
+Then remove NEXT_PUBLIC_DEMO_MODE from .env and from Vercel (it is no longer used).

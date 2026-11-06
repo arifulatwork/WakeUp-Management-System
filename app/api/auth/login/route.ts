@@ -5,7 +5,7 @@ import { createSession, SESSION_COOKIE } from "@/lib/session";
 
 // POST /api/auth/login { username, password } — for EVERY role (cleaner, maintenance,
 // coordinator, manager, admin). Accounts live in the Worker table of the database
-// (Supabase when NEXT_PUBLIC_DEMO_MODE="false"); passwords are stored only as bcrypt hashes.
+// (Supabase); passwords are stored only as bcrypt hashes.
 // Brute-force protection: 8 wrong passwords for the same login + address in 15 minutes -> wait.
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILS = 8;

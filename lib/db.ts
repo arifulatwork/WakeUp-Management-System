@@ -1,14 +1,6 @@
-// Single switch between the DEMO in-memory database and the REAL
-// Postgres/Prisma backend.
-//
-//   NEXT_PUBLIC_DEMO_MODE=true   (default)  -> lib/mockDb.ts, no database needed
-//   NEXT_PUBLIC_DEMO_MODE=false             -> lib/db.prisma.ts, real PostgreSQL
-//
-// Every API route imports `db` from here and is identical in both modes,
-// so going live later is just: set the env var to false, set DATABASE_URL,
-// run the migrations. No route or page changes.
-
-export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
+// The app always uses the real PostgreSQL (Supabase) database through Prisma.
+// (The old in-memory demo mode has been removed, so a missing or wrong env variable
+// can never switch the app to sample data.)
 
 // A clear message instead of a cryptic Prisma error when .env still has the placeholders.
 function realDb() {
@@ -24,8 +16,4 @@ function realDb() {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-// Only the chosen backend is loaded, so in real mode the demo simulator can never start.
-export const db: any = DEMO_MODE
-  ? // eslint-disable-next-line @typescript-eslint/no-var-requires
-    require("./mockDb").mockDb
-  : realDb();
+export const db: any = realDb();

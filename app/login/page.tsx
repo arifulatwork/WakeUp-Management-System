@@ -21,8 +21,6 @@ function LoginForm() {
   const [code, setCode] = useState("");
   const [studentName, setStudentName] = useState("");
 
-  const demo = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
-
   // Arriving here means nobody is signed in on this screen: forget any previous person on this device.
   useEffect(() => {
     ["workerId", "workerName", "workerArea"].forEach((k) => localStorage.removeItem(k));
@@ -124,17 +122,6 @@ function LoginForm() {
           <button onClick={() => handleStudent()} disabled={loading} style={btn}>
             {loading ? tr("Signing in…") : tr("Continue")}
           </button>
-          {demo && (
-            <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
-              <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginBottom: 8 }}>{tr("Demo — one-tap sign in")}</p>
-              {[["AB12CD34", "Lucas Moreau", "Group A"], ["AB12CD34", "Emma Rossi", "Group A"], ["EF56GH78", "Noah Weber", "Group B"]].map(([c, n, g]) => (
-                <button key={n} disabled={loading} onClick={() => handleStudent(c, n)}
-                  style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 6, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--line)", background: "#fff", fontSize: 13 }}>
-                  {n} — {tr("Student")} · {g}
-                </button>
-              ))}
-            </div>
-          )}
         </>
       ) : (
       <>
@@ -185,25 +172,6 @@ function LoginForm() {
         {tr("No account yet? Ask your administrator.")}
       </p>
 
-      {demo && (
-        <div style={{ marginTop: 28, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
-          <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginBottom: 8 }}>{tr("Demo — one-tap sign in")}</p>
-          {[
-            ["cristina", "Cristina", "Manager"],
-            ["pedro", "Pedro", "Coordinator"],
-            ["giuseppe", "Giuseppe", "Super Admin"],
-            ["maria", "Maria", "Cleaning"],
-            ["joao", "João", "Cleaning"],
-            ["ivan", "Ivan", "Maintenance"],
-            ["rita", "Rita", "Supplier"],
-          ].map(([u, name, role]) => (
-            <button key={u} disabled={loading} onClick={() => handleSubmit(u, "changeme123")}
-              style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 6, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--line)", background: "#fff", fontSize: 13 }}>
-              {name} — {tr(role)}
-            </button>
-          ))}
-        </div>
-      )}
       </>
       )}
     </main>
