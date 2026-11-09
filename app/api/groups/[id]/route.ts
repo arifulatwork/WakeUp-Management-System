@@ -4,11 +4,12 @@ import { currentSession } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { nameKey, normName } from "@/lib/houseMode";
-import { canManageGroup, jerr, newGroupCode } from "@/lib/orderLogic";
+import { canManageGroup, cleanMemberLimit, groupStudents, jerr, newGroupCode } from "@/lib/orderLogic";
 
 // PATCH /api/groups/:id
 //   admin:                  { name?, coordinatorId?, houseId? }
 //   coordinator of group / admin: { codeAction: "regenerate" } | { codeActive: boolean }   (the secret code)
+//                                 { memberLimit: number | null }   (how many students may join and order; null = no limit)
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const me = await currentSession(req);
   if (!me) return jerr("sign in required", 401);
@@ -43,6 +44,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     else if (b.codeAction !== undefined) return jerr("invalid code action");
     if (typeof b.codeActive === "boolean") data.codeActive = b.codeActive;
   }
+  if (b.memberLimit !== undefined) {
+    if (!can(me.role, "groups.code") || !(await canManageGroup(me, group.id))) return jerr("forbidden", 403);
+    const lim = cleanMemberLimit(b.memberLimit);
+    if (lim.error) return jerr(lim.error);
+    // Can't set the size below the students who are already in: the coordinator removes some first.
+    if (lim.value !== null && lim.value !== undefined && (await groupStudents(group.id)).length > lim.value) return jerr("below current members", 409);
+    data.memberLimit = lim.value;
+  }
   if (!Object.keys(data).length) return jerr("nothing to change");
 
   try {
@@ -53,6 +62,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   if (data.accessCode) await logAudit(req, "group", group.id, "code", "New access code for group {name}", { name: group.name });
   else if (typeof data.codeActive === "boolean") await logAudit(req, "group", group.id, "code", data.codeActive ? "Switched on the access code of group {name}" : "Switched off the access code of group {name}", { name: group.name });
+  else if (data.memberLimit !== undefined && Object.keys(data).length === 1) await logAudit(req, "group", group.id, "update", "Set the group size of {name}", { name: group.name });
   else await logAudit(req, "group", group.id, "update", "Edited group {name}", { name: data.name ?? group.name });
   return NextResponse.json({ ok: true });
 }

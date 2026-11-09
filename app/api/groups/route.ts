@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const students = await db.worker.findMany({ where: { role: "student" } });
   const showCode = me.role === "coordinator" || me.role === "admin";
   return NextResponse.json(groups.map((g: any) => ({
-    id: g.id, name: g.name, codeActive: g.codeActive, createdAt: g.createdAt,
+    id: g.id, name: g.name, codeActive: g.codeActive, memberLimit: g.memberLimit ?? null, createdAt: g.createdAt,
     coordinator: g.coordinator ? { id: g.coordinator.id, name: g.coordinator.name } : null,
     house: g.house ? { id: g.house.id, name: g.house.name } : null,
     studentCount: students.filter((s: any) => s.groupId === g.id).length,

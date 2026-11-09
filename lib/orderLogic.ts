@@ -50,6 +50,32 @@ export async function ordersWithLines(orders: any[]) {
   return orders.map((o) => ({ ...o, lines: lines.filter((l: any) => l.orderId === o.id) }));
 }
 
+export const MAX_MEMBER_LIMIT = 200;
+
+// The students of a group, oldest first (the order they joined in).
+export async function groupStudents(groupId: string): Promise<any[]> {
+  const rows = await db.worker.findMany({ where: { groupId } });
+  return rows
+    .filter((w: any) => w.role === "student")
+    .sort((a: any, b: any) => +new Date(a.createdAt) - +new Date(b.createdAt));
+}
+
+// Clean the member limit sent by the coordinator: null/"" = no limit, otherwise a whole number 1..MAX_MEMBER_LIMIT.
+export function cleanMemberLimit(v: unknown): { value?: number | null; error?: string } {
+  if (v === null || v === "" || v === undefined) return { value: null };
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_MEMBER_LIMIT) return { error: `group size must be 1-${MAX_MEMBER_LIMIT}` };
+  return { value: n };
+}
+
+// May this student still order? Only the first `memberLimit` students of the group count (extra ones, if any
+// slipped in, are blocked). No limit set = everybody may.
+export async function studentWithinLimit(group: any, studentId: string): Promise<boolean> {
+  if (!group || group.memberLimit == null) return true;
+  const students = await groupStudents(group.id);
+  return students.slice(0, group.memberLimit).some((s: any) => s.id === studentId);
+}
+
 export class OrderLocked extends Error {}
 
 // Put approved items into the group's order for that ordering day (created if needed).

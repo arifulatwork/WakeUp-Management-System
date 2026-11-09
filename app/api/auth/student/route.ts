@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
   const members = await db.worker.findMany({ where: { groupId: group.id } });
   let student = members.find((w: any) => w.role === "student" && normName(w.name) === normName(name));
   if (!student) {
-    if (members.length >= MAX_STUDENTS_PER_GROUP) return NextResponse.json({ error: "group is full" }, { status: 409 });
+    const studentCount = members.filter((w: any) => w.role === "student").length;
+    // The coordinator decides how many students the group has: once that many joined, nobody new can join.
+    const cap = group.memberLimit ?? MAX_STUDENTS_PER_GROUP;
+    if (studentCount >= Math.min(cap, MAX_STUDENTS_PER_GROUP)) return NextResponse.json({ error: "group is full" }, { status: 409 });
     student = await db.worker.create({
       data: { name, language: String(body.language ?? "en").slice(0, 2), area: "CLEANING", role: "student", groupId: group.id, dietary: [] },
     });

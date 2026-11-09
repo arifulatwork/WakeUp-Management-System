@@ -68,6 +68,7 @@ function LoginForm() {
     }
     setLoading(false);
     if (res.status === 429) { setError(tr("Too many attempts. Please wait a few minutes.")); return; }
+    if (res.status === 409) { setError(tr("This group is full. Ask your coordinator.")); return; }
     if (!res.ok) { setError(tr("That code is not valid. Ask your coordinator.")); return; }
     finishLogin(await res.json());
   }

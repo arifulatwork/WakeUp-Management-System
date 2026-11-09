@@ -9,7 +9,7 @@ import { showCode } from "@/lib/ordering";
 import { altLabel, Order, Product } from "@/components/ordering/common";
 
 export type Group = {
-  id: string; name: string; codeActive: boolean; accessCode?: string; studentCount: number;
+  id: string; name: string; codeActive: boolean; accessCode?: string; studentCount: number; memberLimit: number | null;
   coordinator: { id: string; name: string } | null; house: { id: string; name: string } | null;
 };
 export type Student = { id: string; name: string; dietary: string[] };
@@ -26,6 +26,8 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
   const [copied, setCopied] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [err, setErr] = useState("");
+  const [limitText, setLimitText] = useState(g.memberLimit != null ? String(g.memberLimit) : "");
+  useEffect(() => { setLimitText(g.memberLimit != null ? String(g.memberLimit) : ""); }, [g.memberLimit]);
 
   const loadStudents = () => fetch(`/api/groups/${g.id}/students`).then((r) => (r.ok ? r.json() : [])).then(setStudents).catch(() => {});
   useEffect(() => { if (open) loadStudents(); /* eslint-disable-next-line */ }, [open, g.studentCount]);
@@ -34,6 +36,18 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
     setErr("");
     try { await api(`/api/groups/${g.id}`, "PATCH", body); onChanged(); } catch (e) { setErr(saveError(e, tr)); }
   }
+  async function saveLimit(value: number | null) {
+    setErr("");
+    try { await api(`/api/groups/${g.id}`, "PATCH", { memberLimit: value }); onChanged(); }
+    catch (e: any) {
+      setErr(e?.message === "below current members"
+        ? tr("There are already more students in this group than that. Remove some students first.")
+        : saveError(e, tr));
+    }
+  }
+  const limitNum = Math.floor(Number(limitText));
+  const limitValid = Number.isFinite(limitNum) && limitNum >= 1 && limitNum <= 200;
+  const full = g.memberLimit != null && g.studentCount >= g.memberLimit;
   async function setDietary(s: Student, list: string[]) {
     setStudents((cur) => cur.map((x) => (x.id === s.id ? { ...x, dietary: list } : x)));
     try { await api(`/api/groups/${g.id}/students`, "PATCH", { studentId: s.id, dietary: list }); } catch (e) { setErr(saveError(e, tr)); loadStudents(); }
@@ -47,7 +61,7 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
   return (
     <PanelCard
       title={g.name}
-      subtitle={[g.house?.name, g.coordinator ? `${tr("Coordinator")}: ${g.coordinator.name}` : tr("No coordinator yet"), `${g.studentCount} ${tr("students")}`].filter(Boolean).join(" · ")}
+      subtitle={[g.house?.name, g.coordinator ? `${tr("Coordinator")}: ${g.coordinator.name}` : tr("No coordinator yet"), g.memberLimit != null ? `${g.studentCount} / ${g.memberLimit} ${tr("students")}` : `${g.studentCount} ${tr("students")}`].filter(Boolean).join(" · ")}
       action={<>
         {onOrder && <button style={S.smallDark} onClick={onOrder}>{tr("Create order")}</button>}
         {canManage && <button style={S.small} onClick={onEdit}>{tr("Edit")}</button>}
@@ -67,6 +81,18 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
           </div>
         </div>
       )}
+      {canCode && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
+          <div style={{ flex: "1 1 180px" }}>
+            <div style={{ fontSize: 10.5, textTransform: "uppercase", color: "var(--ink-soft)" }}>{tr("Number of students in the group")}</div>
+            <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{tr("Only this many students can join and order.")}</div>
+          </div>
+          <input style={{ ...S.input, width: 80 }} type="number" min={1} max={200} placeholder="—" value={limitText} onChange={(e) => setLimitText(e.target.value)} />
+          <button style={S.small} disabled={!limitValid || limitNum === g.memberLimit} onClick={() => saveLimit(limitNum)}>{tr("Save")}</button>
+          {g.memberLimit != null && <button style={S.small} onClick={() => saveLimit(null)}>{tr("No limit")}</button>}
+        </div>
+      )}
+      {full && <p style={{ fontSize: 12, color: "var(--ink-soft)", margin: "4px 0" }}>{tr("The group is full: no new students can join.")}</p>}
       {!g.codeActive && <p style={{ fontSize: 12, color: "var(--red)", margin: "4px 0" }}>{tr("The code is off: students of this group cannot sign in.")}</p>}
       {confirm && (
         <div style={{ background: "var(--red-bg)", borderRadius: 10, padding: 12, margin: "8px 0" }}>
@@ -171,7 +197,7 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
   }, []);
 
   const fillStandard = () => {
-    const n = Math.max(1, students.length);
+    const n = Math.max(1, group.memberLimit ?? students.length);
     setQty(Object.fromEntries(active.map((p) => [p.id, p.standardQty * n])));
   };
   const lines = active.filter((p) => (qty[p.id] ?? 0) > 0).map((p) => ({ productId: p.id, quantity: qty[p.id], alternativeId: alt[p.id] || undefined }));
@@ -198,7 +224,7 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
             {withDiet.map((s) => <div key={s.id}>{s.name}: {s.dietary.join(", ")}</div>)}
           </div>
         )}
-        <button style={{ ...S.small, margin: "10px 0" }} onClick={fillStandard}>{tr("Fill standard quantities × {n} students", { n: Math.max(1, students.length) })}</button>
+        <button style={{ ...S.small, margin: "10px 0" }} onClick={fillStandard}>{tr("Fill standard quantities × {n} students", { n: Math.max(1, group.memberLimit ?? students.length) })}</button>
         {active.map((p) => (
           <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 160px", fontSize: 13 }}>{p.name}<div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}</div></div>

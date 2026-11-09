@@ -4,7 +4,7 @@ import { currentSession } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { getOrdering } from "@/lib/settings";
 import { dateKey, dietaryGaps, orderingWindow } from "@/lib/ordering";
-import { addToGroupOrder, groupsFor, intQty, jerr, OrderLocked, requestsWithLines } from "@/lib/orderLogic";
+import { addToGroupOrder, groupsFor, intQty, jerr, OrderLocked, requestsWithLines, studentWithinLimit } from "@/lib/orderLogic";
 
 // GET /api/requests — student: their own · coordinator: their groups' · admin/manager: all. Newest first.
 export async function GET(req: NextRequest) {
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
   const student = await db.worker.findUnique({ where: { id: me.workerId } });
   const group = await db.group.findUnique({ where: { id: me.groupId } });
   if (!student || !group) return jerr("not found", 404);
+  if (!(await studentWithinLimit(group, student.id))) return jerr("group is full", 403); // only as many students as the coordinator set may order
   const products = await db.product.findMany({});
 
   const seen = new Set<string>();

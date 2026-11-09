@@ -551,6 +551,12 @@ const ROWS: Row[] = [
   ["Products", "Produtos", "Productos", "Produits", "Prodotti", "Продукти"],
   ["Send request", "Enviar pedido", "Enviar pedido", "Envoyer la demande", "Invia richiesta", "Надіслати запит"],
   ["Student sign-in", "Entrada de estudante", "Acceso de estudiante", "Connexion étudiant", "Accesso studente", "Вхід студента"],
+  ["Number of students in the group", "Número de estudantes no grupo", "Número de estudiantes en el grupo", "Nombre d’étudiants dans le groupe", "Numero di studenti nel gruppo", "Кількість студентів у групі"],
+  ["Only this many students can join and order.", "Só este número de estudantes pode entrar e encomendar.", "Solo este número de estudiantes puede unirse y pedir.", "Seul ce nombre d’étudiants peut rejoindre et commander.", "Solo questo numero di studenti può unirsi e ordinare.", "Лише стільки студентів може приєднатися та робити замовлення."],
+  ["No limit", "Sem limite", "Sin límite", "Sans limite", "Nessun limite", "Без обмеження"],
+  ["The group is full: no new students can join.", "O grupo está cheio: não podem entrar novos estudantes.", "El grupo está lleno: no pueden unirse nuevos estudiantes.", "Le groupe est complet : aucun nouvel étudiant ne peut le rejoindre.", "Il gruppo è al completo: nessun nuovo studente può unirsi.", "Група заповнена: нові студенти не можуть приєднатися."],
+  ["There are already more students in this group than that. Remove some students first.", "Já há mais estudantes neste grupo do que isso. Remova alguns primeiro.", "Ya hay más estudiantes en este grupo que eso. Elimina algunos primero.", "Il y a déjà plus d’étudiants dans ce groupe. Retirez-en d’abord.", "Ci sono già più studenti nel gruppo. Rimuovine alcuni prima.", "У групі вже більше студентів. Спершу видаліть кількох."],
+  ["This group is full. Ask your coordinator.", "Este grupo está cheio. Fale com o seu coordenador.", "Este grupo está lleno. Pregunta a tu coordinador.", "Ce groupe est complet. Demandez à votre coordinateur.", "Questo gruppo è al completo. Chiedi al tuo coordinatore.", "Ця група заповнена. Зверніться до координатора."],
   ["Group code and your name", "Código do grupo e o seu nome", "Código del grupo y tu nombre", "Code du groupe et votre nom", "Codice del gruppo e il tuo nome", "Код групи та ваше ім'я"],
 ];
 
