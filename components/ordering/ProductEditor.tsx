@@ -5,8 +5,8 @@ import { api, saveError } from "@/lib/api";
 import { LANGS, useI18n } from "@/lib/i18n";
 import { PhotoPicker } from "@/components/Photos";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
-import { COUNTRY_CODES, MAX_QTY, countryName } from "@/lib/ordering";
-import { Product } from "@/components/ordering/common";
+import { MAX_QTY } from "@/lib/ordering";
+import { CountrySelect, Product } from "@/components/ordering/common";
 
 // Admin: add / edit a product with brand, standard quantity, dietary suitability and approved alternatives.
 // `countries`: the countries this person may use (a coordinator: those of their own groups). Empty/undefined = any country, plus "All countries" (admin).
@@ -60,10 +60,7 @@ export default function ProductEditor({ product, dietary, countries, onClose, on
           ))}
         </div>
         <label style={S.label}>{tr("Country")}</label>
-        <select style={S.input} value={country} onChange={(e) => setCountry(e.target.value)}>
-          {!countries && <option value="">{tr("All countries")}</option>}
-          {(countries ?? COUNTRY_CODES).map((c) => <option key={c} value={c}>{countryName(c, locale)}</option>)}
-        </select>
+        <CountrySelect value={country} onChange={setCountry} only={countries} firstLabel={countries ? undefined : tr("All countries")} />
         <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("Only groups of this country can order this product. Choose All countries to let every group order it.")}</div>
         <label style={S.label}>{tr("Product photo")}</label>
         {photoSrc && (

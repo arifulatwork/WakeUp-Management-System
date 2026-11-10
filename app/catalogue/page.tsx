@@ -8,8 +8,8 @@ import { useCan } from "@/lib/useSession";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useSectionVisibility } from "@/lib/useSectionVisibility";
 import { Pills, S } from "@/components/ui";
-import { COUNTRY_CODES, OrderingConfig, WEEKDAYS, countryName } from "@/lib/ordering";
-import { Info, Pill, Product, ProductThumb, td, th, useJson } from "@/components/ordering/common";
+import { OrderingConfig, WEEKDAYS, countryName, countryOptions } from "@/lib/ordering";
+import { CountrySelect, Info, Pill, Product, ProductThumb, td, th, useJson } from "@/components/ordering/common";
 import ProductEditor from "@/components/ordering/ProductEditor";
 
 const SECTIONS = ["rules", "products", "dietary", "reports"] as const;
@@ -68,6 +68,8 @@ export default function CataloguePage() {
   const R = report.data;
   // Admin: every product, any country. Coordinator: only products of the countries of their own groups.
   const myCountries = Array.from(new Set(myGroups.data.map((g) => g.country).filter((c): c is string => !!c)));
+  // the filter only lists countries that have products
+  const usedCountries = Array.from(new Set(products.data.map((p) => p.country).filter((c): c is string => !!c)));
   const mayEdit = (p: Product) => canEdit || (canProducts && !!p.country && myCountries.includes(p.country));
   const shownProducts = products.data.filter((p) => !countryFilter || (countryFilter === "ALL" ? !p.country : p.country === countryFilter));
 
@@ -104,12 +106,15 @@ export default function CataloguePage() {
       )}
 
       {vis.shown.products && (
-        <PanelCard title={`${tr("Products")} (${shownProducts.length})`} flush
-          action={<select style={{ ...S.input, width: 170 }} aria-label={tr("Country")} value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}>
-            <option value="">{tr("All products")}</option>
-            <option value="ALL">{tr("All countries")}</option>
-            {COUNTRY_CODES.map((c) => <option key={c} value={c}>{countryName(c, locale)}</option>)}
-          </select>}>
+        <PanelCard title={`${tr("Products")} (${shownProducts.length})`} flush>
+          <div style={{ padding: "12px 14px 10px", maxWidth: 360 }}>
+            <label style={S.label}>{tr("Country")}</label>
+            <select aria-label={tr("Country")} style={{ ...S.input, width: "100%", minWidth: 0, boxSizing: "border-box" }} value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}>
+              <option value="">{tr("All products")}</option>
+              <option value="ALL">{tr("All countries")}</option>
+              {countryOptions(locale, usedCountries).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+            </select>
+          </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr><th style={th} /><th style={th}>{tr("Product")}</th><th style={th}>{tr("Country")}</th><th style={th}>{tr("Brand")}</th><th style={th}>{tr("Standard")}</th><th style={th}>{tr("Suitable for")}</th><th style={th}>{tr("Alternatives")}</th><th style={th} /></tr></thead>
             <tbody>

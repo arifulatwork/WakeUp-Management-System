@@ -83,12 +83,17 @@ export const MAX_QTY = 99;
 
 // ---- countries & product languages ----
 // Each group belongs to a country; a product is sold in one country (or in all of them when country is empty).
-// Add a country by adding its two-letter code here.
-export const COUNTRY_CODES = ["PT", "ES", "FR", "IT", "DE", "GB", "IE", "NL", "BE", "PL", "UA", "US"];
+// The standard list of countries (ISO 3166-1 codes); the names come from the browser in the language of the screen.
+export const COUNTRY_CODES = ["AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HM", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR", "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK", "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG", "VI", "VN", "VU", "WF", "WS", "XK", "YE", "YT", "ZA", "ZM", "ZW"];
 export const cleanCountry = (v: unknown): string | null => {
   const c = String(v ?? "").trim().toUpperCase();
   return COUNTRY_CODES.includes(c) ? c : null;
 };
+// Countries as dropdown options, sorted by name in the screen's language. `only` limits the list (e.g. a coordinator).
+export function countryOptions(locale = "en-GB", only?: string[] | null): { code: string; name: string }[] {
+  const col = new Intl.Collator(locale);
+  return (only ?? COUNTRY_CODES).map((code) => ({ code, name: countryName(code, locale) })).sort((a, b) => col.compare(a.name, b.name));
+}
 // "PT" -> "Portugal" / "Portugal" / "Portogallo" … in the language of the screen.
 export function countryName(code: string, locale = "en-GB"): string {
   try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code; } catch { return code; }

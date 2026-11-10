@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { OrderingConfig, WEEKDAYS, WindowState } from "@/lib/ordering";
+import { OrderingConfig, WEEKDAYS, WindowState, countryOptions } from "@/lib/ordering";
+import { S } from "@/components/ui";
 
 // Small pieces shared by the four ordering screens (student, supplier, groups & orders, catalogue).
 
@@ -32,6 +33,20 @@ export function ProductThumb({ p, size = 44 }: { p?: { photo?: string | null } |
   const box: React.CSSProperties = { width: size, height: size, borderRadius: 8, border: "1px solid var(--line)", background: "#F3F2EE", flex: "none", display: "block" };
   // eslint-disable-next-line @next/next/no-img-element
   return p?.photo ? <img src={p.photo} alt="" loading="lazy" decoding="async" style={{ ...box, objectFit: "cover" }} /> : <span style={box} aria-hidden />;
+}
+
+// Country dropdown: the standard list of countries, always full width of its box (never squeezes the text next to it).
+// `firstLabel` = the empty choice at the top ("All countries" / "—"); leave undefined for no empty choice.
+export function CountrySelect({ value, onChange, firstLabel, only, ariaLabel }: {
+  value: string; onChange: (code: string) => void; firstLabel?: string; only?: string[] | null; ariaLabel?: string;
+}) {
+  const { locale } = useI18n();
+  return (
+    <select aria-label={ariaLabel} style={{ ...S.input, width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }} value={value} onChange={(e) => onChange(e.target.value)}>
+      {firstLabel !== undefined && <option value="">{firstLabel}</option>}
+      {countryOptions(locale, only).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+    </select>
+  );
 }
 
 export const altLabel = (a: { name: string; brand?: string }) => `${a.name}${a.brand ? ` (${a.brand})` : ""}`;

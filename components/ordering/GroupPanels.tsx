@@ -5,8 +5,8 @@ import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { PanelCard } from "@/components/PanelShell";
-import { COUNTRY_CODES, countryName, productInCountry, productName, showCode } from "@/lib/ordering";
-import { altLabel, Order, Product, ProductThumb } from "@/components/ordering/common";
+import { countryName, productInCountry, productName, showCode } from "@/lib/ordering";
+import { altLabel, CountrySelect, Order, Product, ProductThumb } from "@/components/ordering/common";
 
 export type Group = {
   id: string; name: string; codeActive: boolean; accessCode?: string; studentCount: number; memberLimit: number | null; country?: string | null;
@@ -93,15 +93,10 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
         </div>
       )}
       {canCode && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
-          <div style={{ flex: "1 1 180px" }}>
-            <div style={{ fontSize: 10.5, textTransform: "uppercase", color: "var(--ink-soft)" }}>{tr("Country")}</div>
-            <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{tr("Students of this group only see the products of this country, plus the products for all countries.")}</div>
-          </div>
-          <select style={{ ...S.input, width: 170 }} value={g.country ?? ""} onChange={(e) => patch({ country: e.target.value || null })}>
-            <option value="">—</option>
-            {COUNTRY_CODES.map((c) => <option key={c} value={c}>{countryName(c, locale)}</option>)}
-          </select>
+        <div style={{ margin: "8px 0" }}>
+          <div style={{ fontSize: 10.5, textTransform: "uppercase", color: "var(--ink-soft)" }}>{tr("Country")}</div>
+          <div style={{ fontSize: 11.5, color: "var(--ink-soft)", margin: "2px 0 6px" }}>{tr("Students of this group only see the products of this country, plus the products for all countries.")}</div>
+          <div style={{ maxWidth: 320 }}><CountrySelect value={g.country ?? ""} onChange={(c) => patch({ country: c || null })} firstLabel="—" /></div>
         </div>
       )}
       {full && <p style={{ fontSize: 12, color: "var(--ink-soft)", margin: "4px 0" }}>{tr("The group is full: no new students can join.")}</p>}
@@ -176,10 +171,7 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
         {houses.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
       </select>
       <label style={S.label}>{tr("Country")}</label>
-      <select style={S.input} value={country} onChange={(e) => setCountry(e.target.value)}>
-        <option value="">—</option>
-        {COUNTRY_CODES.map((c) => <option key={c} value={c}>{countryName(c, locale)}</option>)}
-      </select>
+      <CountrySelect value={country} onChange={setCountry} firstLabel="—" />
       <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("Students of this group only see the products of this country, plus the products for all countries.")}</div>
       <FormFooter saving={saving} canSave={!!name.trim()} onSave={save} onClose={onClose} onDelete={group ? remove : undefined} error={error}
         confirmText={tr("Delete this group and its students? This cannot be undone.")} />
