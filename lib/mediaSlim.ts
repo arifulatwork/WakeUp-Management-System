@@ -53,6 +53,12 @@ export function slimTicket(t: any): any {
   return out;
 }
 
+// A catalogue product: its photo as a short URL instead of a possible base64 data URL.
+export function slimProduct(p: any): any {
+  if (!p || typeof p !== "object" || !p.photo) return p;
+  return { ...p, photo: one("product", p.id, "photo", 0, p.photo) };
+}
+
 // For route responses that may be a task, a ticket, or a list of them.
 export function slimAny(v: any): any {
   if (Array.isArray(v)) return v.map(slimAny);

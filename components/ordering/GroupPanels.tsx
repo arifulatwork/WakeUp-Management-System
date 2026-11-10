@@ -5,11 +5,11 @@ import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { PanelCard } from "@/components/PanelShell";
-import { showCode } from "@/lib/ordering";
-import { altLabel, Order, Product } from "@/components/ordering/common";
+import { COUNTRY_CODES, countryName, productInCountry, productName, showCode } from "@/lib/ordering";
+import { altLabel, Order, Product, ProductThumb } from "@/components/ordering/common";
 
 export type Group = {
-  id: string; name: string; codeActive: boolean; accessCode?: string; studentCount: number; memberLimit: number | null;
+  id: string; name: string; codeActive: boolean; accessCode?: string; studentCount: number; memberLimit: number | null; country?: string | null;
   coordinator: { id: string; name: string } | null; house: { id: string; name: string } | null;
 };
 export type Student = { id: string; name: string; dietary: string[] };
@@ -20,7 +20,7 @@ type House = { id: string; name: string };
 export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, onEdit, onOrder }: {
   group: Group; dietary: string[]; canCode: boolean; canManage: boolean; onChanged: () => void; onEdit: () => void; onOrder?: () => void;
 }) {
-  const { tr } = useI18n();
+  const { tr, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [copied, setCopied] = useState(false);
@@ -61,7 +61,7 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
   return (
     <PanelCard
       title={g.name}
-      subtitle={[g.house?.name, g.coordinator ? `${tr("Coordinator")}: ${g.coordinator.name}` : tr("No coordinator yet"), g.memberLimit != null ? `${g.studentCount} / ${g.memberLimit} ${tr("students")}` : `${g.studentCount} ${tr("students")}`].filter(Boolean).join(" · ")}
+      subtitle={[g.house?.name, g.country ? countryName(g.country, locale) : null, g.coordinator ? `${tr("Coordinator")}: ${g.coordinator.name}` : tr("No coordinator yet"), g.memberLimit != null ? `${g.studentCount} / ${g.memberLimit} ${tr("students")}` : `${g.studentCount} ${tr("students")}`].filter(Boolean).join(" · ")}
       action={<>
         {onOrder && <button style={S.smallDark} onClick={onOrder}>{tr("Create order")}</button>}
         {canManage && <button style={S.small} onClick={onEdit}>{tr("Edit")}</button>}
@@ -90,6 +90,18 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
           <input style={{ ...S.input, width: 80 }} type="number" min={1} max={200} placeholder="—" value={limitText} onChange={(e) => setLimitText(e.target.value)} />
           <button style={S.small} disabled={!limitValid || limitNum === g.memberLimit} onClick={() => saveLimit(limitNum)}>{tr("Save")}</button>
           {g.memberLimit != null && <button style={S.small} onClick={() => saveLimit(null)}>{tr("No limit")}</button>}
+        </div>
+      )}
+      {canCode && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
+          <div style={{ flex: "1 1 180px" }}>
+            <div style={{ fontSize: 10.5, textTransform: "uppercase", color: "var(--ink-soft)" }}>{tr("Country")}</div>
+            <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{tr("Students of this group only see the products of this country, plus the products for all countries.")}</div>
+          </div>
+          <select style={{ ...S.input, width: 170 }} value={g.country ?? ""} onChange={(e) => patch({ country: e.target.value || null })}>
+            <option value="">—</option>
+            {COUNTRY_CODES.map((c) => <option key={c} value={c}>{countryName(c, locale)}</option>)}
+          </select>
         </div>
       )}
       {full && <p style={{ fontSize: 12, color: "var(--ink-soft)", margin: "4px 0" }}>{tr("The group is full: no new students can join.")}</p>}
@@ -129,16 +141,17 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
 export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
   group: Group | null; coordinators: Person[]; houses: House[]; onClose: () => void; onSaved: () => void;
 }) {
-  const { tr } = useI18n();
+  const { tr, locale } = useI18n();
   const [name, setName] = useState(group?.name ?? "");
   const [coordinatorId, setCoordinatorId] = useState(group?.coordinator?.id ?? "");
   const [houseId, setHouseId] = useState(group?.house?.id ?? "");
+  const [country, setCountry] = useState(group?.country ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   async function save() {
     setSaving(true); setError("");
     try {
-      const body = { name: name.trim(), coordinatorId: coordinatorId || null, houseId: houseId || null };
+      const body = { name: name.trim(), coordinatorId: coordinatorId || null, houseId: houseId || null, country: country || null };
       if (group) await api(`/api/groups/${group.id}`, "PATCH", body); else await api("/api/groups", "POST", body);
       onSaved();
     } catch (e: any) { setError(e?.status === 409 ? tr("A group with that name already exists.") : saveError(e, tr)); setSaving(false); }
@@ -162,6 +175,12 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
         <option value="">—</option>
         {houses.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
       </select>
+      <label style={S.label}>{tr("Country")}</label>
+      <select style={S.input} value={country} onChange={(e) => setCountry(e.target.value)}>
+        <option value="">—</option>
+        {COUNTRY_CODES.map((c) => <option key={c} value={c}>{countryName(c, locale)}</option>)}
+      </select>
+      <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("Students of this group only see the products of this country, plus the products for all countries.")}</div>
       <FormFooter saving={saving} canSave={!!name.trim()} onSave={save} onClose={onClose} onDelete={group ? remove : undefined} error={error}
         confirmText={tr("Delete this group and its students? This cannot be undone.")} />
     </Modal>
@@ -172,14 +191,14 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
 export function OrderBuilder({ group, order, products, onClose, onSaved }: {
   group: Group; order: Order | null; products: Product[]; onClose: () => void; onSaved: () => void;
 }) {
-  const { tr } = useI18n();
+  const { tr, lang } = useI18n();
   const [students, setStudents] = useState<Student[]>([]);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [alt, setAlt] = useState<Record<string, string>>({});
   const [note, setNote] = useState(order?.note ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const active = products.filter((p) => p.active);
+  const active = products.filter((p) => p.active && productInCountry(p, group.country)); // each country has its own products
 
   useEffect(() => {
     fetch(`/api/groups/${group.id}/students`).then((r) => (r.ok ? r.json() : [])).then(setStudents).catch(() => {});
@@ -227,7 +246,8 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
         <button style={{ ...S.small, margin: "10px 0" }} onClick={fillStandard}>{tr("Fill standard quantities × {n} students", { n: Math.max(1, group.memberLimit ?? students.length) })}</button>
         {active.map((p) => (
           <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 160px", fontSize: 13 }}>{p.name}<div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}</div></div>
+            <ProductThumb p={p} size={36} />
+            <div style={{ flex: "1 1 160px", fontSize: 13 }}>{productName(p, lang)}<div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}</div></div>
             {p.alternatives.length > 0 && (
               <select style={{ ...S.input, width: 150 }} value={alt[p.id] ?? ""} onChange={(e) => setAlt({ ...alt, [p.id]: e.target.value })}>
                 <option value="">{tr("Standard product")}</option>

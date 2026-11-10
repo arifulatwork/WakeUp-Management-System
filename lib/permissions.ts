@@ -50,6 +50,7 @@ export const PERMS = {
 
   // ---- product ordering ----
   "catalogue.manage": ADMIN,   // products, brands, approved alternatives, standard quantities, dietary requirements
+  "catalogue.products": COORD_ADMIN, // add / edit / delete products — coordinators only for the countries of their own groups (checked in the product routes)
   "ordering.configure": ADMIN, // ordering days, cut-off time, who orders, approval rules
   "groups.manage": ADMIN,      // create / rename / delete student groups, assign their coordinator
   "groups.code": COORD_ADMIN,  // group code, student list, dietary exceptions (coordinators: their own groups only)
@@ -72,7 +73,7 @@ export const SCREENS: Record<string, Role[]> = {
   "/coordinator": ["coordinator", "manager", "admin"],
   "/ops": ["manager", "admin"],
   "/group-orders": ["coordinator", "manager", "admin"],
-  "/catalogue": ["manager", "admin"],
+  "/catalogue": ["coordinator", "manager", "admin"],
   "/student": ["student"],
   "/supplier": ["supplier", "admin"],
 };
@@ -107,6 +108,7 @@ export const MATRIX: { label: string; roles: readonly Role[] }[] = [
   { label: "Approve / reject requests & quantity changes", roles: PERMS["requests.review"] },
   { label: "Create the group order (when coordinators order)", roles: PERMS["orders.create"] },
   { label: "Manage products, brands, alternatives & quantities", roles: PERMS["catalogue.manage"] },
+  { label: "Add & edit products of the countries of their own groups", roles: PERMS["catalogue.products"] },
   { label: "Ordering days, cut-off time & workflow", roles: PERMS["ordering.configure"] },
   { label: "View all orders, reports & history", roles: PERMS["orders.read.all"] },
   { label: "Prepare, mark missing, dispatch & deliver orders", roles: PERMS["orders.fulfil"] },

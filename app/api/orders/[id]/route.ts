@@ -76,7 +76,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (action === "set_lines") {
     if (order.status !== "OPEN") return jerr("the order was already sent to the supplier", 409);
-    const { lines, error } = await cleanOrderLines(b.lines);
+    const { lines, error } = await cleanOrderLines(b.lines, order.group?.country);
     if (error || !lines) return jerr(error ?? "invalid lines");
     await db.orderLine.deleteMany({ where: { orderId: order.id } });
     for (const l of lines) await db.orderLine.create({ data: { orderId: order.id, ...l } });

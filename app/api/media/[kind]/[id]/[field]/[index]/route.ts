@@ -36,6 +36,11 @@ export async function GET(req: NextRequest, { params }: { params: { kind: string
     if (params.field === "photoUrl" || params.field === "afterPhotoUrl") value = i === 0 ? (t as any)[params.field] : null;
     else if (params.field === "photos" || params.field === "videos" || params.field === "reportVideos") value = ((t.mediaData as any)?.[params.field] ?? [])[i];
     else return notFound();
+  } else if (params.kind === "product") {
+    if (params.field !== "photo") return notFound();
+    const p = await db.product.findUnique({ where: { id: params.id } });
+    if (!p) return notFound();
+    value = i === 0 ? p.photo : null;
   } else return notFound();
 
   const file = typeof value === "string" ? decode(value) : null;

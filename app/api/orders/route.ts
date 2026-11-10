@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const win = orderingWindow(cfg);
     if (!win.open) return NextResponse.json({ error: "ordering closed", reason: win.reason, nextDay: win.nextDay }, { status: 403 });
   }
-  const { lines, error } = await cleanOrderLines(b.lines);
+  const { lines, error } = await cleanOrderLines(b.lines, group.country);
   if (error || !lines) return jerr(error ?? "invalid lines");
 
   const orderDate = dateKey();

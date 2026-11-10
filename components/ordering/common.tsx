@@ -9,6 +9,7 @@ import { OrderingConfig, WEEKDAYS, WindowState } from "@/lib/ordering";
 export type Product = {
   id: string; name: string; category: string; unit: string; brand: string | null; standardQty: number;
   dietaryTags: string[]; alternatives: { id: string; name: string; brand?: string; dietaryTags: string[] }[]; active: boolean;
+  names?: Record<string, string>; photo?: string | null; country?: string | null; // name per language, catalogue photo, country (null = all)
 };
 export type Line = {
   id: string; productId: string; quantity: number; product?: Product | null; alternativeName?: string | null;
@@ -25,6 +26,13 @@ export type Req = {
   student?: { id: string; name: string; dietary: string[] } | null; group?: { id: string; name: string } | null; lines: Line[];
 };
 export type Info = { config: OrderingConfig; window: WindowState };
+
+// Small catalogue photo of a product (a neutral box when it has none, so lists line up).
+export function ProductThumb({ p, size = 44 }: { p?: { photo?: string | null } | null; size?: number }) {
+  const box: React.CSSProperties = { width: size, height: size, borderRadius: 8, border: "1px solid var(--line)", background: "#F3F2EE", flex: "none", display: "block" };
+  // eslint-disable-next-line @next/next/no-img-element
+  return p?.photo ? <img src={p.photo} alt="" loading="lazy" decoding="async" style={{ ...box, objectFit: "cover" }} /> : <span style={box} aria-hidden />;
+}
 
 export const altLabel = (a: { name: string; brand?: string }) => `${a.name}${a.brand ? ` (${a.brand})` : ""}`;
 export const th: React.CSSProperties = { textAlign: "left", fontSize: 10.5, textTransform: "uppercase", color: "var(--ink-soft)", borderBottom: "1px solid var(--line)", padding: "8px 10px" };

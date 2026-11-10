@@ -8,8 +8,8 @@ import { useCan } from "@/lib/useSession";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useSectionVisibility } from "@/lib/useSectionVisibility";
 import { Pills, S } from "@/components/ui";
-import { OrderingConfig, WEEKDAYS } from "@/lib/ordering";
-import { Info, Pill, Product, td, th, useJson } from "@/components/ordering/common";
+import { COUNTRY_CODES, OrderingConfig, WEEKDAYS, countryName } from "@/lib/ordering";
+import { Info, Pill, Product, ProductThumb, td, th, useJson } from "@/components/ordering/common";
 import ProductEditor from "@/components/ordering/ProductEditor";
 
 const SECTIONS = ["rules", "products", "dietary", "reports"] as const;
@@ -25,9 +25,12 @@ type Report = {
 // CATALOGUE & ORDERING — the administrator manages products, quantities, brands/alternatives, dietary requirements and the
 // ordering workflow. Managers see the same screen read-only, plus the reports.
 export default function CataloguePage() {
-  const { tr } = useI18n();
+  const { tr, locale } = useI18n();
   const canEdit = useCan("catalogue.manage");
   const canConfigure = useCan("ordering.configure");
+  const canProducts = useCan("catalogue.products");   // admin, or a coordinator (only for the countries of their own groups)
+  const canReports = useCan("reports.read");
+  const myGroups = useJson<{ country?: string | null }[]>("/api/groups", []);
   const vis = useSectionVisibility("catalogueSections", SECTIONS);
   const info = useJson<Info | null>("/api/ordering", null);
   const products = useJson<Product[]>("/api/products", []);
@@ -40,6 +43,7 @@ export default function CataloguePage() {
   const [saved, setSaved] = useState("");
   const [newDiet, setNewDiet] = useState("");
   const [err, setErr] = useState("");
+  const [countryFilter, setCountryFilter] = useState(""); // "" = every product, "ALL" = products for all countries, else a country code
 
   const refresh = () => { info.reload(); products.reload(); dietary.reload(); report.reload(); };
   useLiveRefresh(refresh, { models: ["product", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
@@ -62,10 +66,14 @@ export default function CataloguePage() {
 
   const names = dietary.data.map((d) => d.name);
   const R = report.data;
+  // Admin: every product, any country. Coordinator: only products of the countries of their own groups.
+  const myCountries = Array.from(new Set(myGroups.data.map((g) => g.country).filter((c): c is string => !!c)));
+  const mayEdit = (p: Product) => canEdit || (canProducts && !!p.country && myCountries.includes(p.country));
+  const shownProducts = products.data.filter((p) => !countryFilter || (countryFilter === "ALL" ? !p.country : p.country === countryFilter));
 
   return (
     <PanelShell title={tr("Catalogue & Ordering")} subtitle={tr("Products, standard quantities, dietary requirements and the ordering workflow.")} vis={vis} labels={LABELS}
-      actions={canEdit ? <button style={S.navDark} onClick={() => setEditing({ product: null })}>+ {tr("Add product")}</button> : undefined}>
+      actions={canEdit || (canProducts && myCountries.length > 0) ? <button style={S.navDark} onClick={() => setEditing({ product: null })}>+ {tr("Add product")}</button> : undefined}>
       {err && <p style={{ color: "var(--red)", fontSize: 12.5 }}>{err}</p>}
 
       {vis.shown.rules && cfg && (
@@ -96,18 +104,26 @@ export default function CataloguePage() {
       )}
 
       {vis.shown.products && (
-        <PanelCard title={`${tr("Products")} (${products.data.length})`} flush>
+        <PanelCard title={`${tr("Products")} (${shownProducts.length})`} flush
+          action={<select style={{ ...S.input, width: 170 }} aria-label={tr("Country")} value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}>
+            <option value="">{tr("All products")}</option>
+            <option value="ALL">{tr("All countries")}</option>
+            {COUNTRY_CODES.map((c) => <option key={c} value={c}>{countryName(c, locale)}</option>)}
+          </select>}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr><th style={th}>{tr("Product")}</th><th style={th}>{tr("Brand")}</th><th style={th}>{tr("Standard")}</th><th style={th}>{tr("Suitable for")}</th><th style={th}>{tr("Alternatives")}</th><th style={th} /></tr></thead>
+            <thead><tr><th style={th} /><th style={th}>{tr("Product")}</th><th style={th}>{tr("Country")}</th><th style={th}>{tr("Brand")}</th><th style={th}>{tr("Standard")}</th><th style={th}>{tr("Suitable for")}</th><th style={th}>{tr("Alternatives")}</th><th style={th} /></tr></thead>
             <tbody>
-              {products.data.map((p) => (
+              {shownProducts.map((p) => (
                 <tr key={p.id} style={{ opacity: p.active ? 1 : 0.5 }}>
-                  <td style={td}><strong>{p.name}</strong><div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{p.category}{!p.active && ` · ${tr("inactive")}`}</div></td>
+                  <td style={td}><ProductThumb p={p} /></td>
+                  <td style={td}><strong>{p.name}</strong><div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{p.category}{!p.active && ` · ${tr("inactive")}`}</div>
+                    {Object.entries(p.names ?? {}).length > 0 && <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{Object.entries(p.names ?? {}).map(([l, n]) => `${l.toUpperCase()}: ${n}`).join(" · ")}</div>}</td>
+                  <td style={td}>{p.country ? countryName(p.country, locale) : tr("All countries")}</td>
                   <td style={td}>{p.brand ?? "—"}</td>
                   <td style={td}>{p.standardQty} {p.unit}</td>
                   <td style={{ ...td, fontSize: 12 }}>{p.dietaryTags.join(", ") || "—"}</td>
                   <td style={{ ...td, fontSize: 12 }}>{p.alternatives.map((a) => a.name).join(", ") || "—"}</td>
-                  <td style={td}>{canEdit && <button style={S.small} onClick={() => setEditing({ product: p })}>{tr("Edit")}</button>}</td>
+                  <td style={td}>{mayEdit(p) && <button style={S.small} onClick={() => setEditing({ product: p })}>{tr("Edit")}</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -133,7 +149,7 @@ export default function CataloguePage() {
         </PanelCard>
       )}
 
-      {vis.shown.reports && (
+      {vis.shown.reports && canReports && (
         <PanelCard title={tr("Reports & history")}
           action={<>
             <input style={{ ...S.input, width: 140 }} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -166,7 +182,7 @@ export default function CataloguePage() {
         </PanelCard>
       )}
 
-      {editing && <ProductEditor product={editing.product} dietary={names} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
+      {editing && <ProductEditor product={editing.product} dietary={names} countries={canEdit ? null : myCountries} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
     </PanelShell>
   );
 }

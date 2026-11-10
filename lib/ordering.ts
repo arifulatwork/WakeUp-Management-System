@@ -80,3 +80,26 @@ export const dietaryGaps = (studentReqs: string[] | null | undefined, tags: stri
 export type Alternative = { id: string; name: string; brand?: string; dietaryTags: string[] };
 
 export const MAX_QTY = 99;
+
+// ---- countries & product languages ----
+// Each group belongs to a country; a product is sold in one country (or in all of them when country is empty).
+// Add a country by adding its two-letter code here.
+export const COUNTRY_CODES = ["PT", "ES", "FR", "IT", "DE", "GB", "IE", "NL", "BE", "PL", "UA", "US"];
+export const cleanCountry = (v: unknown): string | null => {
+  const c = String(v ?? "").trim().toUpperCase();
+  return COUNTRY_CODES.includes(c) ? c : null;
+};
+// "PT" -> "Portugal" / "Portugal" / "Portogallo" … in the language of the screen.
+export function countryName(code: string, locale = "en-GB"): string {
+  try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code; } catch { return code; }
+}
+// Keep in step with LANGS in lib/i18n.tsx (that file is browser-only, so the codes are repeated here).
+export const PRODUCT_LANGS = ["en", "pt", "es", "fr", "it", "uk"];
+// The product name in the viewer's language; the default name when that language was not filled in.
+export const productName = (p: { name: string; names?: unknown }, lang: string): string => {
+  const n = (p.names as Record<string, unknown> | null | undefined)?.[lang];
+  return typeof n === "string" && n.trim() ? n.trim() : p.name;
+};
+// A product with no country is for everybody; otherwise it must match the group's country.
+export const productInCountry = (p: { country?: string | null }, country?: string | null): boolean =>
+  !p.country || p.country === (country ?? null);

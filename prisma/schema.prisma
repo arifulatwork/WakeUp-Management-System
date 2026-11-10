@@ -283,6 +283,7 @@ model Group {
   accessCode    String   @unique          // 8 characters, see lib/ordering.ts CODE_ALPHABET
   codeActive    Boolean  @default(true)
   memberLimit   Int?                      // how many students the coordinator allows in this group (null = no limit); only that many can join and order
+  country       String?                   // country code (lib/ordering.ts COUNTRY_CODES): the group only sees/orders the products of its country + the products for all countries
   coordinator   Worker?  @relation("GroupCoordinator", fields: [coordinatorId], references: [id], onDelete: SetNull)
   coordinatorId String?
   house         House?   @relation(fields: [houseId], references: [id], onDelete: SetNull)
@@ -305,6 +306,10 @@ model Product {
   // Approved alternatives / other brands: [{ id, name, brand?, dietaryTags: string[] }]
   alternatives Json    @default("[]")
   active      Boolean  @default(true)
+  // The product name in other languages: { "pt": "Leite", "es": "Leche" }. `name` stays the default / fallback.
+  names       Json     @default("{}")
+  photo       String?                     // catalogue photo: an "r2:photos/…" reference (or a small data URL, like the other photos)
+  country     String?                     // country code this product is sold in (null = available in every country)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

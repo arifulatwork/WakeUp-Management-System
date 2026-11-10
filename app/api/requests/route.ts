@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { currentSession } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { getOrdering } from "@/lib/settings";
-import { dateKey, dietaryGaps, orderingWindow } from "@/lib/ordering";
+import { dateKey, dietaryGaps, orderingWindow, productInCountry } from "@/lib/ordering";
 import { addToGroupOrder, groupsFor, intQty, jerr, OrderLocked, requestsWithLines, studentWithinLimit } from "@/lib/orderLogic";
 
 // GET /api/requests — student: their own · coordinator: their groups' · admin/manager: all. Newest first.
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   const seen = new Set<string>();
   const lines: Record<string, any>[] = [];
   for (const l of input) {
-    const p = products.find((x: any) => x.id === l?.productId && x.active);
+    const p = products.find((x: any) => x.id === l?.productId && x.active && productInCountry(x, group.country));
     if (!p) return jerr("product not available", 404);
     if (seen.has(p.id)) return jerr("each product only once");
     seen.add(p.id);

@@ -6,8 +6,8 @@ import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { S } from "@/components/ui";
-import { dietaryGaps } from "@/lib/ordering";
-import { altLabel, Flow, Info, Order, OrderingBanner, Pill, Product, Req, Stepper, useJson, when } from "@/components/ordering/common";
+import { dietaryGaps, productName } from "@/lib/ordering";
+import { altLabel, Flow, Info, Order, OrderingBanner, Pill, Product, ProductThumb, Req, Stepper, useJson, when } from "@/components/ordering/common";
 
 type Me = { name: string; groupName?: string; dietary?: string[] };
 type Pick = { qty: number; reason: string; alt: string };
@@ -15,7 +15,7 @@ type Pick = { qty: number; reason: string; alt: string };
 // STUDENT SCREEN — joined with the group code. Sees the catalogue and the standard quantities, sends a request
 // (with a reason when the quantity differs from the standard one), follows their requests and the group's order.
 export default function StudentPage() {
-  const { tr, ev, locale } = useI18n();
+  const { tr, ev, locale, lang } = useI18n();
   const [me, setMe] = useState<Me | null>(null);
   const info = useJson<Info | null>("/api/ordering", null);
   const products = useJson<Product[]>("/api/products", []);
@@ -98,9 +98,12 @@ export default function StudentPage() {
               return (
                 <div key={p.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{p.name}{p.brand && <span style={{ fontWeight: 400, color: "var(--ink-soft)" }}> · {p.brand}</span>}</div>
-                      <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}</div>
+                    <div style={{ minWidth: 0, display: "flex", gap: 10, alignItems: "center" }}>
+                      <ProductThumb p={p} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{productName(p, lang)}{p.brand && <span style={{ fontWeight: 400, color: "var(--ink-soft)" }}> · {p.brand}</span>}</div>
+                        <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}</div>
+                      </div>
                     </div>
                     {canOrder && !pending && (
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -162,7 +165,7 @@ export default function StudentPage() {
             <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
               {r.lines.map((l) => (
                 <li key={l.id}>
-                  {l.product?.name}{l.alternativeName ? ` → ${l.alternativeName}` : ""} × {l.quantity}
+                  {l.product ? productName(l.product, lang) : ""}{l.alternativeName ? ` → ${l.alternativeName}` : ""} × {l.quantity}
                   {l.standardQty != null && l.quantity !== l.standardQty && <em style={{ color: "var(--ink-soft)" }}> ({tr("standard")} {l.standardQty}: {l.exceptionReason})</em>}
                   {r.status === "APPROVED" && l.lineStatus === "REJECTED" && <strong style={{ color: "var(--red)" }}> — {ev("REJECTED")}</strong>}
                   {r.status === "APPROVED" && l.lineStatus === "APPROVED" && l.approvedQty != null && l.approvedQty !== l.quantity && <strong> — {tr("approved")}: {l.approvedQty}</strong>}
@@ -183,7 +186,7 @@ export default function StudentPage() {
             <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
               {o.lines.map((l) => (
                 <li key={l.id}>
-                  {l.product?.name}{l.alternativeName ? ` → ${l.alternativeName}` : ""} × {l.quantity}
+                  {l.product ? productName(l.product, lang) : ""}{l.alternativeName ? ` → ${l.alternativeName}` : ""} × {l.quantity}
                   {l.status === "UNAVAILABLE" && <strong style={{ color: "var(--red)" }}> — {tr("not available")}{l.missingNote ? `: ${l.missingNote}` : ""}</strong>}
                   {l.substituteName && <span style={{ color: "var(--ink-soft)" }}> → {l.substituteName}</span>}
                 </li>

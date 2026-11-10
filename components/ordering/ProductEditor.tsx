@@ -2,16 +2,18 @@
 
 import { useState } from "react";
 import { api, saveError } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { LANGS, useI18n } from "@/lib/i18n";
+import { PhotoPicker } from "@/components/Photos";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
-import { MAX_QTY } from "@/lib/ordering";
+import { COUNTRY_CODES, MAX_QTY, countryName } from "@/lib/ordering";
 import { Product } from "@/components/ordering/common";
 
 // Admin: add / edit a product with brand, standard quantity, dietary suitability and approved alternatives.
-export default function ProductEditor({ product, dietary, onClose, onSaved }: {
-  product: Product | null; dietary: string[]; onClose: () => void; onSaved: () => void;
+// `countries`: the countries this person may use (a coordinator: those of their own groups). Empty/undefined = any country, plus "All countries" (admin).
+export default function ProductEditor({ product, dietary, countries, onClose, onSaved }: {
+  product: Product | null; dietary: string[]; countries?: string[] | null; onClose: () => void; onSaved: () => void;
 }) {
-  const { tr } = useI18n();
+  const { tr, locale } = useI18n();
   const [name, setName] = useState(product?.name ?? "");
   const [category, setCategory] = useState(product?.category ?? "General");
   const [unit, setUnit] = useState(product?.unit ?? "pcs");
@@ -20,6 +22,11 @@ export default function ProductEditor({ product, dietary, onClose, onSaved }: {
   const [tags, setTags] = useState<string[]>(product?.dietaryTags ?? []);
   const [active, setActive] = useState(product?.active ?? true);
   const [alts, setAlts] = useState(product?.alternatives ?? []);
+  const [names, setNames] = useState<Record<string, string>>(product?.names ?? {});
+  const [country, setCountry] = useState(product?.country ?? countries?.[0] ?? "");
+  // photo: undefined = unchanged, null = remove, string = newly chosen file
+  const [photo, setPhoto] = useState<string | null | undefined>(undefined);
+  const photoSrc = photo !== undefined ? photo : product?.photo ?? null;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -27,7 +34,7 @@ export default function ProductEditor({ product, dietary, onClose, onSaved }: {
 
   async function save() {
     setSaving(true); setError("");
-    const body = { name, category, unit, brand, standardQty, dietaryTags: tags, active, alternatives: alts };
+    const body = { name, names, country: country || null, category, unit, brand, standardQty, dietaryTags: tags, active, alternatives: alts, ...(photo !== undefined ? { photo } : {}) };
     try {
       if (product) await api(`/api/products/${product.id}`, "PATCH", body); else await api("/api/products", "POST", body);
       onSaved();
@@ -44,6 +51,30 @@ export default function ProductEditor({ product, dietary, onClose, onSaved }: {
       <div style={{ maxHeight: "65vh", overflowY: "auto", paddingRight: 4 }}>
         <label style={S.label}>{tr("Name")}</label>
         <input style={S.input} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+        <label style={S.label}>{tr("Name in other languages")}</label>
+        <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginBottom: 4 }}>{tr("Shown to people who use that language. Empty = the name above.")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {LANGS.map((l) => (
+            <input key={l.code} style={S.input} placeholder={l.label} aria-label={l.label} value={names[l.code] ?? ""} maxLength={80}
+              onChange={(e) => setNames({ ...names, [l.code]: e.target.value })} />
+          ))}
+        </div>
+        <label style={S.label}>{tr("Country")}</label>
+        <select style={S.input} value={country} onChange={(e) => setCountry(e.target.value)}>
+          {!countries && <option value="">{tr("All countries")}</option>}
+          {(countries ?? COUNTRY_CODES).map((c) => <option key={c} value={c}>{countryName(c, locale)}</option>)}
+        </select>
+        <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("Only groups of this country can order this product. Choose All countries to let every group order it.")}</div>
+        <label style={S.label}>{tr("Product photo")}</label>
+        {photoSrc && (
+          <div style={{ position: "relative", marginBottom: 8, width: 120 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoSrc} alt="" style={{ width: 120, height: 120, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)", display: "block" }} />
+            <button type="button" aria-label={tr("Remove photo")} onClick={() => setPhoto(null)}
+              style={{ position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: "50%", border: "none", background: "#111", color: "#fff", cursor: "pointer", padding: 0 }}>×</button>
+          </div>
+        )}
+        <PhotoPicker showWhenOff label={`📷 ${photoSrc ? tr("Replace photo") : tr("Upload photo")}`} style={{ ...S.ghost, width: "100%" }} onPhoto={setPhoto} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div><label style={S.label}>{tr("Category")}</label><input style={S.input} value={category} maxLength={40} onChange={(e) => setCategory(e.target.value)} /></div>
           <div><label style={S.label}>{tr("Brand")}</label><input style={S.input} value={brand} maxLength={60} onChange={(e) => setBrand(e.target.value)} /></div>
@@ -71,7 +102,7 @@ export default function ProductEditor({ product, dietary, onClose, onSaved }: {
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> {tr("Available to order")}
         </label>
       </div>
-      <FormFooter saving={saving} canSave={!!name.trim()} onSave={save} onClose={onClose} onDelete={product ? remove : undefined} error={error} />
+      <FormFooter saving={saving} canSave={!!name.trim() && (!countries || !!country)} onSave={save} onClose={onClose} onDelete={product ? remove : undefined} error={error} />
     </Modal>
   );
 }

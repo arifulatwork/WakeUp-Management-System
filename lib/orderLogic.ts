@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { randomInt } from "crypto";
 import { db } from "@/lib/db";
 import type { FullSession } from "@/lib/guard";
-import { CODE_ALPHABET, CODE_LENGTH, MAX_QTY, Alternative } from "@/lib/ordering";
+import { CODE_ALPHABET, CODE_LENGTH, MAX_QTY, Alternative, PRODUCT_LANGS, cleanCountry, productInCountry } from "@/lib/ordering";
+import { MEDIA_ENABLED } from "@/lib/features";
+import { isValidPhoto } from "@/lib/photoValidation";
+import { slimProduct } from "@/lib/mediaSlim";
 
 // Server-side helpers shared by the ordering routes (groups, products, requests, orders).
 
@@ -30,6 +33,12 @@ export async function groupsFor(s: FullSession): Promise<any[]> {
   return [];
 }
 
+// The countries of the groups a coordinator runs (a coordinator may manage the products of these countries only).
+export async function coordinatorCountries(s: FullSession): Promise<string[]> {
+  const list = (await groupsFor(s)).map((g: any) => g.country as string | null).filter((c): c is string => !!c);
+  return Array.from(new Set(list));
+}
+
 // Admin, or the coordinator OF THIS group. (Managers only read.)
 export async function canManageGroup(s: FullSession, groupId: string): Promise<boolean> {
   if (s.role === "admin") return true;
@@ -41,13 +50,13 @@ export async function canManageGroup(s: FullSession, groupId: string): Promise<b
 export async function requestsWithLines(requests: any[]) {
   if (!requests.length) return [];
   const lines = await db.requestLine.findMany({ where: { requestId: { in: requests.map((r) => r.id) } }, include: { product: true } });
-  return requests.map((r) => ({ ...r, lines: lines.filter((l: any) => l.requestId === r.id) }));
+  return requests.map((r) => ({ ...r, lines: lines.filter((l: any) => l.requestId === r.id).map((l: any) => ({ ...l, product: slimProduct(l.product) })) }));
 }
 
 export async function ordersWithLines(orders: any[]) {
   if (!orders.length) return [];
   const lines = await db.orderLine.findMany({ where: { orderId: { in: orders.map((o) => o.id) } }, include: { product: true } });
-  return orders.map((o) => ({ ...o, lines: lines.filter((l: any) => l.orderId === o.id) }));
+  return orders.map((o) => ({ ...o, lines: lines.filter((l: any) => l.orderId === o.id).map((l: any) => ({ ...l, product: slimProduct(l.product) })) }));
 }
 
 export const MAX_MEMBER_LIMIT = 200;
@@ -129,6 +138,21 @@ export async function cleanProduct(b: any, partial: boolean): Promise<{ data?: R
   if (has("brand")) data.brand = str(b.brand, 60) || null;
   if (has("standardQty")) { const q = qty(b.standardQty ?? 1); if (q === null) return { error: `standard quantity must be 1-${MAX_QTY}` }; data.standardQty = q; }
   if (has("active")) data.active = b.active !== false;
+  if (has("country")) {
+    const raw = String(b.country ?? "").trim();
+    if (raw && !cleanCountry(raw)) return { error: "invalid country" };
+    data.country = raw ? cleanCountry(raw) : null;
+  }
+  if (has("names")) {
+    const out: Record<string, string> = {};
+    if (b.names && typeof b.names === "object") for (const l of PRODUCT_LANGS) { const n = str(b.names[l], 80); if (n) out[l] = n; }
+    data.names = out;
+  }
+  if (MEDIA_ENABLED && has("photo")) {
+    const v = b.photo || null;
+    if (v !== null && !isValidPhoto(v)) return { error: "invalid photo (JPEG, PNG or WebP)" };
+    data.photo = v;
+  }
   const known = await dietaryNames();
   const tags = (v: unknown) => (Array.isArray(v) ? Array.from(new Set(v.map((x) => String(x))))  .filter((x) => known.includes(x)) : []);
   if (has("dietaryTags")) data.dietaryTags = tags(b.dietaryTags);
@@ -147,14 +171,14 @@ export async function cleanProduct(b: any, partial: boolean): Promise<{ data?: R
 }
 
 // Validates [{ productId, quantity, alternativeId? }] for a coordinator-made order.
-export async function cleanOrderLines(input: unknown): Promise<{ lines?: { productId: string; quantity: number; alternativeName: string | null }[]; error?: string }> {
+export async function cleanOrderLines(input: unknown, country?: string | null): Promise<{ lines?: { productId: string; quantity: number; alternativeName: string | null }[]; error?: string }> {
   if (!Array.isArray(input) || !input.length) return { error: "choose at least one product" };
   if (input.length > 80) return { error: "too many products" };
   const products = await db.product.findMany({});
   const seen = new Set<string>();
   const lines = [];
   for (const l of input) {
-    const p = products.find((x: any) => x.id === l?.productId && x.active);
+    const p = products.find((x: any) => x.id === l?.productId && x.active && productInCountry(x, country));
     if (!p) return { error: "product not available" };
     const alt = l.alternativeId ? ((p.alternatives ?? []) as any[]).find((a) => a.id === l.alternativeId) : null;
     if (l.alternativeId && !alt) return { error: "alternative not found" };

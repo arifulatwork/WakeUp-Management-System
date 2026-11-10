@@ -8,7 +8,7 @@ import { useCan } from "@/lib/useSession";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useSectionVisibility } from "@/lib/useSectionVisibility";
 import { S } from "@/components/ui";
-import { dateKey } from "@/lib/ordering";
+import { dateKey, productName } from "@/lib/ordering";
 import { Flow, Info, Order, OrderingBanner, Pill, Product, Req, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
 import { Group, GroupCard, GroupEditor, OrderBuilder } from "@/components/ordering/GroupPanels";
 
@@ -17,7 +17,7 @@ const LABELS: Record<(typeof SECTIONS)[number], string> = { requests: "Student r
 
 // GROUPS & ORDERS — coordinators work with their own groups; managers can read everything; admins manage groups too.
 export default function GroupOrdersPage() {
-  const { tr, ev, locale } = useI18n();
+  const { tr, ev, locale, lang } = useI18n();
   const canReview = useCan("requests.review");
   const canCode = useCan("groups.code");
   const canManage = useCan("groups.manage");
@@ -120,7 +120,7 @@ export default function GroupOrdersPage() {
                 <tbody>
                   {o.lines.map((l) => (
                     <tr key={l.id}>
-                      <td style={td}>{l.product?.name}{l.alternativeName ? ` → ${l.alternativeName}` : ""}</td>
+                      <td style={td}>{l.product ? productName(l.product, lang) : ""}{l.alternativeName ? ` → ${l.alternativeName}` : ""}</td>
                       <td style={td}>{l.quantity} {l.product?.unit}</td>
                       <td style={td}>
                         {l.status === "PREPARED" ? `✓ ${l.preparedQty}${l.substituteName ? ` → ${l.substituteName}` : ""}${l.missingNote ? ` (${l.missingNote})` : ""}`
@@ -155,7 +155,7 @@ export default function GroupOrdersPage() {
 
 // A waiting student request: approve as is, change a quantity, drop a line, or reject it with a note.
 function RequestCard({ req, canReview, onDone }: { req: Req; canReview: boolean; onDone: () => void }) {
-  const { tr } = useI18n();
+  const { tr, lang } = useI18n();
   const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(req.lines.map((l) => [l.id, l.quantity])));
   const [drop, setDrop] = useState<Record<string, boolean>>({});
   const [note, setNote] = useState("");
@@ -190,7 +190,7 @@ function RequestCard({ req, canReview, onDone }: { req: Req; canReview: boolean;
         return (
           <div key={l.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "6px 0", borderTop: "1px solid var(--line)", opacity: drop[l.id] ? 0.45 : 1 }}>
             <div style={{ flex: "1 1 200px", fontSize: 13 }}>
-              {l.product?.name}{l.alternativeName ? ` → ${l.alternativeName}` : ""}
+              {l.product ? productName(l.product, lang) : ""}{l.alternativeName ? ` → ${l.alternativeName}` : ""}
               <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>
                 {tr("Standard")}: {l.standardQty} · {tr("asked")}: {l.quantity}
                 {exception && <> · <strong style={{ color: "#B8860B" }}>{tr("exception")}</strong>: {l.exceptionReason}</>}

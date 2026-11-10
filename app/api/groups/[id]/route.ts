@@ -4,11 +4,13 @@ import { currentSession } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { nameKey, normName } from "@/lib/houseMode";
+import { cleanCountry } from "@/lib/ordering";
 import { canManageGroup, cleanMemberLimit, groupStudents, jerr, newGroupCode } from "@/lib/orderLogic";
 
 // PATCH /api/groups/:id
 //   admin:                  { name?, coordinatorId?, houseId? }
 //   coordinator of group / admin: { codeAction: "regenerate" } | { codeActive: boolean }   (the secret code)
+//                                 { country: "PT" | … | null }   (the country whose products the group orders)
 //                                 { memberLimit: number | null }   (how many students may join and order; null = no limit)
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const me = await currentSession(req);
@@ -43,6 +45,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (b.codeAction === "regenerate") data.accessCode = await newGroupCode();
     else if (b.codeAction !== undefined) return jerr("invalid code action");
     if (typeof b.codeActive === "boolean") data.codeActive = b.codeActive;
+  }
+  // The country (which products the group sees): the admin or the coordinator of this group.
+  if (b.country !== undefined) {
+    if (!can(me.role, "groups.code") || !(await canManageGroup(me, group.id))) return jerr("forbidden", 403);
+    if (String(b.country ?? "").trim() && !cleanCountry(b.country)) return jerr("invalid country");
+    data.country = cleanCountry(b.country);
   }
   if (b.memberLimit !== undefined) {
     if (!can(me.role, "groups.code") || !(await canManageGroup(me, group.id))) return jerr("forbidden", 403);

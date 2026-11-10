@@ -6,14 +6,15 @@ import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { S } from "@/components/ui";
-import { altLabel, Flow, Line, Order, Pill, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
+import { productName } from "@/lib/ordering";
+import { altLabel, Flow, Line, Order, Pill, ProductThumb, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
 
 const ACTIVE = ["APPROVED", "PREPARING", "PREPARED"];
 
 // SUPPLIER / WAREHOUSE SCREEN — approved orders, consolidated quantities, preparing each group's products,
 // recording what is missing, and marking orders dispatched / delivered.
 export default function SupplierPage() {
-  const { tr, locale } = useI18n();
+  const { tr, locale, lang } = useI18n();
   const orders = useJson<Order[]>("/api/orders", []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -30,15 +31,15 @@ export default function SupplierPage() {
     const m = new Map<string, { name: string; unit: string; brand: string | null; total: number; done: number; parts: { group: string; qty: number; alt?: string | null }[] }>();
     for (const o of active) for (const l of o.lines) {
       const key = `${l.productId}|${l.alternativeName ?? ""}`;
-      const row = m.get(key) ?? { name: l.product?.name ?? "—", unit: l.product?.unit ?? "", brand: l.product?.brand ?? null, total: 0, done: 0, parts: [] };
-      row.name = l.alternativeName ? `${l.product?.name ?? ""} → ${l.alternativeName}` : row.name;
+      const row = m.get(key) ?? { name: l.product ? productName(l.product, lang) : "—", unit: l.product?.unit ?? "", brand: l.product?.brand ?? null, total: 0, done: 0, parts: [] };
+      row.name = l.alternativeName ? `${l.product ? productName(l.product, lang) : ""} → ${l.alternativeName}` : row.name;
       row.total += l.quantity;
       if (l.status === "PREPARED") row.done += l.preparedQty ?? l.quantity;
       row.parts.push({ group: o.group?.name ?? "—", qty: l.quantity, alt: l.alternativeName });
       m.set(key, row);
     }
     return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [active]);
+  }, [active, lang]);
 
   async function act(orderId: string, body: Record<string, unknown>) {
     setBusy(true); setErr("");
@@ -120,7 +121,7 @@ function OrderCard({ order: o, busy, onAct, locale }: { order: Order; busy: bool
 }
 
 function LineRow({ line: l, editable, busy, onAct }: { line: Line; editable: boolean; busy: boolean; onAct: (b: Record<string, unknown>) => void }) {
-  const { tr } = useI18n();
+  const { tr, lang } = useI18n();
   const [qty, setQty] = useState(String(l.quantity));
   const [note, setNote] = useState("");
   const [sub, setSub] = useState("");
@@ -131,7 +132,7 @@ function LineRow({ line: l, editable, busy, onAct }: { line: Line; editable: boo
     <div style={{ padding: "9px 10px", borderRadius: 8, background: bg, marginBottom: 4, border: "1px solid var(--line)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ minWidth: 0, fontSize: 13 }}>
-          <strong>{l.quantity} × {l.product?.name}</strong>{l.alternativeName && <span> → {l.alternativeName}</span>}
+          <ProductThumb p={l.product} size={32} /> <strong>{l.quantity} × {l.product ? productName(l.product, lang) : ""}</strong>{l.alternativeName && <span> → {l.alternativeName}</span>}
           <span style={{ color: "var(--ink-soft)" }}> {l.product?.unit}{l.product?.brand ? ` · ${l.product.brand}` : ""}</span>
           {l.status === "PREPARED" && <div style={{ fontSize: 11.5 }}>✓ {tr("prepared")}: {l.preparedQty}{l.substituteName ? ` → ${l.substituteName}` : ""}{l.missingNote ? ` — ${l.missingNote}` : ""}</div>}
           {l.status === "UNAVAILABLE" && <div style={{ fontSize: 11.5, color: "var(--red)" }}>✗ {tr("not available")}{l.missingNote ? `: ${l.missingNote}` : ""}</div>}
