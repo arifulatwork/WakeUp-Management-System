@@ -7,7 +7,8 @@ import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/useSession";
-import { S, StatusBadge, PriorityDot, TicketSortBar } from "@/components/ui";
+import { Pills, S, StatusBadge, PriorityDot, TicketSortBar } from "@/components/ui";
+import { ShowMore, norm } from "@/components/ordering/Pager";
 import { PhotoStrip } from "@/components/Photos";
 import { cmpText, dayKey, KEY_RANK, sortTickets, TicketSort } from "@/lib/sort";
 import TicketEditor, { EdTicket } from "@/components/editors/TicketEditor";
@@ -31,6 +32,9 @@ const SECTION_LABEL: Record<(typeof SECTIONS)[number], string> = {
 };
 
 const KEY_STATES = ["AT_OFFICE", "WITH_CLEANER", "WITH_GUEST", "MISSING"];
+const KEY_FILTERS = ["ALL", ...KEY_STATES];
+const LIST_STEP = 5;   // requests shown at first, and added by each "Show more"
+const KEYS_STEP = 8;   // houses shown at first in the key list
 
 // The single screen Manager / Ops check first each morning. Every list is
 // editable: tickets, material requests, houses and key status.
@@ -46,6 +50,13 @@ export default function OpsOverview() {
   const [ticketSort, setTicketSort] = useState<TicketSort>("priority");
   const vis = useSectionVisibility("opsSections", SECTIONS);
   const shown = vis.shown;
+  const [matQ, setMatQ] = useState("");
+  const [matShown, setMatShown] = useState(LIST_STEP);
+  const [keyF, setKeyF] = useState("ALL");
+  const [keyQ, setKeyQ] = useState("");
+  const [keyShown, setKeyShown] = useState(KEYS_STEP);
+  useEffect(() => setMatShown(LIST_STEP), [matQ]);
+  useEffect(() => setKeyShown(KEYS_STEP), [keyF, keyQ]);
 
   const [ticketEd, setTicketEd] = useState<{ ticket: Ticket | null } | null>(null);
   const [matEd, setMatEd] = useState<{ request: MaterialReq | null } | null>(null);
@@ -129,6 +140,17 @@ export default function OpsOverview() {
     .slice(0, 3);
   // Keys: anything unusual (missing, out with someone) before keys sitting at the office.
   const sortedHouses = [...houses].sort((a, b) => KEY_RANK[a.keyStatus] - KEY_RANK[b.keyStatus] || cmpText(a.name, b.name));
+
+  // Search + paging for the two side lists (the queue itself stays in the same order).
+  const matNeedle = norm(matQ.trim());
+  const matHit = (m: MaterialReq) => !matNeedle || [m.house.name, m.items, tr(m.items), m.requestedBy.name].some((v) => norm(v).includes(matNeedle));
+  const pendingMatching = pending.filter(matHit);
+  const pendingShown = pendingMatching.slice(0, matShown);
+  const recentShown = recentDone.filter(matHit);
+  const keyNeedle = norm(keyQ.trim());
+  const keysMatching = sortedHouses.filter((h) => (keyF === "ALL" || h.keyStatus === keyF) && (!keyNeedle || norm(h.name).includes(keyNeedle)));
+  const keysShown = keysMatching.slice(0, keyShown);
+  const keyCount = (f: string) => (f === "ALL" ? houses.length : houses.filter((h) => h.keyStatus === f).length);
 
   // Daily workload per person, in minutes: time already worked today (from the real start/finish
   // times) and time still planned (estimates of today's jobs that are not done yet).
@@ -289,7 +311,11 @@ export default function OpsOverview() {
         {/* ---- material requests ---- */}
         {shown.materials && (
           <PanelCard title={tr("Pending material requests")} action={<button style={S.smallDark} onClick={() => setMatEd({ request: null })}>+ {tr("New request")}</button>}>
-            {pending.map((m) => (
+            {pending.length > LIST_STEP && (
+              <input type="search" value={matQ} onChange={(e) => setMatQ(e.target.value)} maxLength={60} aria-label={tr("Search houses, items or people…")}
+                placeholder={tr("Search houses, items or people…")} style={{ ...S.input, boxSizing: "border-box", marginBottom: 8 }} />
+            )}
+            {pendingShown.map((m) => (
               <div key={m.id} style={row}>
                 <b>{m.house.name}</b>
                 <div style={sub}>{tr("{items} — requested by {name}", { items: tr(m.items), name: m.requestedBy.name })}</div>
@@ -299,11 +325,14 @@ export default function OpsOverview() {
                 </div>
               </div>
             ))}
+            <ShowMore hidden={pendingMatching.length - pendingShown.length} total={pendingMatching.length} step={LIST_STEP}
+              onMore={() => setMatShown(matShown + LIST_STEP)} onAll={() => setMatShown(pendingMatching.length)} />
             {pending.length === 0 && <p style={empty}>{tr("Nothing pending.")}</p>}
-            {recentDone.length > 0 && (
+            {pending.length > 0 && pendingMatching.length === 0 && <p style={empty}>{tr("No matching requests.")}</p>}
+            {recentShown.length > 0 && (
               <>
                 <div style={{ fontSize: 10.5, textTransform: "uppercase", color: "var(--ink-soft)", margin: "12px 0 6px" }}>{tr("Fulfilled")}</div>
-                {recentDone.map((m) => (
+                {recentShown.map((m) => (
                   <div key={m.id} style={{ ...row, opacity: 0.7 }}>
                     <b>{m.house.name}</b>
                     <div style={sub}>{tr(m.items)}</div>
@@ -321,7 +350,16 @@ export default function OpsOverview() {
         {/* ---- houses & keys ---- */}
         {shown.keys && (
           <PanelCard title={tr("Key status")} action={canCreateHouse ? <button style={S.smallDark} onClick={() => setHouseEd({ house: null })}>+ {tr("New house")}</button> : undefined}>
-            {sortedHouses.map((h) => (
+            {houses.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <Pills options={KEY_FILTERS} value={keyF} onChange={setKeyF} label={(k) => `${k === "ALL" ? tr("All") : ev(k)} (${keyCount(k)})`} />
+                {houses.length > KEYS_STEP && (
+                  <input type="search" value={keyQ} onChange={(e) => setKeyQ(e.target.value)} maxLength={60} aria-label={tr("Search houses…")}
+                    placeholder={tr("Search houses…")} style={{ ...S.input, boxSizing: "border-box", marginTop: 8 }} />
+                )}
+              </div>
+            )}
+            {keysShown.map((h) => (
               <div key={h.id} style={{ ...row, flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <span style={{ flex: 1, minWidth: 0 }}>{h.name}</span>
                 <select value={h.keyStatus} onChange={(e) => setKey(h.id, e.target.value)}
@@ -331,7 +369,10 @@ export default function OpsOverview() {
                 {canEditHouse && <button style={S.small} onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>}
               </div>
             ))}
+            <ShowMore hidden={keysMatching.length - keysShown.length} total={keysMatching.length} step={KEYS_STEP}
+              onMore={() => setKeyShown(keyShown + KEYS_STEP)} onAll={() => setKeyShown(keysMatching.length)} />
             {houses.length === 0 && <p style={empty}>{tr("No houses yet.")}</p>}
+            {houses.length > 0 && keysMatching.length === 0 && <p style={empty}>{tr("No matching houses.")}</p>}
           </PanelCard>
         )}
         </div>

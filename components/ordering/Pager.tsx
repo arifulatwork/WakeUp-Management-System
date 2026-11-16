@@ -20,3 +20,15 @@ export function Pager({ page, pages, onPage }: { page: number; pages: number; on
     </div>
   );
 }
+
+// "Show 5 more · Show all (23)" — for short queues and side lists where numbered pages would be too heavy.
+export function ShowMore({ hidden, total, step, onMore, onAll }: { hidden: number; total: number; step: number; onMore: () => void; onAll: () => void }) {
+  const { tr } = useI18n();
+  if (hidden <= 0) return null;
+  return (
+    <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", paddingTop: 8 }}>
+      <button type="button" style={S.small} onClick={onMore}>{tr("Show {n} more", { n: Math.min(step, hidden) })}</button>
+      <button type="button" style={S.small} onClick={onAll}>{tr("Show all")} ({total})</button>
+    </div>
+  );
+}
