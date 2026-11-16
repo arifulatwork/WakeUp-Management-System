@@ -1,19 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
 import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useCan } from "@/lib/useSession";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useSectionVisibility } from "@/lib/useSectionVisibility";
-import { S } from "@/components/ui";
+import { Pills, S } from "@/components/ui";
 import { dateKey, productName } from "@/lib/ordering";
 import { Flow, Info, Order, OrderingBanner, Pill, Product, Req, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
 import { Group, GroupCard, GroupEditor, OrderBuilder } from "@/components/ordering/GroupPanels";
 
 const SECTIONS = ["requests", "orders", "groups"] as const;
 const LABELS: Record<(typeof SECTIONS)[number], string> = { requests: "Student requests", orders: "Orders", groups: "Groups & codes" };
+
+// Paging and filtering of the long lists.
+const ORDERS_PER_PAGE = 10;
+const GROUPS_PER_PAGE = 8;
+const STATUS_FILTERS = ["ACTIVE", "OPEN", "WITH_SUPPLIER", "DISPATCHED", "DELIVERED", "CANCELLED", "ALL"];
+const STATUS_LABEL: Record<string, string> = {
+  ACTIVE: "Active", OPEN: "Open", WITH_SUPPLIER: "With the supplier", DISPATCHED: "On the way",
+  DELIVERED: "Delivered", CANCELLED: "Cancelled", ALL: "All",
+};
+
+// Lower-case and without accents, so "jose" finds "José".
+const norm = (v: unknown) => String(v ?? "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+
+function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (p: number) => void }) {
+  const { tr } = useI18n();
+  if (pages <= 1) return null;
+  const btn = (off: boolean): CSSProperties => ({ ...S.small, opacity: off ? 0.4 : 1, cursor: off ? "default" : "pointer" });
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "12px 16px", fontSize: 12.5, color: "var(--ink-soft)" }}>
+      <button type="button" style={btn(page <= 1)} disabled={page <= 1} onClick={() => onPage(page - 1)}>‹ {tr("Previous")}</button>
+      <span>{tr("Page {n} of {total}", { n: page, total: pages })}</span>
+      <button type="button" style={btn(page >= pages)} disabled={page >= pages} onClick={() => onPage(page + 1)}>{tr("Next")} ›</button>
+    </div>
+  );
+}
 
 // GROUPS & ORDERS — coordinators work with their own groups; managers can read everything; admins manage groups too.
 export default function GroupOrdersPage() {
@@ -35,6 +60,11 @@ export default function GroupOrdersPage() {
   const [groupEd, setGroupEd] = useState<{ group: Group | null } | null>(null);
   const [builder, setBuilder] = useState<{ group: Group; order: Order | null } | null>(null);
   const [err, setErr] = useState("");
+  const [q, setQ] = useState("");
+  const [statusF, setStatusF] = useState("ACTIVE"); // finished orders stay out of the way until asked for
+  const [orderPage, setOrderPage] = useState(1);
+  const [groupPage, setGroupPage] = useState(1);
+  useEffect(() => { setOrderPage(1); setGroupPage(1); }, [q, statusF]);
 
   const refresh = () => { info.reload(); groups.reload(); requests.reload(); orders.reload(); products.reload(); dietary.reload(); };
   useLiveRefresh(refresh, { models: ["group", "worker", "studentRequest", "requestLine", "order", "orderLine", "product", "dietaryRequirement", "appSetting"] });
@@ -50,8 +80,29 @@ export default function GroupOrdersPage() {
   // Coordinators order themselves only in the "coordinator orders" model; admins may always.
   const mayBuild = canCreate && (cfg?.model === "COORDINATOR_ORDERS" || canManage) && (orderingNow || canManage);
   const pending = requests.data.filter((r) => r.status === "PENDING");
-  const decided = requests.data.filter((r) => r.status !== "PENDING").slice(0, 8);
   const sortedOrders = orders.data.slice().sort((a, b) => b.orderDate.localeCompare(a.orderDate) || (a.group?.name ?? "").localeCompare(b.group?.name ?? ""));
+
+  // ---- search + filter + paging ----
+  const needle = norm(q.trim());
+  const searching = needle.length > 0;
+  const hit = (...parts: unknown[]) => !searching || parts.some((p) => norm(p).includes(needle));
+  const statusMatch = (o: Order, f: string) =>
+    f === "ALL" ? true
+    : f === "ACTIVE" ? o.status !== "CANCELLED" && !(o.status === "DELIVERED" && (o.receivedAt || !canCreate)) // a delivered order still waiting for "Confirm received" stays active
+    : f === "WITH_SUPPLIER" ? ["APPROVED", "PREPARING", "PREPARED"].includes(o.status)
+    : o.status === f;
+
+  const pendingShown = pending.filter((r) => hit(r.student?.name, r.group?.name));
+  const decidedShown = requests.data.filter((r) => r.status !== "PENDING" && hit(r.student?.name, r.group?.name)).slice(0, 8);
+  const ordersMatching = sortedOrders.filter((o) => statusMatch(o, statusF) && hit(o.group?.name, o.orderDate, o.deliveryDate, ...o.lines.map((l) => (l.product ? productName(l.product, lang) : ""))));
+  const orderPages = Math.max(1, Math.ceil(ordersMatching.length / ORDERS_PER_PAGE));
+  const curOrderPage = Math.min(orderPage, orderPages);
+  const pagedOrders = ordersMatching.slice((curOrderPage - 1) * ORDERS_PER_PAGE, curOrderPage * ORDERS_PER_PAGE);
+  const groupsMatching = groups.data.filter((g) => hit(g.name, g.house?.name, g.coordinator?.name, g.accessCode));
+  const groupPages = Math.max(1, Math.ceil(groupsMatching.length / GROUPS_PER_PAGE));
+  const curGroupPage = Math.min(groupPage, groupPages);
+  const pagedGroups = groupsMatching.slice((curGroupPage - 1) * GROUPS_PER_PAGE, curGroupPage * GROUPS_PER_PAGE);
+  const statusCount = (f: string) => sortedOrders.filter((o) => statusMatch(o, f)).length;
 
   async function orderAction(o: Order, action: string) {
     setErr("");
@@ -80,14 +131,23 @@ export default function GroupOrdersPage() {
       </StatGrid>
       {err && <p style={{ color: "var(--red)", fontSize: 12.5 }}>{err}</p>}
 
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 18 }}>
+        <input
+          type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={60}
+          placeholder={tr("Search groups, students or orders…")} aria-label={tr("Search groups, students or orders…")}
+          style={{ ...S.input, maxWidth: 420 }}
+        />
+        {searching && <button type="button" style={S.small} onClick={() => setQ("")}>{tr("Clear")}</button>}
+      </div>
+
       {vis.shown.requests && (
         <PanelCard title={`${tr("Student requests")} (${pending.length})`} subtitle={cfg?.model === "COORDINATOR_ORDERS" ? tr("Students do not send requests in the current ordering model.") : undefined}>
-          {!pending.length && <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: 0 }}>{tr("No requests waiting.")}</p>}
-          {pending.map((r) => <RequestCard key={r.id} req={r} canReview={canReview} onDone={refresh} />)}
-          {decided.length > 0 && (
+          {!pendingShown.length && <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: 0 }}>{pending.length ? tr("No matching requests.") : tr("No requests waiting.")}</p>}
+          {pendingShown.map((r) => <RequestCard key={r.id} req={r} canReview={canReview} onDone={refresh} />)}
+          {decidedShown.length > 0 && (
             <div style={{ marginTop: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 6 }}>{tr("Recently decided")}</div>
-              {decided.map((r) => (
+              {decidedShown.map((r) => (
                 <div key={r.id} style={{ fontSize: 12.5, padding: "5px 0", borderBottom: "1px solid var(--line)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <Pill status={r.status} /> <strong>{r.student?.name}</strong> · {r.group?.name} · {r.lines.length} {tr("products")} · {when(r.createdAt, locale)}
                 </div>
@@ -99,8 +159,17 @@ export default function GroupOrdersPage() {
 
       {vis.shown.orders && (
         <PanelCard title={tr("Orders")} subtitle={tr("Follow each group's order until it is delivered.")} flush>
+          {sortedOrders.length > 0 && (
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
+              <Pills
+                options={STATUS_FILTERS} value={statusF} onChange={setStatusF}
+                label={(f) => `${tr(STATUS_LABEL[f])} (${statusCount(f)})`}
+              />
+            </div>
+          )}
           {!sortedOrders.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No orders yet.")}</p>}
-          {sortedOrders.map((o) => (
+          {sortedOrders.length > 0 && !ordersMatching.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching orders.")}</p>}
+          {pagedOrders.map((o) => (
             <div key={o.id} style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
                 <div><strong>{o.group?.name}</strong> <span style={{ color: "var(--ink-soft)", fontSize: 12 }}>· {o.orderDate}{o.deliveryDate ? ` → ${tr("Delivery")}: ${o.deliveryDate}` : ""} · {unitsOf(o.lines)} {tr("units")}</span></div>
@@ -134,17 +203,20 @@ export default function GroupOrdersPage() {
               {(o.dispatchedAt || o.deliveredAt) && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", margin: "6px 0 0" }}>{o.dispatchedAt && `${tr("Dispatched")}: ${when(o.dispatchedAt, locale)}`} {o.deliveredAt && `· ${tr("Delivered")}: ${when(o.deliveredAt, locale)}`} {o.receivedAt && `· ✓ ${tr("Received")}: ${when(o.receivedAt, locale)}`}</p>}
             </div>
           ))}
+          <Pager page={curOrderPage} pages={orderPages} onPage={setOrderPage} />
         </PanelCard>
       )}
 
       {vis.shown.groups && (
         <>
           {!groups.data.length && <PanelCard><p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No groups yet.")}</p></PanelCard>}
-          {groups.data.map((g) => (
+          {groups.data.length > 0 && !groupsMatching.length && <PanelCard><p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching groups.")}</p></PanelCard>}
+          {pagedGroups.map((g) => (
             <GroupCard key={g.id} group={g} dietary={dietary.data.map((d) => d.name)} canCode={canCode} canManage={canManage}
               onChanged={refresh} onEdit={() => setGroupEd({ group: g })}
               onOrder={mayBuild && !orders.data.some((o) => o.groupId === g.id && o.orderDate === today && o.status !== "CANCELLED") ? () => setBuilder({ group: g, order: null }) : undefined} />
           ))}
+          <Pager page={curGroupPage} pages={groupPages} onPage={setGroupPage} />
         </>
       )}
 
