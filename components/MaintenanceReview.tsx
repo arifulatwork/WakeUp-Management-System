@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PanelCard } from "@/components/PanelShell";
 import { S, PriorityDot } from "@/components/ui";
 import { PhotoStrip, VideoStrip } from "@/components/Photos";
 import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { formatMinutes } from "@/lib/formatDuration";
+import { norm } from "@/components/ordering/Pager";
+
+const STEP = 5; // tickets shown at first, and added by each "Show more"
 
 // "Maintenance to review": every ticket the maintenance team has handed in (status TO_BE_VERIFIED).
 // The office checks the work (time, materials, photos / videos) and either confirms it (the ticket
@@ -23,9 +27,20 @@ export default function MaintenanceReview({ tickets, onChanged }: { tickets: Rev
   const { tr, locale } = useI18n();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [q, setQ] = useState("");
+  const [shown, setShown] = useState(STEP);
+  useEffect(() => setShown(STEP), [q]);
   const waiting = tickets
     .filter((t) => t.status === "TO_BE_VERIFIED")
     .sort((a, b) => +new Date(a.closedAt ?? 0) - +new Date(b.closedAt ?? 0)); // waited longest first
+
+  // The search box only appears once the queue is longer than one screenful.
+  const needle = norm(q.trim());
+  const matching = needle
+    ? waiting.filter((t) => [t.house?.name, t.assignedWorker?.name, t.area, tr(t.area), t.description, tr(t.description)].some((v) => norm(v).includes(needle)))
+    : waiting;
+  const visible = matching.slice(0, shown);
+  const hidden = matching.length - visible.length;
 
   async function act(id: string, action: "confirm" | "sendBack") {
     setBusy(id);
@@ -46,7 +61,11 @@ export default function MaintenanceReview({ tickets, onChanged }: { tickets: Rev
       title={`${tr("Maintenance to review")} (${waiting.length})`}
       subtitle={tr("Work finished by the maintenance team — confirm it or send it back.")}
     >
-      {waiting.map((t) => (
+      {waiting.length > STEP && (
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={60} aria-label={tr("Search houses, workers or issues…")}
+          placeholder={tr("Search houses, workers or issues…")} style={{ ...S.input, boxSizing: "border-box", marginBottom: 10, maxWidth: 420 }} />
+      )}
+      {visible.map((t) => (
         <div key={t.id} style={{ padding: "10px 0", borderTop: "1px solid var(--line)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <PriorityDot p={t.priority} />
@@ -55,7 +74,7 @@ export default function MaintenanceReview({ tickets, onChanged }: { tickets: Rev
           </div>
           <div style={sub}>{tr(t.area)} — {tr(t.description)}</div>
           <div style={sub}>
-            {[t.assignedWorker?.name, t.timeSpentMinutes ? `${t.timeSpentMinutes} min` : null, t.materialsUsed].filter(Boolean).join(" · ")}
+            {[t.assignedWorker?.name, t.timeSpentMinutes ? formatMinutes(t.timeSpentMinutes) : null, t.materialsUsed].filter(Boolean).join(" · ")}
           </div>
           <PhotoStrip photos={t.mediaData?.photos ?? []} size={56} />
           <VideoStrip videos={t.mediaData?.videos ?? []} />
@@ -65,6 +84,13 @@ export default function MaintenanceReview({ tickets, onChanged }: { tickets: Rev
           </div>
         </div>
       ))}
+      {hidden > 0 && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+          <button type="button" style={S.small} onClick={() => setShown(shown + STEP)}>{tr("Show {n} more", { n: Math.min(STEP, hidden) })}</button>
+          <button type="button" style={S.small} onClick={() => setShown(matching.length)}>{tr("Show all")} ({matching.length})</button>
+        </div>
+      )}
+      {waiting.length > 0 && matching.length === 0 && <p style={{ fontSize: 12.5, color: "var(--ink-soft)", margin: 0 }}>{tr("No matching tickets.")}</p>}
       {waiting.length === 0 && <p style={{ fontSize: 12.5, color: "var(--ink-soft)", margin: 0 }}>{tr("Nothing waiting for review.")}</p>}
       {error && <p style={{ fontSize: 12, color: "#C1503C", fontWeight: 600 }}>{error}</p>}
     </PanelCard>
