@@ -242,7 +242,7 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
             {withDiet.map((s) => <div key={s.id}>{s.name}: {s.dietary.join(", ")}</div>)}
           </div>
         )}
-        <button style={{ ...S.small, margin: "10px 0" }} onClick={fillStandard}>{tr("Fill standard quantities × {n} students", { n: Math.max(1, group.memberLimit ?? students.length) })}</button>
+        <button style={{ ...S.small, margin: "10px 0" }} onClick={fillStandard}>{tr("Fill standard quantities (per-student products × {n} students)", { n: Math.max(1, group.memberLimit ?? students.length) })}</button>
         {active.map((p) => (
           <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
             <ProductThumb p={p} size={36} />
