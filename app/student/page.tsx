@@ -70,6 +70,11 @@ export default function StudentPage() {
     refresh();
   }
 
+  async function confirmReceived(id: string) {
+    try { await api(`/api/orders/${id}`, "PATCH", { action: "confirm" }); } catch { /* shown by refresh */ }
+    refresh();
+  }
+
   const myOrders = orders.data.slice().sort((a, b) => b.orderDate.localeCompare(a.orderDate));
 
   return (
@@ -82,7 +87,7 @@ export default function StudentPage() {
           : <p style={{ fontSize: 12.5, color: "var(--ink-soft)", margin: 0 }}>{tr("None registered. If you have one, tell your coordinator.")}</p>}
       </PanelCard>
 
-      <PanelCard title={tr("Products")} subtitle={cfg?.model === "STUDENT_REQUESTS" ? tr("Standard quantity is per person. Ask for a different quantity only with a reason.") : tr("Standard quantities per person.")}>
+      <PanelCard title={tr("Products")} subtitle={cfg?.model === "STUDENT_REQUESTS" ? tr("Ask for a different quantity only with a reason. Packs are ordered once for the whole group; fruit is per person.") : tr("Standard quantities.")}>
         {msg && <p style={{ fontSize: 12.5, color: msg.ok ? "var(--green-dark)" : "var(--red)", marginTop: 0 }}>{msg.text}</p>}
         {pending && <p style={{ fontSize: 12.5, marginTop: 0 }}>⏳ {tr("You already have a request waiting for approval.")}</p>}
         {!products.data.length && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>{tr("No products yet.")}</p>}
@@ -102,7 +107,7 @@ export default function StudentPage() {
                       <ProductThumb p={p} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600 }}>{productName(p, lang)}{p.brand && <span style={{ fontWeight: 400, color: "var(--ink-soft)" }}> · {p.brand}</span>}</div>
-                        <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}</div>
+                        <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}{p.perStudent ? ` · ${tr("per student")}` : ` · ${tr("for the group")}`}</div>
                       </div>
                     </div>
                     {canOrder && !pending && (
@@ -127,10 +132,12 @@ export default function StudentPage() {
                       {suitable.length > 0 && <> — {tr("Try")}: {suitable.map(altLabel).join(" / ")}</>}
                     </div>
                   )}
-                  {canOrder && !pending && pick.qty > 0 && p.alternatives.length > 0 && (
+                  {canOrder && !pending && pick.qty > 0 && dietary.length > 0 && dietaryGaps(dietary, p.dietaryTags).length > 0 && suitable.length > 0 && (
+                    // an alternative is only offered for a registered dietary need that the standard product does not cover
+
                     <select style={{ ...S.input, marginTop: 6 }} value={pick.alt} onChange={(e) => set(p.id, { alt: e.target.value })}>
                       <option value="">{tr("Standard product")}</option>
-                      {p.alternatives.map((a) => <option key={a.id} value={a.id}>{altLabel(a)}{dietaryGaps(dietary, a.dietaryTags).length === 0 && dietary.length ? " ✓" : ""}</option>)}
+                      {suitable.map((a) => <option key={a.id} value={a.id}>{altLabel(a)} ✓</option>)}
                     </select>
                   )}
                   {exception && (
@@ -181,8 +188,11 @@ export default function StudentPage() {
         {!myOrders.length && <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: 0 }}>{tr("No orders yet.")}</p>}
         {myOrders.slice(0, 6).map((o) => (
           <div key={o.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
-            <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>{o.orderDate}</div>
+            <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>{o.orderDate}{o.deliveryDate ? ` → ${tr("Delivery")}: ${o.deliveryDate}` : ""}</div>
             <Flow status={o.status} />
+            {o.status === "DELIVERED" && (o.receivedAt
+              ? <p style={{ fontSize: 12, margin: "8px 0 0", color: "var(--green-dark)" }}>✓ {tr("Received")}: {when(o.receivedAt, locale)}</p>
+              : <button style={{ ...S.smallDark, marginTop: 8 }} onClick={() => confirmReceived(o.id)}>{tr("Confirm received")}</button>)}
             <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
               {o.lines.map((l) => (
                 <li key={l.id}>

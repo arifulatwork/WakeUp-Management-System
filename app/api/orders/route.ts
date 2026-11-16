@@ -4,11 +4,12 @@ import { currentSession } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { getOrdering } from "@/lib/settings";
-import { dateKey, orderingWindow, SUPPLIER_STATUSES } from "@/lib/ordering";
+import { dateKey, deliveryDateKey, orderingWindow, SUPPLIER_STATUSES } from "@/lib/ordering";
 import { canManageGroup, cleanOrderLines, groupsFor, jerr, ordersWithLines } from "@/lib/orderLogic";
 
-const publicOrder = (o: any) => ({
+const publicOrder = (o: any, delay = 1) => ({
   ...o,
+  deliveryDate: deliveryDateKey(o.orderDate, delay),
   group: o.group ? { id: o.group.id, name: o.group.name } : null,
   createdBy: o.createdBy ? { id: o.createdBy.id, name: o.createdBy.name } : null,
 });
@@ -23,7 +24,8 @@ export async function GET(req: NextRequest) {
   else if (me.role === "supplier") where = { status: { in: SUPPLIER_STATUSES } };
   else if (!["admin", "manager"].includes(me.role)) return jerr("forbidden", 403);
   const rows = await db.order.findMany({ where, include: { group: true, createdBy: true }, orderBy: { createdAt: "desc" }, take: 300 });
-  return NextResponse.json((await ordersWithLines(rows)).map(publicOrder));
+  const { deliveryDelayDays } = await getOrdering();
+  return NextResponse.json((await ordersWithLines(rows)).map((o: any) => publicOrder(o, deliveryDelayDays)));
 }
 
 // POST /api/orders { groupId, lines, note? } — the coordinator creates (or rewrites) the group's order for today.
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
     const win = orderingWindow(cfg);
     if (!win.open) return NextResponse.json({ error: "ordering closed", reason: win.reason, nextDay: win.nextDay }, { status: 403 });
   }
-  const { lines, error } = await cleanOrderLines(b.lines, group.country);
+  const { lines, error } = await cleanOrderLines(b.lines, group.country, { allowExceptions: cfg.allowExceptions, admin: me.role === "admin" });
   if (error || !lines) return jerr(error ?? "invalid lines");
 
   const orderDate = dateKey();

@@ -94,11 +94,15 @@ export async function addToGroupOrder(groupId: string, orderDate: string, actorI
   if (order && order.status !== "OPEN") throw new OrderLocked();
   if (!order) order = await db.order.create({ data: { groupId, orderDate, createdById: actorId, status: "OPEN" } });
   const existing = await db.orderLine.findMany({ where: { orderId: order.id } });
+  // A product with a group quantity (a pack) is ordered once for the group: two students asking for it do not double it.
+  // Only per-student products (fruit) add up.
+  const prods = await db.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
   for (const it of items) {
     const alt = it.alternativeName ?? null;
     const same = existing.find((l: any) => l.productId === it.productId && (l.alternativeName ?? null) === alt);
     if (same) {
-      same.quantity = Math.min(999, same.quantity + it.quantity);
+      const perStudent = !!prods.find((p: any) => p.id === it.productId)?.perStudent;
+      same.quantity = perStudent ? Math.min(999, same.quantity + it.quantity) : Math.max(same.quantity, it.quantity);
       await db.orderLine.update({ where: { id: same.id }, data: { quantity: same.quantity } });
     } else {
       const row = await db.orderLine.create({ data: { orderId: order.id, productId: it.productId, quantity: it.quantity, alternativeName: alt } });
@@ -138,6 +142,7 @@ export async function cleanProduct(b: any, partial: boolean): Promise<{ data?: R
   if (has("brand")) data.brand = str(b.brand, 60) || null;
   if (has("standardQty")) { const q = qty(b.standardQty ?? 1); if (q === null) return { error: `standard quantity must be 1-${MAX_QTY}` }; data.standardQty = q; }
   if (has("active")) data.active = b.active !== false;
+  if (has("perStudent")) data.perStudent = b.perStudent === true;
   if (has("country")) {
     const raw = String(b.country ?? "").trim();
     if (raw && !cleanCountry(raw)) return { error: "invalid country" };
@@ -171,7 +176,7 @@ export async function cleanProduct(b: any, partial: boolean): Promise<{ data?: R
 }
 
 // Validates [{ productId, quantity, alternativeId? }] for a coordinator-made order.
-export async function cleanOrderLines(input: unknown, country?: string | null): Promise<{ lines?: { productId: string; quantity: number; alternativeName: string | null }[]; error?: string }> {
+export async function cleanOrderLines(input: unknown, country?: string | null, rules: { allowExceptions: boolean; admin: boolean } = { allowExceptions: true, admin: true }): Promise<{ lines?: { productId: string; quantity: number; alternativeName: string | null; standardQty: number; exceptionReason: string | null }[]; error?: string }> {
   if (!Array.isArray(input) || !input.length) return { error: "choose at least one product" };
   if (input.length > 80) return { error: "too many products" };
   const products = await db.product.findMany({});
@@ -186,8 +191,14 @@ export async function cleanOrderLines(input: unknown, country?: string | null): 
     if (seen.has(key)) return { error: "each product only once" };
     seen.add(key);
     const quantity = Math.floor(Number(l.quantity));
-    if (!Number.isFinite(quantity) || quantity < 1 || quantity > 999) return { error: "invalid quantity" };
-    lines.push({ productId: p.id, quantity, alternativeName: alt ? `${alt.name}${alt.brand ? ` (${alt.brand})` : ""}` : null });
+    // a group quantity is limited like student requests (1-99); a per-student product scales with the group size
+    if (!Number.isFinite(quantity) || quantity < 1 || quantity > (p.perStudent ? 999 : MAX_QTY)) return { error: "invalid quantity" };
+    // A group quantity that differs from the standard one is an exception: it needs a reason (and the admin must allow exceptions).
+    const exception = !p.perStudent && quantity !== p.standardQty;
+    const reason = String(l.reason ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+    if (exception && !rules.allowExceptions && !rules.admin) return { error: "quantity must be the standard quantity" };
+    if (exception && reason.length < 3) return { error: "reason required" };
+    lines.push({ productId: p.id, quantity, alternativeName: alt ? `${alt.name}${alt.brand ? ` (${alt.brand})` : ""}` : null, standardQty: p.standardQty, exceptionReason: exception ? reason : null });
   }
   return { lines };
 }

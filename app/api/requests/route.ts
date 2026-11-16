@@ -66,6 +66,9 @@ export async function POST(req: NextRequest) {
     if (l.alternativeId) {
       alt = ((p.alternatives ?? []) as any[]).find((a) => a.id === l.alternativeId);
       if (!alt) return jerr("alternative not found", 404);
+      // An alternative is only for a registered dietary need that the standard product does not cover, never a preference.
+      if (!dietaryGaps(student.dietary, p.dietaryTags).length) return jerr("alternative only for a dietary need", 403);
+      if (dietaryGaps(student.dietary, alt.dietaryTags).length) return jerr("alternative does not suit your dietary needs", 403);
     }
     const gaps = dietaryGaps(student.dietary, alt ? alt.dietaryTags : p.dietaryTags);
     lines.push({

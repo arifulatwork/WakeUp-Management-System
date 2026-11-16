@@ -103,7 +103,7 @@ export default function GroupOrdersPage() {
           {sortedOrders.map((o) => (
             <div key={o.id} style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-                <div><strong>{o.group?.name}</strong> <span style={{ color: "var(--ink-soft)", fontSize: 12 }}>· {o.orderDate} · {unitsOf(o.lines)} {tr("units")}</span></div>
+                <div><strong>{o.group?.name}</strong> <span style={{ color: "var(--ink-soft)", fontSize: 12 }}>· {o.orderDate}{o.deliveryDate ? ` → ${tr("Delivery")}: ${o.deliveryDate}` : ""} · {unitsOf(o.lines)} {tr("units")}</span></div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {canCreate && o.status === "OPEN" && (
                     <>
@@ -112,6 +112,7 @@ export default function GroupOrdersPage() {
                     </>
                   )}
                   {canCreate && ["OPEN", "APPROVED"].includes(o.status) && <button style={S.small} onClick={() => orderAction(o, "cancel")}>{tr("Cancel order")}</button>}
+                  {canCreate && o.status === "DELIVERED" && !o.receivedAt && <button style={S.smallDark} onClick={() => orderAction(o, "confirm")}>{tr("Confirm received")}</button>}
                 </div>
               </div>
               <Flow status={o.status} />
@@ -130,7 +131,7 @@ export default function GroupOrdersPage() {
                   ))}
                 </tbody>
               </table>
-              {(o.dispatchedAt || o.deliveredAt) && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", margin: "6px 0 0" }}>{o.dispatchedAt && `${tr("Dispatched")}: ${when(o.dispatchedAt, locale)}`} {o.deliveredAt && `· ${tr("Delivered")}: ${when(o.deliveredAt, locale)}`}</p>}
+              {(o.dispatchedAt || o.deliveredAt) && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", margin: "6px 0 0" }}>{o.dispatchedAt && `${tr("Dispatched")}: ${when(o.dispatchedAt, locale)}`} {o.deliveredAt && `· ${tr("Delivered")}: ${when(o.deliveredAt, locale)}`} {o.receivedAt && `· ✓ ${tr("Received")}: ${when(o.receivedAt, locale)}`}</p>}
             </div>
           ))}
         </PanelCard>

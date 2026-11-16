@@ -11,16 +11,18 @@ export type Product = {
   id: string; name: string; category: string; unit: string; brand: string | null; standardQty: number;
   dietaryTags: string[]; alternatives: { id: string; name: string; brand?: string; dietaryTags: string[] }[]; active: boolean;
   names?: Record<string, string>; photo?: string | null; country?: string | null; // name per language, catalogue photo, country (null = all)
+  perStudent?: boolean; // true: the standard quantity is per student (fruit); false: one group quantity (a pack)
 };
 export type Line = {
   id: string; productId: string; quantity: number; product?: Product | null; alternativeName?: string | null;
   status?: string; preparedQty?: number | null; missingNote?: string | null; substituteName?: string | null;
   // request lines
-  standardQty?: number; exceptionReason?: string | null; lineStatus?: string; approvedQty?: number | null; dietaryFlag?: string | null;
+  standardQty?: number | null; exceptionReason?: string | null; lineStatus?: string; approvedQty?: number | null; dietaryFlag?: string | null;
 };
 export type Order = {
   id: string; groupId: string; orderDate: string; status: string; note?: string | null; group?: { id: string; name: string } | null;
   approvedAt?: string | null; preparedAt?: string | null; dispatchedAt?: string | null; deliveredAt?: string | null; lines: Line[];
+  deliveryDate?: string; receivedAt?: string | null; // planned delivery day; when the group confirmed receipt
 };
 export type Req = {
   id: string; orderDate: string; status: string; decisionNote?: string | null; createdAt: string;

@@ -301,7 +301,8 @@ model Product {
   category    String   @default("General")
   unit        String   @default("pcs")
   brand       String?
-  standardQty Int      @default(1)        // standard quantity per student per ordering round
+  standardQty Int      @default(1)        // standard quantity: per student (perStudent = true) or for the whole group (e.g. 1 pack)
+  perStudent  Boolean  @default(false)    // true = the standard quantity is per student (fruit): requests add up. false = one group quantity (packs): requests never add up
   dietaryTags String[] @default([])       // dietary requirements this product is suitable for
   // Approved alternatives / other brands: [{ id, name, brand?, dietaryTags: string[] }]
   alternatives Json    @default("[]")
@@ -376,6 +377,8 @@ model Order {
   preparedAt  DateTime?
   dispatchedAt DateTime?
   deliveredAt DateTime?
+  receivedAt   DateTime?                  // the group confirmed it received the order
+  receivedById String?
 
   lines OrderLine[]
 
@@ -390,6 +393,8 @@ model OrderLine {
   product      Product @relation(fields: [productId], references: [id])
   productId    String
   quantity     Int
+  standardQty  Int?                       // the product's standard quantity when the line was made
+  exceptionReason String?                 // why the quantity differs from the standard one (coordinator orders)
   alternativeName String?                 // approved alternative/brand ordered instead
   status       String  @default("PENDING") // PENDING | PREPARED | UNAVAILABLE
   preparedQty  Int?

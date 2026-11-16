@@ -19,6 +19,7 @@ export default function ProductEditor({ product, dietary, countries, onClose, on
   const [unit, setUnit] = useState(product?.unit ?? "pcs");
   const [brand, setBrand] = useState(product?.brand ?? "");
   const [standardQty, setStandardQty] = useState(product?.standardQty ?? 1);
+  const [perStudent, setPerStudent] = useState(product?.perStudent ?? false);
   const [tags, setTags] = useState<string[]>(product?.dietaryTags ?? []);
   const [active, setActive] = useState(product?.active ?? true);
   const [alts, setAlts] = useState(product?.alternatives ?? []);
@@ -34,7 +35,7 @@ export default function ProductEditor({ product, dietary, countries, onClose, on
 
   async function save() {
     setSaving(true); setError("");
-    const body = { name, names, country: country || null, category, unit, brand, standardQty, dietaryTags: tags, active, alternatives: alts, ...(photo !== undefined ? { photo } : {}) };
+    const body = { name, names, country: country || null, category, unit, brand, standardQty, perStudent, dietaryTags: tags, active, alternatives: alts, ...(photo !== undefined ? { photo } : {}) };
     try {
       if (product) await api(`/api/products/${product.id}`, "PATCH", body); else await api("/api/products", "POST", body);
       onSaved();
@@ -76,9 +77,12 @@ export default function ProductEditor({ product, dietary, countries, onClose, on
           <div><label style={S.label}>{tr("Category")}</label><input style={S.input} value={category} maxLength={40} onChange={(e) => setCategory(e.target.value)} /></div>
           <div><label style={S.label}>{tr("Brand")}</label><input style={S.input} value={brand} maxLength={60} onChange={(e) => setBrand(e.target.value)} /></div>
           <div><label style={S.label}>{tr("Unit")}</label><input style={S.input} value={unit} maxLength={20} onChange={(e) => setUnit(e.target.value)} /></div>
-          <div><label style={S.label}>{tr("Standard quantity (per student)")}</label>
+          <div><label style={S.label}>{perStudent ? tr("Standard quantity (per student)") : tr("Standard quantity (for the group)")}</label>
             <input style={S.input} type="number" min={1} max={MAX_QTY} value={standardQty} onChange={(e) => setStandardQty(Math.max(1, Math.min(MAX_QTY, Math.floor(Number(e.target.value) || 1))))} /></div>
         </div>
+        <label style={{ ...S.label, display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={perStudent} onChange={(e) => setPerStudent(e.target.checked)} /> {tr("Per student (e.g. fruit). Off = one quantity for the whole group (e.g. 1 pack).")}
+        </label>
         {dietary.length > 0 && (<>
           <label style={S.label}>{tr("Suitable for")}</label>
           <Pills multi options={dietary} value={tags} label={(d) => d} onChange={setTags} />

@@ -10,14 +10,16 @@ export type OrderingConfig = {
   cutoffTime: string;         // "HH:MM" — ordering closes at this time on an ordering day
   requireApproval: boolean;   // student requests need the coordinator's approval (off = auto-approved unless a quantity exception)
   allowExceptions: boolean;   // students may ask for a quantity different from the standard one (with a reason)
+  deliveryDelayDays: number;  // days between the order day and the delivery day (1: Sunday -> Monday, Tuesday -> Wednesday, Friday -> Saturday)
 };
 
 export const DEFAULT_ORDERING: OrderingConfig = {
   model: "STUDENT_REQUESTS",
-  orderingDays: [1, 2, 3, 4, 5],
+  orderingDays: [0, 2, 5],    // Sunday, Tuesday, Friday
   cutoffTime: "18:00",
   requireApproval: true,
   allowExceptions: true,
+  deliveryDelayDays: 1,
 };
 
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -35,6 +37,7 @@ export function cleanOrdering(v: any): OrderingConfig {
     cutoffTime,
     requireApproval: typeof v?.requireApproval === "boolean" ? v.requireApproval : d.requireApproval,
     allowExceptions: typeof v?.allowExceptions === "boolean" ? v.allowExceptions : d.allowExceptions,
+    deliveryDelayDays: Number.isInteger(Number(v?.deliveryDelayDays)) && Number(v.deliveryDelayDays) >= 0 && Number(v.deliveryDelayDays) <= 6 ? Number(v.deliveryDelayDays) : d.deliveryDelayDays,
   };
 }
 
@@ -42,6 +45,13 @@ export function cleanOrdering(v: any): OrderingConfig {
 export function dateKey(d: Date = new Date()): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// The delivery day of an order made on `orderDate` ("2026-11-02" + 1 day = "2026-11-03").
+export function deliveryDateKey(orderDate: string, delayDays: number): string {
+  const [y, m, d] = orderDate.split("-").map(Number);
+  if (!y || !m || !d) return orderDate;
+  return dateKey(new Date(y, m - 1, d + delayDays));
 }
 
 export type WindowState = { open: boolean; reason?: "DAY" | "CUTOFF"; nextDay?: number };

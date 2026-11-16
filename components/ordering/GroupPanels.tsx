@@ -5,7 +5,7 @@ import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { PanelCard } from "@/components/PanelShell";
-import { countryName, productInCountry, productName, showCode } from "@/lib/ordering";
+import { countryName, MAX_QTY, productInCountry, productName, showCode } from "@/lib/ordering";
 import { altLabel, CountrySelect, Order, Product, ProductThumb } from "@/components/ordering/common";
 
 export type Group = {
@@ -187,6 +187,7 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
   const [students, setStudents] = useState<Student[]>([]);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [alt, setAlt] = useState<Record<string, string>>({});
+  const [why, setWhy] = useState<Record<string, string>>({}); // reason for a quantity that is not the standard one
   const [note, setNote] = useState(order?.note ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -195,23 +196,27 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
   useEffect(() => {
     fetch(`/api/groups/${group.id}/students`).then((r) => (r.ok ? r.json() : [])).then(setStudents).catch(() => {});
     if (order) {
-      const q: Record<string, number> = {}, a: Record<string, string> = {};
+      const q: Record<string, number> = {}, a: Record<string, string> = {}, w: Record<string, string> = {};
       for (const l of order.lines) {
         q[l.productId] = l.quantity;
+        if (l.exceptionReason) w[l.productId] = l.exceptionReason;
         const p = products.find((x) => x.id === l.productId);
         const match = p?.alternatives.find((x) => altLabel(x) === l.alternativeName);
         if (match) a[l.productId] = match.id;
       }
-      setQty(q); setAlt(a);
+      setQty(q); setAlt(a); setWhy(w);
     }
     // eslint-disable-next-line
   }, []);
 
   const fillStandard = () => {
     const n = Math.max(1, group.memberLimit ?? students.length);
-    setQty(Object.fromEntries(active.map((p) => [p.id, p.standardQty * n])));
+    // a pack is ordered once for the group; only per-student products (fruit) are multiplied by the group size
+    setQty(Object.fromEntries(active.map((p) => [p.id, p.perStudent ? p.standardQty * n : p.standardQty])));
   };
-  const lines = active.filter((p) => (qty[p.id] ?? 0) > 0).map((p) => ({ productId: p.id, quantity: qty[p.id], alternativeId: alt[p.id] || undefined }));
+  const isException = (p: Product) => !p.perStudent && (qty[p.id] ?? 0) > 0 && qty[p.id] !== p.standardQty;
+  const lines = active.filter((p) => (qty[p.id] ?? 0) > 0).map((p) => ({ productId: p.id, quantity: qty[p.id], alternativeId: alt[p.id] || undefined, reason: isException(p) ? (why[p.id] ?? "") : undefined }));
+  const missingReason = active.some((p) => isException(p) && (why[p.id] ?? "").trim().length < 3);
 
   async function save() {
     setSaving(true); setError("");
@@ -220,7 +225,9 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
       else await api("/api/orders", "POST", { groupId: group.id, lines, note });
       onSaved();
     } catch (e: any) {
-      setError(e?.message === "ordering closed" ? tr("Ordering is closed right now.") : e?.status === 409 ? tr("The order was already sent to the supplier.") : saveError(e, tr));
+      setError(e?.message === "ordering closed" ? tr("Ordering is closed right now.")
+        : e?.message === "reason required" ? tr("Please give a reason for every quantity that is not the standard one.")
+        : e?.status === 409 ? tr("The order was already sent to the supplier.") : saveError(e, tr));
       setSaving(false);
     }
   }
@@ -239,20 +246,21 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
         {active.map((p) => (
           <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
             <ProductThumb p={p} size={36} />
-            <div style={{ flex: "1 1 160px", fontSize: 13 }}>{productName(p, lang)}<div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}</div></div>
+            <div style={{ flex: "1 1 160px", fontSize: 13 }}>{productName(p, lang)}<div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}{p.perStudent ? ` · ${tr("per student")}` : ""}</div></div>
             {p.alternatives.length > 0 && (
               <select style={{ ...S.input, width: 150 }} value={alt[p.id] ?? ""} onChange={(e) => setAlt({ ...alt, [p.id]: e.target.value })}>
                 <option value="">{tr("Standard product")}</option>
                 {p.alternatives.map((a) => <option key={a.id} value={a.id}>{altLabel(a)}</option>)}
               </select>
             )}
-            <input style={{ ...S.input, width: 70 }} type="number" min={0} max={999} value={qty[p.id] ?? 0} onChange={(e) => setQty({ ...qty, [p.id]: Math.max(0, Math.min(999, Math.floor(Number(e.target.value) || 0))) })} />
+            <input style={{ ...S.input, width: 70 }} type="number" min={0} max={p.perStudent ? 999 : MAX_QTY} value={qty[p.id] ?? 0} onChange={(e) => setQty({ ...qty, [p.id]: Math.max(0, Math.min(p.perStudent ? 999 : MAX_QTY, Math.floor(Number(e.target.value) || 0))) })} />
+            {isException(p) && <input style={{ ...S.input, flex: "1 1 100%" }} placeholder={tr("Reason for a different quantity")} value={why[p.id] ?? ""} maxLength={200} onChange={(e) => setWhy({ ...why, [p.id]: e.target.value })} />}
           </div>
         ))}
         <label style={S.label}>{tr("Note for the supplier")}</label>
         <input style={S.input} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />
       </div>
-      <FormFooter saving={saving} canSave={lines.length > 0} onSave={save} onClose={onClose} error={error} />
+      <FormFooter saving={saving} canSave={lines.length > 0 && !missingReason} onSave={save} onClose={onClose} error={error} />
     </Modal>
   );
 }

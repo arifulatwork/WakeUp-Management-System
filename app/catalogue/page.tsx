@@ -86,6 +86,10 @@ export default function CataloguePage() {
           <label style={S.label}>{tr("Ordering days")}</label>
           <Pills multi options={["1", "2", "3", "4", "5", "6", "0"]} value={cfg.orderingDays.map(String)} label={(d) => tr(WEEKDAYS[Number(d)])}
             onChange={(v: string[]) => canConfigure && setCfg({ ...cfg, orderingDays: v.map(Number) })} />
+          <label style={S.label}>{tr("Delivery day")}</label>
+          <select style={{ ...S.input, width: 220 }} value={cfg.deliveryDelayDays} disabled={!canConfigure} onChange={(e) => setCfg({ ...cfg, deliveryDelayDays: Number(e.target.value) })}>
+            {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n === 0 ? tr("Same day") : n === 1 ? tr("The day after the order") : tr("{n} days after the order", { n })}</option>)}
+          </select>
           <label style={S.label}>{tr("Cut-off time")}</label>
           <input style={{ ...S.input, width: 120 }} type="time" value={cfg.cutoffTime} disabled={!canConfigure} onChange={(e) => setCfg({ ...cfg, cutoffTime: e.target.value })} />
           <label style={{ ...S.label, display: "flex", gap: 8, alignItems: "center" }}>

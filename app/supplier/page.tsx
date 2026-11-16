@@ -101,7 +101,7 @@ function OrderCard({ order: o, busy, onAct, locale }: { order: Order; busy: bool
   const editable = ACTIVE.includes(o.status);
   return (
     <PanelCard
-      title={`${o.group?.name ?? "—"} · ${o.orderDate}`}
+      title={`${o.group?.name ?? "—"} · ${o.orderDate}${o.deliveryDate ? ` → ${tr("Delivery")}: ${o.deliveryDate}` : ""}`}
       subtitle={`${unitsOf(o.lines)} ${tr("units")} · ${tr("sent")} ${when(o.approvedAt, locale)}`}
       action={
         <>

@@ -4,6 +4,7 @@ import { currentSession } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { LINE_STATUSES } from "@/lib/ordering";
+import { getOrdering } from "@/lib/settings";
 import { canManageGroup, cleanOrderLines, jerr, refreshOrderStatus } from "@/lib/orderLogic";
 
 const SUPPLIER_ACTIONS = ["line", "dispatch", "deliver"];
@@ -17,6 +18,8 @@ const SUPPLIER_ACTIONS = ["line", "dispatch", "deliver"];
 //     line { lineId, status: PENDING|PREPARED|UNAVAILABLE, preparedQty?, missingNote?, substituteName? }
 //     dispatch                     all lines handled, at least one prepared
 //     deliver                      DISPATCHED -> DELIVERED
+//   student of the group / coordinator / admin:
+//     confirm                      DELIVERED -> the group confirms it received the order
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const me = await currentSession(req);
   if (!me) return jerr("sign in required", 401);
@@ -25,6 +28,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const b = await req.json().catch(() => ({}));
   const action = String(b.action ?? "");
   const gname = order.group?.name ?? "";
+
+  // ---------- the group confirms receipt ----------
+  if (action === "confirm") {
+    const member = me.role === "student" && !!me.groupId && me.groupId === order.groupId;
+    if (!member && !(can(me.role, "orders.create") && (await canManageGroup(me, order.groupId)))) return jerr("forbidden", 403);
+    if (order.status !== "DELIVERED") return jerr("the order was not delivered yet", 409);
+    if (order.receivedAt) return NextResponse.json({ ok: true }); // already confirmed (a repeated tap changes nothing)
+    await db.order.update({ where: { id: order.id }, data: { receivedAt: new Date(), receivedById: me.workerId } });
+    await logAudit(req, "order", order.id, "received", "Confirmed that the order of {group} was received", { group: gname });
+    return NextResponse.json({ ok: true });
+  }
 
   // ---------- supplier side ----------
   if (SUPPLIER_ACTIONS.includes(action)) {
@@ -76,7 +90,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (action === "set_lines") {
     if (order.status !== "OPEN") return jerr("the order was already sent to the supplier", 409);
-    const { lines, error } = await cleanOrderLines(b.lines, order.group?.country);
+    const cfg = await getOrdering();
+    const { lines, error } = await cleanOrderLines(b.lines, order.group?.country, { allowExceptions: cfg.allowExceptions, admin: me.role === "admin" });
     if (error || !lines) return jerr(error ?? "invalid lines");
     await db.orderLine.deleteMany({ where: { orderId: order.id } });
     for (const l of lines) await db.orderLine.create({ data: { orderId: order.id, ...l } });

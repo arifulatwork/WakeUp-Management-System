@@ -1,3 +1,13 @@
+# Food ordering: spec fixes
+
+- **Order days:** default ordering days are now Sunday, Tuesday and Friday, and every order shows its **delivery day** (order day + 1: Sunday -> Monday, Tuesday -> Wednesday, Friday -> Saturday). The delay is a setting in Catalogue -> Ordering rules. A setting already saved by the admin is kept, so check the days there.
+- **Alternatives only for a dietary need:** a student can only pick an alternative product if they have a registered dietary requirement that the standard product does not cover, and the alternative must suit it. The server refuses anything else.
+- **Packs are not multiplied:** new product option **Per student** (fruit). Off (default) = one quantity for the whole group, and two students asking for the same pack give one pack. On = quantities add up.
+- **Coordinator orders follow the exception rules:** quantity 1-99, the standard quantity is saved on the line, and a different quantity needs a reason (saved).
+- **Receipt confirmation:** after delivery, a student of the group or the coordinator taps **Confirm received** (time and person saved).
+
+Database: run `npx prisma migrate deploy` (new migration `20261116000000_food_spec_fixes`: `Product.perStudent`, `OrderLine.standardQty/exceptionReason`, `Order.receivedAt/receivedById`). Existing products become "for the group" (set Per student on fruit).
+
 # Code audit: bugs found and fixed
 
 **Maintenance tickets** (`app/api/tickets/[id]/route.ts`)
