@@ -11,7 +11,9 @@ import { Pills, S } from "@/components/ui";
 import { OrderingConfig, WEEKDAYS, countryName, countryOptions } from "@/lib/ordering";
 import { CountrySelect, Info, Pill, Product, ProductThumb, td, th, useJson } from "@/components/ordering/common";
 import ProductEditor from "@/components/ordering/ProductEditor";
+import { Pager, norm } from "@/components/ordering/Pager";
 
+const PRODUCTS_PER_PAGE = 15;
 const SECTIONS = ["rules", "products", "dietary", "reports"] as const;
 const LABELS: Record<(typeof SECTIONS)[number], string> = { rules: "Ordering rules", products: "Products", dietary: "Dietary requirements", reports: "Reports & history" };
 
@@ -44,6 +46,10 @@ export default function CataloguePage() {
   const [newDiet, setNewDiet] = useState("");
   const [err, setErr] = useState("");
   const [countryFilter, setCountryFilter] = useState(""); // "" = every product, "ALL" = products for all countries, else a country code
+  const [categoryFilter, setCategoryFilter] = useState(""); // "" = every category
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [q, countryFilter, categoryFilter]);
 
   const refresh = () => { info.reload(); products.reload(); dietary.reload(); report.reload(); };
   useLiveRefresh(refresh, { models: ["product", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
@@ -71,7 +77,16 @@ export default function CataloguePage() {
   // the filter only lists countries that have products
   const usedCountries = Array.from(new Set(products.data.map((p) => p.country).filter((c): c is string => !!c)));
   const mayEdit = (p: Product) => canEdit || (canProducts && !!p.country && myCountries.includes(p.country));
-  const shownProducts = products.data.filter((p) => !countryFilter || (countryFilter === "ALL" ? !p.country : p.country === countryFilter));
+  // the category filter lists the categories that exist (the sections: Food, Drinks, …)
+  const categories = Array.from(new Set(products.data.map((p) => p.category).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const needle = norm(q.trim());
+  const shownProducts = products.data.filter((p) =>
+    (!countryFilter || (countryFilter === "ALL" ? !p.country : p.country === countryFilter)) &&
+    (!categoryFilter || p.category === categoryFilter) &&
+    (!needle || [p.name, p.brand, p.category, ...Object.values(p.names ?? {})].some((v) => norm(v).includes(needle))));
+  const pages = Math.max(1, Math.ceil(shownProducts.length / PRODUCTS_PER_PAGE));
+  const curPage = Math.min(page, pages);
+  const pagedProducts = shownProducts.slice((curPage - 1) * PRODUCTS_PER_PAGE, curPage * PRODUCTS_PER_PAGE);
 
   return (
     <PanelShell title={tr("Catalogue & Ordering")} subtitle={tr("Products, standard quantities, dietary requirements and the ordering workflow.")} vis={vis} labels={LABELS}
@@ -111,18 +126,32 @@ export default function CataloguePage() {
 
       {vis.shown.products && (
         <PanelCard title={`${tr("Products")} (${shownProducts.length})`} flush>
-          <div style={{ padding: "12px 14px 10px", maxWidth: 360 }}>
-            <label style={S.label}>{tr("Country")}</label>
-            <select aria-label={tr("Country")} style={{ ...S.input, width: "100%", minWidth: 0, boxSizing: "border-box" }} value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}>
-              <option value="">{tr("All products")}</option>
-              <option value="ALL">{tr("All countries")}</option>
-              {countryOptions(locale, usedCountries).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
-            </select>
+          <div style={{ padding: "12px 14px 10px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div style={{ flex: "2 1 220px", minWidth: 0 }}>
+              <label style={S.label}>{tr("Search")}</label>
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={60} aria-label={tr("Search products, brands or categories…")}
+                placeholder={tr("Search products, brands or categories…")} style={{ ...S.input, boxSizing: "border-box" }} />
+            </div>
+            <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+              <label style={S.label}>{tr("Category")}</label>
+              <select aria-label={tr("Category")} style={{ ...S.input, width: "100%", minWidth: 0, boxSizing: "border-box" }} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                <option value="">{tr("All categories")}</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+              <label style={S.label}>{tr("Country")}</label>
+              <select aria-label={tr("Country")} style={{ ...S.input, width: "100%", minWidth: 0, boxSizing: "border-box" }} value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}>
+                <option value="">{tr("All products")}</option>
+                <option value="ALL">{tr("All countries")}</option>
+                {countryOptions(locale, usedCountries).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+              </select>
+            </div>
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr><th style={th} /><th style={th}>{tr("Product")}</th><th style={th}>{tr("Country")}</th><th style={th}>{tr("Brand")}</th><th style={th}>{tr("Standard")}</th><th style={th}>{tr("Suitable for")}</th><th style={th}>{tr("Alternatives")}</th><th style={th} /></tr></thead>
             <tbody>
-              {shownProducts.map((p) => (
+              {pagedProducts.map((p) => (
                 <tr key={p.id} style={{ opacity: p.active ? 1 : 0.5 }}>
                   <td style={td}><ProductThumb p={p} /></td>
                   <td style={td}><strong>{p.name}</strong><div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{p.category}{!p.active && ` · ${tr("inactive")}`}</div>
@@ -137,6 +166,8 @@ export default function CataloguePage() {
               ))}
             </tbody>
           </table>
+          {!shownProducts.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching products.")}</p>}
+          <Pager page={curPage} pages={pages} onPage={setPage} />
         </PanelCard>
       )}
 

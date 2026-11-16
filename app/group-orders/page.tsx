@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
 import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -10,6 +10,7 @@ import { useSectionVisibility } from "@/lib/useSectionVisibility";
 import { Pills, S } from "@/components/ui";
 import { dateKey, productName } from "@/lib/ordering";
 import { Flow, Info, Order, OrderingBanner, Pill, Product, Req, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
+import { Pager, norm } from "@/components/ordering/Pager";
 import { Group, GroupCard, GroupEditor, OrderBuilder } from "@/components/ordering/GroupPanels";
 
 const SECTIONS = ["requests", "orders", "groups"] as const;
@@ -24,23 +25,6 @@ const STATUS_LABEL: Record<string, string> = {
   DELIVERED: "Delivered", CANCELLED: "Cancelled", ALL: "All",
 };
 
-// Lower-case and without accents, so "jose" finds "José".
-const norm = (v: unknown) => String(v ?? "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
-
-function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (p: number) => void }) {
-  const { tr } = useI18n();
-  if (pages <= 1) return null;
-  const btn = (off: boolean): CSSProperties => ({ ...S.small, opacity: off ? 0.4 : 1, cursor: off ? "default" : "pointer" });
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "12px 16px", fontSize: 12.5, color: "var(--ink-soft)" }}>
-      <button type="button" style={btn(page <= 1)} disabled={page <= 1} onClick={() => onPage(page - 1)}>‹ {tr("Previous")}</button>
-      <span>{tr("Page {n} of {total}", { n: page, total: pages })}</span>
-      <button type="button" style={btn(page >= pages)} disabled={page >= pages} onClick={() => onPage(page + 1)}>{tr("Next")} ›</button>
-    </div>
-  );
-}
-
-// GROUPS & ORDERS — coordinators work with their own groups; managers can read everything; admins manage groups too.
 export default function GroupOrdersPage() {
   const { tr, ev, locale, lang } = useI18n();
   const canReview = useCan("requests.review");
