@@ -98,7 +98,7 @@ export default function GroupOrdersPage() {
   const orderPages = Math.max(1, Math.ceil(ordersMatching.length / ORDERS_PER_PAGE));
   const curOrderPage = Math.min(orderPage, orderPages);
   const pagedOrders = ordersMatching.slice((curOrderPage - 1) * ORDERS_PER_PAGE, curOrderPage * ORDERS_PER_PAGE);
-  const groupsMatching = groups.data.filter((g) => hit(g.name, g.house?.name, g.coordinator?.name, g.accessCode));
+  const groupsMatching = groups.data.filter((g) => hit(g.name, g.house?.name, g.coordinator?.name));
   const groupPages = Math.max(1, Math.ceil(groupsMatching.length / GROUPS_PER_PAGE));
   const curGroupPage = Math.min(groupPage, groupPages);
   const pagedGroups = groupsMatching.slice((curGroupPage - 1) * GROUPS_PER_PAGE, curGroupPage * GROUPS_PER_PAGE);
