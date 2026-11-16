@@ -7,6 +7,7 @@ import { HouseGallery } from "@/components/HouseMedia";
 import { checkReadiness, REASON_TEXT } from "@/lib/readiness";
 import { MEDIA_ENABLED } from "@/lib/features";
 import { useI18n } from "@/lib/i18n";
+import { formatMinutes } from "@/lib/formatDuration";
 
 // The review step before a finished cleaning is approved. Used by the Manager AND the
 // Coordinator screens so both look at exactly the same thing: what the cleaner did
@@ -53,7 +54,7 @@ export default function TaskReview({ task: t, house, openTickets, confirmLabel, 
     const end = t.completedAt ? new Date(t.completedAt) : new Date();
     const mins = Math.max(0, Math.round((+end - +start) / 60000));
     const est = t.estimatedMinutes ?? 0;
-    timing = { text: `${hhmm(start)} → ${t.completedAt ? hhmm(end) : "…"} · ${mins}${est ? ` / ${est}` : ""} min`, over: est > 0 && mins > est };
+    timing = { text: `${hhmm(start)} → ${t.completedAt ? hhmm(end) : "…"} · ${formatMinutes(mins)}${est ? ` / ${formatMinutes(est)}` : ""}`, over: est > 0 && mins > est };
   }
 
   return (

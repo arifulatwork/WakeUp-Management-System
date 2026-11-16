@@ -7,6 +7,7 @@ import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { useCan } from "@/lib/useSession";
 import { PhotoStrip } from "@/components/Photos";
 import { MEDIA_ENABLED } from "@/lib/features";
+import { formatMinutes } from "@/lib/formatDuration";
 import { DEFAULT_CHECKLIST, TaskField } from "@/lib/settingsDefaults";
 
 export type EdHouse = { id: string; name: string };
@@ -155,6 +156,7 @@ export default function TaskEditor({ task, houses, workers, defaultHouseId, onCl
 
       <label style={S.label}>{tr("Estimated minutes")}</label>
       <input style={S.input} type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="60" />
+      {Number(minutes) >= 60 && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", margin: "4px 0 0" }}>= {formatMinutes(Number(minutes))}</p>}
 
       {isCheckout && (
         <>

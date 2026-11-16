@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
 import TicketEditor from "@/components/editors/TicketEditor";
 import TaskReview from "@/components/TaskReview";
+import { formatMinutes } from "@/lib/formatDuration";
 import MaintenanceReview from "@/components/MaintenanceReview";
 import HouseEditor from "@/components/editors/HouseEditor";
 import { useCan } from "@/lib/useSession";
@@ -97,7 +98,7 @@ export default function ManagerDashboard() {
     const end = t.completedAt ? new Date(t.completedAt) : new Date();
     const mins = Math.max(0, Math.round((+end - +start) / 60000));
     const est = t.estimatedMinutes ?? 0;
-    return { text: `${hhmm(start)} → ${t.completedAt ? hhmm(end) : "…"} · ${mins}${est ? ` / ${est}` : ""} min`, over: est > 0 && mins > est };
+    return { text: `${hhmm(start)} → ${t.completedAt ? hhmm(end) : "…"} · ${formatMinutes(mins)}${est ? ` / ${formatMinutes(est)}` : ""}`, over: est > 0 && mins > est };
   };
 
   const counts = {
