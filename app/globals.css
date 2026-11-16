@@ -33,6 +33,7 @@ input, select, textarea { font-family: inherit; }
 }
 .panel-brand { padding: 4px 8px 14px; }
 .panel-nav-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); padding: 8px 10px 6px; }
+.panel-nav-group { margin-bottom: 6px; }
 .panel-nav a {
   display: flex; align-items: center; gap: 10px; padding: 9px 10px; margin-bottom: 2px;
   border-radius: 9px; color: var(--ink); text-decoration: none; font-size: 13px;

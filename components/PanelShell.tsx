@@ -15,15 +15,21 @@ import type { SectionVisibility } from "@/lib/useSectionVisibility";
 type Me = { name: string; role: string; workerId?: string };
 
 // The menu. Each person only sees the screens their role may open (SCREENS in lib/permissions.ts).
-const NAV = [
-  { href: "/admin", label: "Staff & Roles", icon: "👥" },
-  { href: "/manager", label: "Cleaning Tasks — Live", icon: "🧹" },
-  { href: "/coordinator", label: "Check-in Readiness", icon: "✅" },
-  { href: "/ops", label: "Ops Overview", icon: "📊" },
-  { href: "/group-orders", label: "Groups & Orders", icon: "📦" },
-  { href: "/catalogue", label: "Catalogue & Ordering", icon: "🛒" },
-  { href: "/student", label: "My Orders", icon: "🍽️" },
-  { href: "/supplier", label: "Order Fulfilment", icon: "🚚" },
+const NAV_GROUPS = [
+  { label: "Administration", items: [
+    { href: "/admin", label: "Staff & Roles", icon: "👥" },
+  ] },
+  { label: "Cleaning & Maintenance", items: [
+    { href: "/manager", label: "Cleaning Tasks — Live", icon: "🧹" },
+    { href: "/coordinator", label: "Check-in Readiness", icon: "✅" },
+    { href: "/ops", label: "Ops Overview", icon: "📊" },
+  ] },
+  { label: "Food & Ordering", items: [
+    { href: "/group-orders", label: "Groups & Orders", icon: "📦" },
+    { href: "/catalogue", label: "Catalogue & Ordering", icon: "🛒" },
+    { href: "/student", label: "My Orders", icon: "🍽️" },
+    { href: "/supplier", label: "Order Fulfilment", icon: "🚚" },
+  ] },
 ];
 
 export default function PanelShell({ title, subtitle, actions, vis, labels, wide, children }: {
@@ -54,7 +60,10 @@ export default function PanelShell({ title, subtitle, actions, vis, labels, wide
   }, []);
   useEffect(() => setOpen(false), [pathname]);
 
-  const items = NAV.filter((n) => me && (SCREENS[n.href] ?? []).includes(me.role as Role));
+  // Keep only the screens this role may open, and drop sections left empty.
+  const groups = NAV_GROUPS
+    .map((g) => ({ ...g, items: g.items.filter((n) => me && (SCREENS[n.href] ?? []).includes(me.role as Role)) }))
+    .filter((g) => g.items.length > 0);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -67,13 +76,17 @@ export default function PanelShell({ title, subtitle, actions, vis, labels, wide
       <div className={"panel-scrim" + (open ? " open" : "")} onClick={() => setOpen(false)} />
       <aside className={"panel-sidebar" + (open ? " open" : "")}>
         <div className="panel-brand"><Logo height={34} /></div>
-        <div className="panel-nav-label">{tr("Menu")}</div>
         <nav className="panel-nav">
-          {items.map((n) => (
-            <Link key={n.href} href={n.href} aria-current={pathname === n.href ? "page" : undefined}>
-              <span className="ico" aria-hidden>{n.icon}</span>
-              <span>{tr(n.label)}</span>
-            </Link>
+          {groups.map((g) => (
+            <div key={g.label} className="panel-nav-group">
+              <div className="panel-nav-label">{tr(g.label)}</div>
+              {g.items.map((n) => (
+                <Link key={n.href} href={n.href} aria-current={pathname === n.href ? "page" : undefined}>
+                  <span className="ico" aria-hidden>{n.icon}</span>
+                  <span>{tr(n.label)}</span>
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
         {me && (
