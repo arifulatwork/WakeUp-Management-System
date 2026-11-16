@@ -12,9 +12,20 @@ import { formatMinutes } from "@/lib/formatDuration";
 import MaintenanceReview from "@/components/MaintenanceReview";
 import HouseEditor from "@/components/editors/HouseEditor";
 import { useCan } from "@/lib/useSession";
-import { S, SortTh, useSort } from "@/components/ui";
+import { Pills, S, SortTh, useSort } from "@/components/ui";
+import { Pager, norm } from "@/components/ordering/Pager";
 import { applyDir, cmpText, dayKey, PRIORITY_RANK, TASK_STATUS_RANK, taskWhen } from "@/lib/sort";
 
+const TASKS_PER_PAGE = 15;
+// Status pills. "Active" = everything not approved yet, so nothing that needs attention is ever hidden.
+const STATUS_FILTERS = ["ACTIVE", "SCHEDULED", "IN_PROGRESS", "WITH_ISSUE", "TO_BE_VERIFIED", "APPROVED", "ALL"];
+const STATUS_LABEL: Record<string, string> = {
+  ACTIVE: "Active", SCHEDULED: "Scheduled / assigned", IN_PROGRESS: "In progress", WITH_ISSUE: "With issue",
+  TO_BE_VERIFIED: "To be verified", APPROVED: "Approved", ALL: "All",
+};
+const DATE_FILTERS = ["ALL", "TODAY", "NEXT7", "PAST"];
+const DATE_LABEL: Record<string, string> = { ALL: "All", TODAY: "Today", NEXT7: "Next 7 days", PAST: "Past" };
+const NOBODY = "__none__"; // value of "Unassigned" in the person dropdown
 const SECTIONS = ["stats", "tasks"] as const;
 const SECTION_LABEL: Record<(typeof SECTIONS)[number], string> = { stats: "Overview", tasks: "Tasks" };
 
@@ -45,6 +56,12 @@ export default function ManagerDashboard() {
   const sort = useSort<"house" | "type" | "time" | "priority" | "assigned" | "status">("time");
   const [taskEd, setTaskEd] = useState<{ task: Task | null } | null>(null);
   const [houseEd, setHouseEd] = useState(false);
+  const [statusF, setStatusF] = useState("ACTIVE");
+  const [dateF, setDateF] = useState("ALL");
+  const [personF, setPersonF] = useState(""); // "" = everybody, NOBODY = unassigned, else a name
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [statusF, dateF, personF, q]);
   const canCreateHouse = useCan("houses.create");
 
   useEffect(() => {
@@ -128,6 +145,29 @@ export default function ManagerDashboard() {
     return applyDir(c, sort.dir) || tie;
   });
 
+  // ---- filters + paging (sorting above is untouched) ----
+  const statusMatch = (t: Task, f: string) =>
+    f === "ALL" ? true
+    : f === "ACTIVE" ? t.status !== "APPROVED"
+    : f === "SCHEDULED" ? t.status === "SCHEDULED" || t.status === "ASSIGNED"
+    : t.status === f;
+  const todayKey = dayKey(new Date());
+  const in7Key = dayKey(new Date(Date.now() + 7 * 86400000));
+  const dateMatch = (t: Task, f: string) => {
+    const d = dayKey(t.scheduledDate);
+    return f === "TODAY" ? d === todayKey : f === "NEXT7" ? d >= todayKey && d <= in7Key : f === "PAST" ? d < todayKey : true;
+  };
+  const people = Array.from(new Set(tasks.map((t) => t.assignedWorker?.name).filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b));
+  const needle = norm(q.trim());
+  const filteredTasks = sortedTasks.filter((t) =>
+    statusMatch(t, statusF) && dateMatch(t, dateF) &&
+    (!personF || (personF === NOBODY ? !t.assignedWorker : t.assignedWorker?.name === personF)) &&
+    (!needle || [t.house.name, t.assignedWorker?.name, ...t.cleaningTypes.map(ev)].some((v) => norm(v).includes(needle))));
+  const pages = Math.max(1, Math.ceil(filteredTasks.length / TASKS_PER_PAGE));
+  const curPage = Math.min(page, pages);
+  const pagedTasks = filteredTasks.slice((curPage - 1) * TASKS_PER_PAGE, (curPage - 1) * TASKS_PER_PAGE + TASKS_PER_PAGE);
+  const statusCount = (f: string) => tasks.filter((t) => statusMatch(t, f)).length;
+
   return (
     <PanelShell
       title={tr("Cleaning Tasks — Live")}
@@ -153,7 +193,29 @@ export default function ManagerDashboard() {
       <MaintenanceReview tickets={tickets} onChanged={load} />
 
       {vis.shown.tasks && (
-        <PanelCard title={tr("Tasks")} flush>
+        <PanelCard title={`${tr("Tasks")} (${filteredTasks.length})`} flush>
+          <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid var(--line)" }}>
+            <Pills options={STATUS_FILTERS} value={statusF} onChange={setStatusF} label={(f) => `${tr(STATUS_LABEL[f])} (${statusCount(f)})`} />
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 4 }}>
+              <div style={{ flex: "2 1 200px", minWidth: 0 }}>
+                <label style={S.label}>{tr("Search")}</label>
+                <input type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={60} aria-label={tr("Search houses, cleaners or cleaning types…")}
+                  placeholder={tr("Search houses, cleaners or cleaning types…")} style={{ ...S.input, boxSizing: "border-box" }} />
+              </div>
+              <div style={{ flex: "1 1 150px", minWidth: 0 }}>
+                <label style={S.label}>{tr("Assigned to")}</label>
+                <select aria-label={tr("Assigned to")} style={{ ...S.input, width: "100%", minWidth: 0, boxSizing: "border-box" }} value={personF} onChange={(e) => setPersonF(e.target.value)}>
+                  <option value="">{tr("All")}</option>
+                  <option value={NOBODY}>{tr("Unassigned")}</option>
+                  {people.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: "0 0 auto" }}>
+                <label style={S.label}>{tr("Date")}</label>
+                <Pills options={DATE_FILTERS} value={dateF} onChange={setDateF} label={(f) => tr(DATE_LABEL[f])} />
+              </div>
+            </div>
+          </div>
           <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", fontSize: 13 }}>
             <thead>
               <tr>
@@ -168,7 +230,7 @@ export default function ManagerDashboard() {
               </tr>
             </thead>
             <tbody>
-              {sortedTasks.map((t) => (
+              {pagedTasks.map((t) => (
                 <tr key={t.id}>
                   <td style={td}>{t.house.name}</td>
                   <td style={td}>{t.cleaningTypes.map(ev).join(", ")}</td>
@@ -201,6 +263,8 @@ export default function ManagerDashboard() {
               ))}
             </tbody>
           </table>
+          {!filteredTasks.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching tasks.")}</p>}
+          <Pager page={curPage} pages={pages} onPage={setPage} />
           {tasks.length === 0 && <p style={{ color: "var(--ink-soft)", padding: 16, margin: 0 }}>{tr("No tasks yet.")}</p>}
         </PanelCard>
       )}
