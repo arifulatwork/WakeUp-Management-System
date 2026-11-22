@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Logo from "@/components/Logo";
 import { useI18n } from "@/lib/i18n";
 import { usePush } from "@/lib/usePush";
+import { useSession } from "@/lib/useSession";
+import { HOME } from "@/lib/permissions";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { pushText, PushKey } from "@/lib/pushText";
 import { timeAgo } from "@/lib/timeAgo";
@@ -17,6 +20,8 @@ const PAGE = 50;
 // for this visit so you can still see what was new.
 export default function NotificationsPage() {
   const { tr, lang, locale } = useI18n();
+  const router = useRouter();
+  const session = useSession() as ({ role: string; area?: string } | null | undefined);
   const [items, setItems] = useState<Item[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -55,6 +60,16 @@ export default function NotificationsPage() {
     setSoundEnabled(next);
     if (next) { unlockSound(); playNotificationSound(); }
   }
+  // Back = where you came from (the cleaner / maintenance screen). If the page was opened
+  // straight from a phone notification there is no history, so go to the person's own home screen.
+  // (Never "/": that is the old onboarding page.)
+  function goBack() {
+    const home = !session ? "/login"
+      : session.role === "worker" ? (session.area === "MAINTENANCE" ? "/maintenance" : "/cleaner")
+      : HOME[session.role] ?? "/login";
+    if (window.history.length > 1 && document.referrer.startsWith(window.location.origin)) router.back();
+    else router.push(home);
+  }
   function showOlder() { limit.current += PAGE; load(); }
 
   const link: React.CSSProperties = {
@@ -66,9 +81,9 @@ export default function NotificationsPage() {
     <main style={{ maxWidth: 380, margin: "0 auto", padding: "20px 16px 60px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <Logo height={28} />
-        <a href="/" style={{ fontSize: 11.5, padding: "5px 10px", borderRadius: 7, border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", textDecoration: "none" }}>
+        <button type="button" onClick={goBack} style={{ fontSize: 11.5, padding: "5px 10px", borderRadius: 7, border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", cursor: "pointer" }}>
           ← {tr("Back")}
-        </a>
+        </button>
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
