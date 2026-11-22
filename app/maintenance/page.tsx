@@ -1,6 +1,7 @@
 "use client";
 
 import FieldHeader from "@/components/FieldHeader";
+import { restoreWorkerId } from "@/lib/restoreWorker";
 import { useEffect, useState } from "react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { queueFetch } from "@/lib/offlineQueue";
@@ -34,13 +35,14 @@ export default function MaintenanceApp() {
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<Ticket | null>(null);
   const [workerId, setWorkerId] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [materials, setMaterials] = useState("");
   const [minutes, setMinutes] = useState("");
   const [sort, setSort] = useState<TicketSort>("priority");
   const { tr, ev, locale } = useI18n();
 
   useEffect(() => {
-    setWorkerId(localStorage.getItem("workerId"));
+    restoreWorkerId().then((id) => { setWorkerId(id); setAuthChecked(true); });
     load();
   }, []);
 
@@ -148,7 +150,8 @@ export default function MaintenanceApp() {
   }
 
   if (!workerId) {
-    return <p style={{ padding: 24 }}>{tr("Please sign in first.")} <a href="/">{tr("Sign in")}</a></p>;
+    if (!authChecked) return null; // still checking who you are: show nothing instead of flashing "sign in"
+    return <p style={{ padding: 24 }}>{tr("Please sign in first.")} <a href="/login">{tr("Sign in")}</a></p>;
   }
 
   if (active) {

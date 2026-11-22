@@ -1,6 +1,7 @@
 "use client";
 
 import FieldHeader from "@/components/FieldHeader";
+import { restoreWorkerId } from "@/lib/restoreWorker";
 import { useEffect, useRef, useState } from "react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { queueFetch } from "@/lib/offlineQueue";
@@ -36,6 +37,7 @@ export default function CleanerApp() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [workerId, setWorkerId] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [reportingIssue, setReportingIssue] = useState(false);
   const [issueArea, setIssueArea] = useState(AREAS[0]);
   const [issuePriority, setIssuePriority] = useState("YELLOW");
@@ -69,19 +71,22 @@ export default function CleanerApp() {
   useEffect(() => {
     // Extra task fields defined by the Super Admin (shown read-only on the job).
     fetch("/api/settings/task-fields").then((r) => (r.ok ? r.json() : null)).then((d) => d && setTaskFields(d.fields ?? [])).catch(() => {});
-    const id = localStorage.getItem("workerId");
-    setWorkerId(id);
-    if (!id) return;
-    // If this phone remembers a worker that no longer exists (demo data was
-    // reset / server restarted), start over instead of showing an empty app.
-    fetch(`/api/workers/${id}`).then((r) => {
-      if (!r.ok) {
-        ["workerId", "workerName", "workerArea"].forEach((k) => localStorage.removeItem(k));
-        router.replace("/");
-      } else {
-        loadTasks(id);
-      }
-    });
+    (async () => {
+      const id = await restoreWorkerId(); // the saved id, or the one the login cookie belongs to
+      setWorkerId(id);
+      setAuthChecked(true);
+      if (!id) return;
+      // Forget this phone's worker ONLY when the server says it no longer exists (404). A slow or
+      // failed reply must not sign anybody out.
+      fetch(`/api/workers/${id}`).then((r) => {
+        if (r.status === 404) {
+          ["workerId", "workerName", "workerArea"].forEach((k) => localStorage.removeItem(k));
+          router.replace("/");
+        } else if (r.ok) {
+          loadTasks(id);
+        }
+      }).catch(() => {});
+    })();
   }, []);
 
   async function loadTasks(id: string) {
@@ -280,7 +285,8 @@ export default function CleanerApp() {
   }
 
   if (!workerId) {
-    return <p style={{ padding: 24 }}>{tr("Please sign in first.")} <a href="/">{tr("Sign in")}</a></p>;
+    if (!authChecked) return null; // still checking who you are: show nothing instead of flashing "sign in"
+    return <p style={{ padding: 24 }}>{tr("Please sign in first.")} <a href="/login">{tr("Sign in")}</a></p>;
   }
 
   // --- Issue report screen (feeds straight into the Maintenance module) ---
