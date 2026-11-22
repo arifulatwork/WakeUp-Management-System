@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { HOME } from "@/lib/permissions";
+import PageSpinner from "@/components/PageSpinner";
 
 // "/" is not a screen any more (the old "create your worker ID" onboarding is gone: accounts are
 // made by the Super Admin). It only sends each person to their own screen:
@@ -36,5 +37,5 @@ export default function Root() {
     return () => { cancelled = true; };
   }, [router]);
 
-  return null;
+  return <PageSpinner />;
 }

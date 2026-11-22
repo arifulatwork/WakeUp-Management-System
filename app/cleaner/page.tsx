@@ -2,6 +2,7 @@
 
 import FieldHeader from "@/components/FieldHeader";
 import { restoreWorkerId } from "@/lib/restoreWorker";
+import PageSpinner from "@/components/PageSpinner";
 import { useEffect, useRef, useState } from "react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { queueFetch } from "@/lib/offlineQueue";
@@ -285,7 +286,7 @@ export default function CleanerApp() {
   }
 
   if (!workerId) {
-    if (!authChecked) return null; // still checking who you are: show nothing instead of flashing "sign in"
+    if (!authChecked) return <PageSpinner />; // still checking who you are: spinner instead of flashing "sign in"
     return <p style={{ padding: 24 }}>{tr("Please sign in first.")} <a href="/login">{tr("Sign in")}</a></p>;
   }
 
