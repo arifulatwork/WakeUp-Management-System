@@ -60,15 +60,19 @@ export default function NotificationsPage() {
     setSoundEnabled(next);
     if (next) { unlockSound(); playNotificationSound(); }
   }
-  // Back = where you came from (the cleaner / maintenance screen). If the page was opened
-  // straight from a phone notification there is no history, so go to the person's own home screen.
-  // (Never "/": that is the old onboarding page.)
+  // Back = where you came from (the cleaner / maintenance screen). If the page was opened straight
+  // from a phone notification there is nothing to go back to, so go to the person's own home screen.
+  // Never to /login or the old onboarding page.
   function goBack() {
-    const home = !session ? "/login"
+    let ref = "";
+    try { ref = document.referrer ? new URL(document.referrer).pathname : ""; } catch { /* ignore */ }
+    const cameFromApp = window.history.length > 1 && document.referrer.startsWith(window.location.origin)
+      && !["", "/", "/login", "/onboarding"].includes(ref);
+    if (cameFromApp) { router.back(); return; }
+    const home = !session ? "/"   // "/" forwards signed-in people to their own screen
       : session.role === "worker" ? (session.area === "MAINTENANCE" ? "/maintenance" : "/cleaner")
-      : HOME[session.role] ?? "/login";
-    if (window.history.length > 1 && document.referrer.startsWith(window.location.origin)) router.back();
-    else router.push(home);
+      : HOME[session.role] ?? "/";
+    router.push(home);
   }
   function showOlder() { limit.current += PAGE; load(); }
 
