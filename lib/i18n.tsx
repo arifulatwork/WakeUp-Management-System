@@ -41,6 +41,8 @@ const ROWS: Row[] = [
   ["Notifications", "Notificações", "Notificaciones", "Notifications", "Notifiche", "Сповіщення"],
   ["Notifications are not set up on the server yet.", "As notificações ainda não estão configuradas no servidor.", "Las notificaciones aún no están configuradas en el servidor.", "Les notifications ne sont pas encore configurées sur le serveur.", "Le notifiche non sono ancora configurate sul server.", "Сповіщення на сервері ще не налаштовано."],
   ["No notifications yet", "Ainda sem notificações", "Aún no hay notificaciones", "Aucune notification pour le moment", "Ancora nessuna notifica", "Сповіщень ще немає"],
+  ["All notifications", "Todas as notificações", "Todas las notificaciones", "Toutes les notifications", "Tutte le notifiche", "Усі сповіщення"],
+  ["Show older", "Mostrar mais antigas", "Mostrar anteriores", "Afficher les plus anciennes", "Mostra le meno recenti", "Показати старіші"],
   ["Mark all as read", "Marcar tudo como lido", "Marcar todo como leído", "Tout marquer comme lu", "Segna tutto come letto", "Позначити все прочитаним"],
   ["Sound on", "Som ligado", "Sonido activado", "Son activé", "Suono attivo", "Звук увімкнено"],
   ["Sound off", "Som desligado", "Sonido desactivado", "Son désactivé", "Suono disattivato", "Звук вимкнено"],
