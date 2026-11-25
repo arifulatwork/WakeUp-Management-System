@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { randomInt } from "crypto";
 import { db } from "@/lib/db";
 import type { FullSession } from "@/lib/guard";
-import { CODE_ALPHABET, CODE_LENGTH, MAX_QTY, MAX_QTY_TOTAL, Alternative, PRODUCT_LANGS, cleanCountry, productInCountry } from "@/lib/ordering";
+import { CODE_ALPHABET, CODE_LENGTH, MAX_QTY, MAX_QTY_TOTAL, Alternative, PRODUCT_LANGS, cleanCountry, dateKey, productInCountry } from "@/lib/ordering";
+import { getOrdering } from "@/lib/settings";
+import { logAudit } from "@/lib/audit";
 import { MEDIA_ENABLED } from "@/lib/features";
 import { isValidPhoto } from "@/lib/photoValidation";
 import { slimProduct } from "@/lib/mediaSlim";
@@ -110,6 +112,32 @@ export async function addToGroupOrder(groupId: string, orderDate: string, actorI
     }
   }
   return order;
+}
+
+// Once the cut-off has passed, every OPEN order goes to the supplier by itself (no second confirmation).
+// An order is left open only while it is empty or a student request for that day is still waiting for the
+// coordinator: as soon as the last one is approved or rejected, the next call sends it.
+// Called whenever the order list is loaded, so no scheduled job is needed.
+export async function autoSendDueOrders() {
+  try {
+    const cfg = await getOrdering();
+    const now = new Date();
+    const [h, m] = cfg.cutoffTime.split(":").map(Number);
+    const cut = new Date(now); cut.setHours(h, m, 0, 0);
+    const today = dateKey(now);
+    const open = await db.order.findMany({ where: { status: "OPEN" }, include: { group: true } });
+    for (const o of open) {
+      const due = o.orderDate < today || (o.orderDate === today && now >= cut);
+      if (!due) continue;
+      if (!(await db.orderLine.count({ where: { orderId: o.id } }))) continue;
+      const waiting = await db.studentRequest.findMany({ where: { groupId: o.groupId, orderDate: o.orderDate, status: "PENDING" } });
+      if (waiting.length) continue;
+      await db.order.update({ where: { id: o.id }, data: { status: "APPROVED", approvedAt: new Date() } });
+      await logAudit(null, "order", o.id, "submit", "Sent the order of {group} to the supplier", { group: o.group?.name ?? "" });
+    }
+  } catch (e) {
+    console.error("[orders] automatic send failed", e); // never breaks loading the list
+  }
 }
 
 // After the supplier marks a line: PENDING lines left -> PREPARING (or APPROVED if none done yet), none left -> PREPARED.

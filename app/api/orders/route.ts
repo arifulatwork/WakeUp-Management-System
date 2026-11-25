@@ -5,7 +5,7 @@ import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { getOrdering } from "@/lib/settings";
 import { dateKey, deliveryDateKey, orderingWindow, SUPPLIER_STATUSES } from "@/lib/ordering";
-import { canManageGroup, cleanOrderLines, groupsFor, jerr, ordersWithLines } from "@/lib/orderLogic";
+import { autoSendDueOrders, canManageGroup, cleanOrderLines, groupsFor, jerr, ordersWithLines } from "@/lib/orderLogic";
 
 const publicOrder = (o: any, delay = 1) => ({
   ...o,
@@ -18,6 +18,7 @@ const publicOrder = (o: any, delay = 1) => ({
 export async function GET(req: NextRequest) {
   const me = await currentSession(req);
   if (!me) return jerr("sign in required", 401);
+  await autoSendDueOrders(); // after the cut-off, open orders go to the supplier by themselves
   let where: Record<string, any> | undefined;
   if (me.role === "student") where = { groupId: me.groupId ?? "none" };
   else if (me.role === "coordinator") where = { groupId: { in: (await groupsFor(me)).map((g: any) => g.id) } };
