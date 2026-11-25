@@ -5,7 +5,7 @@ import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { PanelCard } from "@/components/PanelShell";
-import { countryName, MAX_QTY, productInCountry, productName, showCode } from "@/lib/ordering";
+import { countryName, MAX_QTY, MAX_QTY_TOTAL, productInCountry, productName, showCode } from "@/lib/ordering";
 import { altLabel, CountrySelect, Order, Product, ProductThumb } from "@/components/ordering/common";
 
 export type Group = {
@@ -264,7 +264,7 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
                 {p.alternatives.map((a) => <option key={a.id} value={a.id}>{altLabel(a)}</option>)}
               </select>
             )}
-            <input style={{ ...S.input, width: 70 }} type="number" min={0} max={p.perStudent ? 999 : MAX_QTY} value={qty[p.id] ?? 0} onChange={(e) => setQty({ ...qty, [p.id]: Math.max(0, Math.min(p.perStudent ? 999 : MAX_QTY, Math.floor(Number(e.target.value) || 0))) })} />
+            <input style={{ ...S.input, width: 70 }} type="number" min={0} max={p.perStudent ? MAX_QTY_TOTAL : MAX_QTY} value={qty[p.id] ?? 0} onChange={(e) => setQty({ ...qty, [p.id]: Math.max(0, Math.min(p.perStudent ? MAX_QTY_TOTAL : MAX_QTY, Math.floor(Number(e.target.value) || 0))) })} />
             {isException(p) && <input style={{ ...S.input, flex: "1 1 100%" }} placeholder={tr("Reason for a different quantity")} value={why[p.id] ?? ""} maxLength={200} onChange={(e) => setWhy({ ...why, [p.id]: e.target.value })} />}
           </div>
         ))}

@@ -255,8 +255,8 @@ function RequestCard({ req, canReview, onDone }: { req: Req; canReview: boolean;
             </div>
             {canReview && (
               <>
-                <input style={{ ...S.input, width: 70 }} type="number" min={1} max={99} value={qty[l.id]} disabled={!!drop[l.id]}
-                  onChange={(e) => setQty({ ...qty, [l.id]: Math.max(1, Math.min(99, Math.floor(Number(e.target.value) || 1))) })} />
+                <input style={{ ...S.input, width: 70 }} type="number" min={1} max={9999} value={qty[l.id]} disabled={!!drop[l.id]}
+                  onChange={(e) => setQty({ ...qty, [l.id]: Math.max(1, Math.min(9999, Math.floor(Number(e.target.value) || 1))) })} />
                 <button style={S.small} onClick={() => setDrop({ ...drop, [l.id]: !drop[l.id] })}>{drop[l.id] ? tr("Keep") : tr("Reject line")}</button>
               </>
             )}

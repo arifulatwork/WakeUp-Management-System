@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomInt } from "crypto";
 import { db } from "@/lib/db";
 import type { FullSession } from "@/lib/guard";
-import { CODE_ALPHABET, CODE_LENGTH, MAX_QTY, Alternative, PRODUCT_LANGS, cleanCountry, productInCountry } from "@/lib/ordering";
+import { CODE_ALPHABET, CODE_LENGTH, MAX_QTY, MAX_QTY_TOTAL, Alternative, PRODUCT_LANGS, cleanCountry, productInCountry } from "@/lib/ordering";
 import { MEDIA_ENABLED } from "@/lib/features";
 import { isValidPhoto } from "@/lib/photoValidation";
 import { slimProduct } from "@/lib/mediaSlim";
@@ -102,7 +102,7 @@ export async function addToGroupOrder(groupId: string, orderDate: string, actorI
     const same = existing.find((l: any) => l.productId === it.productId && (l.alternativeName ?? null) === alt);
     if (same) {
       const perStudent = !!prods.find((p: any) => p.id === it.productId)?.perStudent;
-      same.quantity = perStudent ? Math.min(999, same.quantity + it.quantity) : Math.max(same.quantity, it.quantity);
+      same.quantity = perStudent ? Math.min(MAX_QTY_TOTAL, same.quantity + it.quantity) : Math.max(same.quantity, it.quantity);
       await db.orderLine.update({ where: { id: same.id }, data: { quantity: same.quantity } });
     } else {
       const row = await db.orderLine.create({ data: { orderId: order.id, productId: it.productId, quantity: it.quantity, alternativeName: alt } });
@@ -191,8 +191,8 @@ export async function cleanOrderLines(input: unknown, country?: string | null, r
     if (seen.has(key)) return { error: "each product only once" };
     seen.add(key);
     const quantity = Math.floor(Number(l.quantity));
-    // a group quantity is limited like student requests (1-99); a per-student product scales with the group size
-    if (!Number.isFinite(quantity) || quantity < 1 || quantity > (p.perStudent ? 999 : MAX_QTY)) return { error: "invalid quantity" };
+    // a group quantity is limited like student requests (1-9999); a per-student product scales with the group size
+    if (!Number.isFinite(quantity) || quantity < 1 || quantity > (p.perStudent ? MAX_QTY_TOTAL : MAX_QTY)) return { error: "invalid quantity" };
     // A group quantity that differs from the standard one is an exception: it needs a reason (and the admin must allow exceptions).
     const exception = !p.perStudent && quantity !== p.standardQty;
     const reason = String(l.reason ?? "").replace(/\s+/g, " ").trim().slice(0, 200);

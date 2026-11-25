@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { OrderingConfig, WEEKDAYS, WindowState, countryOptions } from "@/lib/ordering";
+import { MAX_QTY, OrderingConfig, WEEKDAYS, WindowState, countryOptions } from "@/lib/ordering";
 import { S } from "@/components/ui";
 
 // Small pieces shared by the four ordering screens (student, supplier, groups & orders, catalogue).
@@ -117,7 +117,7 @@ export function useJson<T>(url: string, fallback: T) {
   return { data, reload, loaded };
 }
 
-export function Stepper({ value, onChange, min = 0, max = 99, disabled }: { value: number; onChange: (n: number) => void; min?: number; max?: number; disabled?: boolean }) {
+export function Stepper({ value, onChange, min = 0, max = MAX_QTY, disabled }: { value: number; onChange: (n: number) => void; min?: number; max?: number; disabled?: boolean }) {
   const b: React.CSSProperties = { width: 30, height: 30, borderRadius: 8, border: "1px solid var(--line)", background: "#fff", fontSize: 16, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.4 : 1 };
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>

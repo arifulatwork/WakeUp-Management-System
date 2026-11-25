@@ -89,7 +89,8 @@ export const dietaryGaps = (studentReqs: string[] | null | undefined, tags: stri
 
 export type Alternative = { id: string; name: string; brand?: string; dietaryTags: string[] };
 
-export const MAX_QTY = 99;
+export const MAX_QTY = 9999;          // largest quantity of one product for a group (e.g. 9999 g)
+export const MAX_QTY_TOTAL = 99999;   // largest total when a per-student quantity is multiplied by the number of students
 
 // ---- countries & product languages ----
 // Each group belongs to a country; a product is sold in one country (or in all of them when country is empty).
