@@ -75,7 +75,6 @@ export default function ProductEditor({ product, dietary, countries, onClose, on
         <PhotoPicker showWhenOff label={`📷 ${photoSrc ? tr("Replace photo") : tr("Upload photo")}`} style={{ ...S.ghost, width: "100%" }} onPhoto={setPhoto} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div><label style={S.label}>{tr("Category")}</label><input style={S.input} value={category} maxLength={40} onChange={(e) => setCategory(e.target.value)} /></div>
-          <div><label style={S.label}>{tr("Brand")}</label><input style={S.input} value={brand} maxLength={60} onChange={(e) => setBrand(e.target.value)} /></div>
           <div><label style={S.label}>{tr("Unit")}</label><input style={S.input} value={unit} maxLength={20} onChange={(e) => setUnit(e.target.value)} /></div>
           <div><label style={S.label}>{perStudent ? tr("Standard quantity (per student)") : tr("Standard quantity (for the group)")}</label>
             <input style={S.input} type="number" min={1} max={MAX_QTY} value={standardQty} onChange={(e) => setStandardQty(Math.max(1, Math.min(MAX_QTY, Math.floor(Number(e.target.value) || 1))))} /></div>
