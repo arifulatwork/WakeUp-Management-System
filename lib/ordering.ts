@@ -99,10 +99,12 @@ export const cleanCountry = (v: unknown): string | null => {
   const c = String(v ?? "").trim().toUpperCase();
   return COUNTRY_CODES.includes(c) ? c : null;
 };
+// The 27 EU member states: the only countries offered in the dropdowns.
+export const EU_COUNTRY_CODES = ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"];
 // Countries as dropdown options, sorted by name in the screen's language. `only` limits the list (e.g. a coordinator).
 export function countryOptions(locale = "en-GB", only?: string[] | null): { code: string; name: string }[] {
   const col = new Intl.Collator(locale);
-  return (only ?? COUNTRY_CODES).map((code) => ({ code, name: countryName(code, locale) })).sort((a, b) => col.compare(a.name, b.name));
+  return (only ?? EU_COUNTRY_CODES).map((code) => ({ code, name: countryName(code, locale) })).sort((a, b) => col.compare(a.name, b.name));
 }
 // "PT" -> "Portugal" / "Portugal" / "Portogallo" … in the language of the screen.
 export function countryName(code: string, locale = "en-GB"): string {
