@@ -15,6 +15,7 @@ export default function StaffEditor({ worker, selfId, onClose, onSaved }: {
   const editing = !!worker;
   const [name, setName] = useState(worker?.name ?? "");
   const [area, setArea] = useState(worker?.area ?? "CLEANING");
+  const [role, setRole] = useState("worker"); // new staff only; an existing person's role is changed in the staff table
   const [language, setLanguage] = useState(worker?.language ?? "pt");
   const [username, setUsername] = useState(worker?.username ?? "");
   const [password, setPassword] = useState("");
@@ -35,8 +36,7 @@ export default function StaffEditor({ worker, selfId, onClose, onSaved }: {
         await api(`/api/workers/${worker!.id}`, "PATCH", { name, area, language });
         if (password) await api("/api/auth/register", "POST", { workerId: worker!.id, username: username.trim(), password });
       } else {
-        const isSupplier = area === "SUPPLIER"; // warehouse staff: role "supplier", the team is just a placeholder
-        await api("/api/workers", "POST", { name: name.trim(), area: isSupplier ? "CLEANING" : area, ...(isSupplier ? { role: "supplier" } : {}), language, username: username.trim(), password });
+        await api("/api/workers", "POST", { name: name.trim(), area, role, language, username: username.trim(), password });
       }
       onSaved();
     } catch (e: any) {
@@ -61,8 +61,17 @@ export default function StaffEditor({ worker, selfId, onClose, onSaved }: {
       <label style={S.label}>{tr("Name")}</label>
       <input style={S.input} value={name} onChange={(e) => setName(e.target.value)} />
 
+      {!editing && (
+        <>
+          <label style={S.label}>{tr("Role")}</label>
+          <select style={S.input} value={role} onChange={(e) => setRole(e.target.value)}>
+            {["worker", "manager", "coordinator", "admin", "supplier"].map((r) => <option key={r} value={r}>{ev(r)}</option>)}
+          </select>
+        </>
+      )}
+
       <label style={S.label}>{tr("Team")}</label>
-      <Pills options={editing ? ["CLEANING", "MAINTENANCE"] : ["CLEANING", "MAINTENANCE", "SUPPLIER"]} value={area} onChange={setArea} label={(o) => (o === "SUPPLIER" ? tr("Supplier") : ev(o))} />
+      <Pills options={["CLEANING", "MAINTENANCE"]} value={area} onChange={setArea} label={ev} />
 
       <label style={S.label}>{tr("Language")}</label>
       <select style={S.input} value={language} onChange={(e) => setLanguage(e.target.value)}>
