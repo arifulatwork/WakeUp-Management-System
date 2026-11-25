@@ -72,7 +72,7 @@ export default function GroupOrdersPage() {
   const hit = (...parts: unknown[]) => !searching || parts.some((p) => norm(p).includes(needle));
   const statusMatch = (o: Order, f: string) =>
     f === "ALL" ? true
-    : f === "ACTIVE" ? o.status !== "CANCELLED" && !(o.status === "DELIVERED" && (o.receivedAt || !canCreate)) // a delivered order still waiting for "Confirm received" stays active
+    : f === "ACTIVE" ? o.status !== "CANCELLED" && o.status !== "DELIVERED" // delivered = done (the driver's "Delivered" is the confirmation)
     : f === "WITH_SUPPLIER" ? ["APPROVED", "PREPARING", "PREPARED"].includes(o.status)
     : o.status === f;
 
@@ -165,7 +165,6 @@ export default function GroupOrdersPage() {
                     </>
                   )}
                   {canCreate && ["OPEN", "APPROVED"].includes(o.status) && <button style={S.small} onClick={() => orderAction(o, "cancel")}>{tr("Cancel order")}</button>}
-                  {canCreate && o.status === "DELIVERED" && !o.receivedAt && <button style={S.smallDark} onClick={() => orderAction(o, "confirm")}>{tr("Confirm received")}</button>}
                 </div>
               </div>
               <Flow status={o.status} />
