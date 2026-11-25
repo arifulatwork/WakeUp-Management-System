@@ -10,6 +10,7 @@ import { altLabel, CountrySelect, Order, Product, ProductThumb } from "@/compone
 
 export type Group = {
   id: string; name: string; codeActive: boolean; accessCode?: string; studentCount: number; memberLimit: number | null; country?: string | null;
+  startDate?: string | null; endDate?: string | null; archived?: boolean; // archived = the end date has passed
   coordinator: { id: string; name: string } | null; house: { id: string; name: string } | null;
 };
 export type Student = { id: string; name: string; dietary: string[] };
@@ -56,12 +57,14 @@ export function GroupCard({ group: g, dietary, canCode, canManage, onChanged, on
     try { await api(`/api/groups/${g.id}/students?studentId=${s.id}`, "DELETE"); onChanged(); loadStudents(); }
     catch (e: any) { setErr(e?.message === "has history" ? tr("This student has approved requests on record, so they can't be removed.") : saveError(e, tr)); }
   }
+  const fmtDay = (k?: string | null) => { const [y, m, d] = (k ?? "").split("-").map(Number); return y ? new Date(y, m - 1, d).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" }) : ""; };
+  const period = g.startDate || g.endDate ? `${fmtDay(g.startDate) || "…"} → ${fmtDay(g.endDate) || "…"}` : null;
   const copy = () => { navigator.clipboard?.writeText(g.accessCode ?? "").then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); };
 
   return (
     <PanelCard
       title={g.name}
-      subtitle={[g.house?.name, g.country ? countryName(g.country, locale) : null, g.coordinator ? `${tr("Coordinator")}: ${g.coordinator.name}` : tr("No coordinator yet"), g.memberLimit != null ? `${g.studentCount} / ${g.memberLimit} ${tr("students")}` : `${g.studentCount} ${tr("students")}`].filter(Boolean).join(" · ")}
+      subtitle={[g.archived ? `📦 ${tr("Archived")}` : null, period, g.house?.name, g.country ? countryName(g.country, locale) : null, g.coordinator ? `${tr("Coordinator")}: ${g.coordinator.name}` : tr("No coordinator yet"), g.memberLimit != null ? `${g.studentCount} / ${g.memberLimit} ${tr("students")}` : `${g.studentCount} ${tr("students")}`].filter(Boolean).join(" · ")}
       action={<>
         {onOrder && <button style={S.smallDark} onClick={onOrder}>{tr("Create order")}</button>}
         {canManage && <button style={S.small} onClick={onEdit}>{tr("Edit")}</button>}
@@ -141,6 +144,9 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
   const [coordinatorId, setCoordinatorId] = useState(group?.coordinator?.id ?? "");
   const [houseId, setHouseId] = useState(group?.house?.id ?? "");
   const [country, setCountry] = useState(group?.country ?? "");
+  const [startDate, setStartDate] = useState(group?.startDate ?? "");
+  const [endDate, setEndDate] = useState(group?.endDate ?? "");
+  const datesOk = !startDate || !endDate || endDate >= startDate;
   const [limitText, setLimitText] = useState(""); // new group only: empty = no limit
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -149,7 +155,7 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
   async function save() {
     setSaving(true); setError("");
     try {
-      const body = { name: name.trim(), coordinatorId: coordinatorId || null, houseId: houseId || null, country: country || null,
+      const body = { name: name.trim(), coordinatorId: coordinatorId || null, houseId: houseId || null, country: country || null, startDate: startDate || null, endDate: endDate || null,
         ...(!group && limitText.trim() ? { memberLimit: limitNum } : {}) };
       if (group) await api(`/api/groups/${group.id}`, "PATCH", body); else await api("/api/groups", "POST", body);
       onSaved();
@@ -177,6 +183,13 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
       <label style={S.label}>{tr("Country")}</label>
       <CountrySelect value={country} onChange={setCountry} firstLabel="—" />
       <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("Students of this group only see the products of this country, plus the products for all countries.")}</div>
+      <label style={S.label}>{tr("Start date")}</label>
+      <input style={S.input} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+      <label style={S.label}>{tr("End date")}</label>
+      <input style={S.input} type="date" value={endDate} min={startDate || undefined} onChange={(e) => setEndDate(e.target.value)} />
+      <div style={{ fontSize: 11.5, color: datesOk ? "var(--ink-soft)" : "var(--red)", marginTop: 4 }}>
+        {datesOk ? tr("After the end date the group moves to the archive and its students can no longer sign in.") : tr("The end date can't be before the start date.")}
+      </div>
       {!group && (
         <>
           <label style={S.label}>{tr("Number of students in the group")}</label>
@@ -184,7 +197,7 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
           <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("Only this many students can join and order.")}</div>
         </>
       )}
-      <FormFooter saving={saving} canSave={!!name.trim() && limitValid} onSave={save} onClose={onClose} onDelete={group ? remove : undefined} error={error}
+      <FormFooter saving={saving} canSave={!!name.trim() && limitValid && datesOk} onSave={save} onClose={onClose} onDelete={group ? remove : undefined} error={error}
         confirmText={tr("Delete this group and its students? This cannot be undone.")} />
     </Modal>
   );

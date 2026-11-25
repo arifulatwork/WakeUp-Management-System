@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { verifySession, SESSION_COOKIE, SessionPayload } from "@/lib/session";
 import { can, Perm } from "@/lib/permissions";
 import { cachedValue } from "@/lib/serverCache";
+import { groupEnded } from "@/lib/ordering";
 
 // Server-side enforcement. Hiding a button is not security — every route that
 // changes or exposes management data calls requirePerm().
@@ -26,7 +27,7 @@ export async function currentSession(req: NextRequest): Promise<FullSession | nu
     const group = worker.groupId
       ? await cachedValue<any>(`group:${worker.groupId}`, ["group"], () => db.group.findUnique({ where: { id: worker.groupId } }))
       : null;
-    if (!group || !group.codeActive) return null;
+    if (!group || !group.codeActive || groupEnded(group)) return null; // switched off, deleted, or past its end date (archived)
   }
   return { ...session, role: worker.role, name: worker.name, area: worker.area, language: worker.language, groupId: worker.groupId ?? null };
 }

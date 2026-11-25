@@ -290,6 +290,8 @@ model Group {
   coordinatorId String?
   house         House?   @relation(fields: [houseId], references: [id], onDelete: SetNull)
   houseId       String?                   // optional: the house this group lives in
+  startDate     String?                   // "YYYY-MM-DD": first day of the group's stay (informational)
+  endDate       String?                   // "YYYY-MM-DD": last day. Once this day has passed the group is ARCHIVED (see lib/ordering.ts groupEnded). null = never ends
   createdAt     DateTime @default(now())
 
   students Worker[]         @relation("GroupStudents")

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { createSession, SESSION_COOKIE } from "@/lib/session";
 import { normName } from "@/lib/houseMode";
-import { normCode } from "@/lib/ordering";
+import { groupEnded, normCode } from "@/lib/ordering";
 import { logAudit } from "@/lib/audit";
 
 // POST /api/auth/student { code, name } — students have no username or password.
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   };
 
   const group = await db.group.findUnique({ where: { accessCode: code } });
-  if (!group || !group.codeActive) return fail();
+  if (!group || !group.codeActive || groupEnded(group)) return fail(); // an archived group (end date passed) cannot sign in
   fails.delete(ip);
 
   const members = await db.worker.findMany({ where: { groupId: group.id } });

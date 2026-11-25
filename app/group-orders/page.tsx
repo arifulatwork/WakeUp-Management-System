@@ -48,7 +48,8 @@ export default function GroupOrdersPage() {
   const [statusF, setStatusF] = useState("ACTIVE"); // finished orders stay out of the way until asked for
   const [orderPage, setOrderPage] = useState(1);
   const [groupPage, setGroupPage] = useState(1);
-  useEffect(() => { setOrderPage(1); setGroupPage(1); }, [q, statusF]);
+  const [showArchive, setShowArchive] = useState(false); // false = current groups, true = archive (end date passed)
+  useEffect(() => { setOrderPage(1); setGroupPage(1); }, [q, statusF, showArchive]);
 
   const refresh = () => { info.reload(); groups.reload(); requests.reload(); orders.reload(); products.reload(); dietary.reload(); };
   useLiveRefresh(refresh, { models: ["group", "worker", "studentRequest", "requestLine", "order", "orderLine", "product", "dietaryRequirement", "appSetting"] });
@@ -82,7 +83,9 @@ export default function GroupOrdersPage() {
   const orderPages = Math.max(1, Math.ceil(ordersMatching.length / ORDERS_PER_PAGE));
   const curOrderPage = Math.min(orderPage, orderPages);
   const pagedOrders = ordersMatching.slice((curOrderPage - 1) * ORDERS_PER_PAGE, curOrderPage * ORDERS_PER_PAGE);
-  const groupsMatching = groups.data.filter((g) => hit(g.name, g.house?.name, g.coordinator?.name));
+  const currentGroups = groups.data.filter((g) => !g.archived);
+  const archivedGroups = groups.data.filter((g) => g.archived);
+  const groupsMatching = (showArchive ? archivedGroups : currentGroups).filter((g) => hit(g.name, g.house?.name, g.coordinator?.name));
   const groupPages = Math.max(1, Math.ceil(groupsMatching.length / GROUPS_PER_PAGE));
   const curGroupPage = Math.min(groupPage, groupPages);
   const pagedGroups = groupsMatching.slice((curGroupPage - 1) * GROUPS_PER_PAGE, curGroupPage * GROUPS_PER_PAGE);
@@ -108,7 +111,7 @@ export default function GroupOrdersPage() {
     >
       <OrderingBanner info={info.data} />
       <StatGrid>
-        <StatCard n={groups.data.length} label={tr("Groups")} />
+        <StatCard n={currentGroups.length} label={tr("Groups")} />
         <StatCard n={pending.length} label={tr("Requests to review")} color="#B8860B" />
         <StatCard n={orders.data.filter((o) => ["APPROVED", "PREPARING", "PREPARED"].includes(o.status)).length} label={tr("With the supplier")} color="#2E6B8A" />
         <StatCard n={orders.data.filter((o) => o.status === "DISPATCHED").length} label={tr("On the way")} color="#4F7A26" />
@@ -192,12 +195,16 @@ export default function GroupOrdersPage() {
 
       {vis.shown.groups && (
         <>
-          {!groups.data.length && <PanelCard><p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No groups yet.")}</p></PanelCard>}
-          {groups.data.length > 0 && !groupsMatching.length && <PanelCard><p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching groups.")}</p></PanelCard>}
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <button style={showArchive ? S.small : S.smallDark} onClick={() => setShowArchive(false)}>{tr("Current")} ({currentGroups.length})</button>
+            <button style={showArchive ? S.smallDark : S.small} onClick={() => setShowArchive(true)}>{tr("Archived groups")} ({archivedGroups.length})</button>
+          </div>
+          {!(showArchive ? archivedGroups : currentGroups).length && <PanelCard><p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{showArchive ? tr("No archived groups.") : tr("No groups yet.")}</p></PanelCard>}
+          {(showArchive ? archivedGroups : currentGroups).length > 0 && !groupsMatching.length && <PanelCard><p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching groups.")}</p></PanelCard>}
           {pagedGroups.map((g) => (
             <GroupCard key={g.id} group={g} dietary={dietary.data.map((d) => d.name)} canCode={canCode} canManage={canManage}
               onChanged={refresh} onEdit={() => setGroupEd({ group: g })}
-              onOrder={mayBuild && !orders.data.some((o) => o.groupId === g.id && o.orderDate === today && o.status !== "CANCELLED") ? () => setBuilder({ group: g, order: null }) : undefined} />
+              onOrder={mayBuild && !g.archived && !orders.data.some((o) => o.groupId === g.id && o.orderDate === today && o.status !== "CANCELLED") ? () => setBuilder({ group: g, order: null }) : undefined} />
           ))}
           <Pager page={curGroupPage} pages={groupPages} onPage={setGroupPage} />
         </>

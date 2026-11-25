@@ -4,7 +4,7 @@ import { currentSession } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { getOrdering } from "@/lib/settings";
-import { dateKey, deliveryDateKey, orderingWindow, SUPPLIER_STATUSES } from "@/lib/ordering";
+import { dateKey, deliveryDateKey, groupEnded, orderingWindow, SUPPLIER_STATUSES } from "@/lib/ordering";
 import { autoSendDueOrders, canManageGroup, cleanOrderLines, groupsFor, jerr, ordersWithLines } from "@/lib/orderLogic";
 
 const publicOrder = (o: any, delay = 1) => ({
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
   const group = await db.group.findUnique({ where: { id: String(b.groupId ?? "") } });
   if (!group) return jerr("group not found", 404);
   if (!(await canManageGroup(me, group.id))) return jerr("forbidden", 403);
+  if (groupEnded(group)) return jerr("group archived", 409);
 
   const cfg = await getOrdering();
   if (me.role !== "admin") {

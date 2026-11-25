@@ -1,3 +1,14 @@
+# Groups: start / end date and archive
+
+- **Start and end date.** The group editor (Groups & Orders -> Add / Edit group) has a start date and an end date. Both are optional; an end date can't be before the start date.
+- **Archive.** From the day *after* the end date a group is archived: it leaves the **Current** list and appears under **Archived groups** (tab above the list). The end date itself is still a current day. Groups without an end date stay current forever.
+- **Archived groups are locked.** Students can no longer sign in (existing sessions end at once), and no new order can be created for them. Their requests, orders and history stay visible.
+- **Bring a group back** by moving its end date to a later day (or clearing it).
+
+Database: run `npx prisma migrate deploy` (new migration `20261125120000_group_dates`: `Group.startDate`, `Group.endDate`). Existing groups have no dates, so nothing changes for them.
+
+Changed: `prisma/schema.prisma`, `lib/ordering.ts`, `lib/guard.ts`, `lib/i18n.tsx`, `app/api/groups/route.ts`, `app/api/groups/[id]/route.ts`, `app/api/auth/student/route.ts`, `app/api/orders/route.ts`, `components/ordering/GroupPanels.tsx`, `app/group-orders/page.tsx`.
+
 # Food ordering: spec fixes
 
 - **Order days:** default ordering days are now Sunday, Tuesday and Friday, and every order shows its **delivery day** (order day + 1: Sunday -> Monday, Tuesday -> Wednesday, Friday -> Saturday). The delay is a setting in Catalogue -> Ordering rules. A setting already saved by the admin is kept, so check the days there.

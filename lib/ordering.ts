@@ -47,6 +47,22 @@ export function dateKey(d: Date = new Date()): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+// A "YYYY-MM-DD" date typed in a form -> the same string, or null when empty / not a real date. `error` = something typed but invalid.
+export function cleanDateKey(v: unknown): { value: string | null; error?: string } {
+  const s = String(v ?? "").trim();
+  if (!s) return { value: null };
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return { value: null, error: "invalid date" };
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (d.getFullYear() !== Number(m[1]) || d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[3])) return { value: null, error: "invalid date" };
+  return { value: s };
+}
+
+// Has this group's end date passed? The end date itself still counts as a current day; the group is archived from the day after.
+export function groupEnded(g: { endDate?: string | null }, today: string = dateKey()): boolean {
+  return !!g.endDate && g.endDate < today;
+}
+
 // The delivery day of an order made on `orderDate` ("2026-11-02" + 1 day = "2026-11-03").
 export function deliveryDateKey(orderDate: string, delayDays: number): string {
   const [y, m, d] = orderDate.split("-").map(Number);

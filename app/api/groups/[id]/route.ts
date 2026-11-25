@@ -4,13 +4,14 @@ import { currentSession } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { nameKey, normName } from "@/lib/houseMode";
-import { cleanCountry } from "@/lib/ordering";
+import { cleanCountry, cleanDateKey } from "@/lib/ordering";
 import { canManageGroup, cleanMemberLimit, groupStudents, jerr, newGroupCode } from "@/lib/orderLogic";
 
 // PATCH /api/groups/:id
 //   admin:                  { name?, coordinatorId?, houseId? }
 //   coordinator of group / admin: { codeAction: "regenerate" } | { codeActive: boolean }   (the secret code)
 //                                 { country: "PT" | … | null }   (the country whose products the group orders)
+//                                 { startDate?, endDate?: "YYYY-MM-DD" | null }   (after the end date the group is archived)
 //                                 { memberLimit: number | null }   (how many students may join and order; null = no limit)
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const me = await currentSession(req);
@@ -51,6 +52,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!can(me.role, "groups.code") || !(await canManageGroup(me, group.id))) return jerr("forbidden", 403);
     if (String(b.country ?? "").trim() && !cleanCountry(b.country)) return jerr("invalid country");
     data.country = cleanCountry(b.country);
+  }
+  // Start / end date: admin or the coordinator of this group. Moving the end date forward brings an archived group back.
+  if (b.startDate !== undefined || b.endDate !== undefined) {
+    if (!can(me.role, "groups.code") || !(await canManageGroup(me, group.id))) return jerr("forbidden", 403);
+    const sd = b.startDate !== undefined ? cleanDateKey(b.startDate) : { value: group.startDate ?? null };
+    const ed = b.endDate !== undefined ? cleanDateKey(b.endDate) : { value: group.endDate ?? null };
+    if ((sd as any).error || (ed as any).error) return jerr("invalid date");
+    if (sd.value && ed.value && ed.value < sd.value) return jerr("end before start");
+    if (b.startDate !== undefined) data.startDate = sd.value;
+    if (b.endDate !== undefined) data.endDate = ed.value;
   }
   if (b.memberLimit !== undefined) {
     if (!can(me.role, "groups.code") || !(await canManageGroup(me, group.id))) return jerr("forbidden", 403);

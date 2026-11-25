@@ -4,7 +4,7 @@ import { currentSession, requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { nameKey, normName } from "@/lib/houseMode";
 import { cleanMemberLimit, groupsFor, jerr, newGroupCode } from "@/lib/orderLogic";
-import { cleanCountry } from "@/lib/ordering";
+import { cleanCountry, cleanDateKey, groupEnded } from "@/lib/ordering";
 
 // GET /api/groups — the groups this person may see (admin/manager: all, coordinator: theirs, student: their own).
 // The secret code is only included for the group's coordinator and admins.
@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const showCode = me.role === "coordinator" || me.role === "admin";
   return NextResponse.json(groups.map((g: any) => ({
     id: g.id, name: g.name, codeActive: g.codeActive, memberLimit: g.memberLimit ?? null, country: g.country ?? null, createdAt: g.createdAt,
+    startDate: g.startDate ?? null, endDate: g.endDate ?? null, archived: groupEnded(g),
     coordinator: g.coordinator ? { id: g.coordinator.id, name: g.coordinator.name } : null,
     house: g.house ? { id: g.house.id, name: g.house.name } : null,
     studentCount: students.filter((s: any) => s.groupId === g.id).length,
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   })));
 }
 
-// POST /api/groups { name, coordinatorId?, houseId?, country? } — admin creates a group; it gets its own secret code.
+// POST /api/groups { name, coordinatorId?, houseId?, country?, startDate?, endDate? } — admin creates a group; it gets its own secret code.
 export async function POST(req: NextRequest) {
   const g = await requirePerm(req, "groups.manage");
   if (g.error) return g.error;
@@ -38,10 +39,13 @@ export async function POST(req: NextRequest) {
   if (String(b.country ?? "").trim() && !cleanCountry(b.country)) return jerr("invalid country");
   const lim = cleanMemberLimit(b.memberLimit);
   if (lim.error) return jerr(lim.error);
+  const sd = cleanDateKey(b.startDate), ed = cleanDateKey(b.endDate);
+  if (sd.error || ed.error) return jerr("invalid date");
+  if (sd.value && ed.value && ed.value < sd.value) return jerr("end before start");
   if ((await db.group.findMany({})).some((x: any) => normName(x.name) === normName(name))) return jerr("a group with that name already exists", 409);
   try {
     const row = await db.group.create({
-      data: { name, nameKey: nameKey(name), accessCode: await newGroupCode(), coordinatorId: b.coordinatorId || null, houseId: b.houseId || null, country: cleanCountry(b.country), memberLimit: lim.value ?? null },
+      data: { name, nameKey: nameKey(name), accessCode: await newGroupCode(), coordinatorId: b.coordinatorId || null, houseId: b.houseId || null, country: cleanCountry(b.country), memberLimit: lim.value ?? null, startDate: sd.value, endDate: ed.value },
     });
     await logAudit(req, "group", row.id, "create", "Created group {name}", { name });
     return NextResponse.json({ id: row.id }, { status: 201 });
