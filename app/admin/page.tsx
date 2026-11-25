@@ -48,6 +48,8 @@ export default function StaffAndRoles() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [credsFor, setCredsFor] = useState<Worker | null>(null);
   const [houses, setHouses] = useState<EdHouseFull[]>([]);
+  const [archivedHouses, setArchivedHouses] = useState<EdHouseFull[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [staffEd, setStaffEd] = useState<{ worker: EdStaff | null } | null>(null);
   const staffSort = useSort<"name" | "team" | "joined" | "role">("role");
   const houseSort = useSort<"name" | "address" | "key" | "until">("name");
@@ -72,8 +74,14 @@ export default function StaffAndRoles() {
 
   async function load() {
     fetch("/api/houses").then((r) => r.json()).then(setHouses);
+    fetch("/api/houses?archived=1").then((r) => (r.ok ? r.json() : [])).then(setArchivedHouses);
     const res = await fetch("/api/workers");
     setWorkers(await res.json());
+  }
+
+  async function setArchived(h: EdHouseFull, archived: boolean) {
+    await fetch(`/api/houses/${h.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived }) });
+    load();
   }
 
   async function changeRole(w: Worker, role: string) {
@@ -234,7 +242,10 @@ export default function StaffAndRoles() {
       {shown.houses && (
         <PanelCard
           title={tr("Houses")}
-          action={<button style={S.navDark} onClick={() => setHouseEd({ house: null })}>+ {tr("New house")}</button>}
+          action={<>
+            {archivedHouses.length > 0 && <button style={S.small} onClick={() => setShowArchived(!showArchived)}>{showArchived ? "✓ " : ""}{tr("Show archived")} ({archivedHouses.length})</button>}{" "}
+            <button style={S.navDark} onClick={() => setHouseEd({ house: null })}>+ {tr("New house")}</button>
+          </>}
           flush
         >
           <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", fontSize: 13 }}>
@@ -256,12 +267,31 @@ export default function StaffAndRoles() {
                   <td style={td}>{h.validUntil ? new Date(h.validUntil).toLocaleDateString(locale) : "—"}</td>
                   <td style={{ ...td, textAlign: "right" }}>
                     <CheckInGuideButton house={h} />{" "}
-                    <button style={S.small} onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>
+                    <button style={S.small} onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>{" "}
+                    <button style={S.small} onClick={() => setArchived(h, true)}>{tr("Archive")}</button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {showArchived && archivedHouses.length > 0 && (
+            <>
+              <div style={{ ...th, padding: "12px 10px 6px", borderTop: "1px solid var(--line)" }}>{tr("Archived houses")}</div>
+              <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", fontSize: 13 }}>
+                <tbody>
+                  {archivedHouses.map((h) => (
+                    <tr key={h.id} style={{ opacity: 0.65 }}>
+                      <td style={td}>{h.name}<ModeBadge mode={h.mode} /></td>
+                      <td style={{ ...td, color: "var(--ink-soft)" }}>{h.address}</td>
+                      <td style={{ ...td, textAlign: "right" }}>
+                        <button style={S.small} onClick={() => setArchived(h, false)}>{tr("Restore")}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </PanelCard>
       )}
 

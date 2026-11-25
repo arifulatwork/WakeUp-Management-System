@@ -80,6 +80,8 @@ model House {
   validFrom   DateTime?
   validUntil  DateTime?
   createdAt   DateTime  @default(now())
+  // Set = archived: hidden from every list, nothing is deleted. null = active.
+  archivedAt  DateTime?
 
   // "status of keys" from the Ops Overview spec. Simple state machine,
   // not a full key-log/audit-trail — enough for Ops to see at a glance.

@@ -15,8 +15,10 @@ const toDate = (v: unknown): Date | null | undefined => {
 };
 
 // GET /api/houses — every house (the big photo/video files are NOT included, only the flags).
-export async function GET() {
-  const houses = await db.house.findMany({ orderBy: { name: "asc" } });
+// Archived houses are left out; ?archived=1 returns only the archived ones.
+export async function GET(req: NextRequest) {
+  const archived = req.nextUrl.searchParams.get("archived") === "1";
+  const houses = await db.house.findMany({ where: { archivedAt: archived ? { not: null } : null }, orderBy: { name: "asc" } });
   return NextResponse.json(houses);
 }
 

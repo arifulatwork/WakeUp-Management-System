@@ -39,6 +39,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     data.name = name;
     data.nameKey = nameKey(name);
   }
+  if (body.archived !== undefined) data.archivedAt = body.archived ? new Date() : null;
   if (body.address !== undefined) data.address = String(body.address).trim();
   if (body.mode !== undefined) data.mode = normMode(body.mode);
   if (body.checkInText !== undefined) data.checkInText = body.checkInText ? String(body.checkInText).slice(0, MAX_CHECKIN_TEXT) : null;
@@ -71,7 +72,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         { name: updated.name, from: house.keyStatus, to: String(data.keyStatus) });
       if (data.keyStatus === "MISSING") pushAsync({ roles: STAFF_ROLES, excludeWorkerId: g.session.workerId }, "key_missing", { house: updated.name }, `key-${params.id}`);
     }
-    if (Object.keys(data).some((k) => k !== "keyStatus" && k !== "keyUpdatedAt")) {
+    if ("archivedAt" in data) {
+      await logAudit(req, "house", params.id, "update", data.archivedAt ? "Archived house {name}" : "Restored house {name}", { name: updated.name });
+    } else if (Object.keys(data).some((k) => k !== "keyStatus" && k !== "keyUpdatedAt")) {
       await logAudit(req, "house", params.id, "update", "Edited house {name} ({fields})", { name: updated.name, fields });
     }
     return NextResponse.json(updated);
