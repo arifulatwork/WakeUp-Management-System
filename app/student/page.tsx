@@ -20,6 +20,7 @@ export default function StudentPage() {
   const info = useJson<Info | null>("/api/ordering", null);
   const products = useJson<Product[]>("/api/products", []);
   const requests = useJson<Req[]>("/api/requests", []);
+  const groupRequests = useJson<Req[]>("/api/requests?group=1", []); // what the other students of the group asked for
   const orders = useJson<Order[]>("/api/orders", []);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [sending, setSending] = useState(false);
@@ -27,7 +28,7 @@ export default function StudentPage() {
 
   const loadMe = () => fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then(setMe).catch(() => {});
   useEffect(() => { loadMe(); }, []);
-  const refresh = () => { loadMe(); info.reload(); products.reload(); requests.reload(); orders.reload(); };
+  const refresh = () => { loadMe(); info.reload(); products.reload(); requests.reload(); groupRequests.reload(); orders.reload(); };
   useLiveRefresh(refresh, { models: ["product", "studentRequest", "requestLine", "order", "orderLine", "worker", "appSetting", "group"] });
 
   const cfg = info.data?.config;
@@ -180,6 +181,23 @@ export default function StudentPage() {
               ))}
             </ul>
             {r.decisionNote && <p style={{ fontSize: 12, margin: "6px 0 0", color: "var(--ink-soft)" }}>💬 {r.decisionNote}</p>}
+          </div>
+        ))}
+      </PanelCard>
+
+      <PanelCard title={tr("Group requests")} subtitle={tr("What the other students of your group asked for.")}>
+        {!groupRequests.data.length && <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: 0 }}>{tr("Nobody else has requested anything yet.")}</p>}
+        {groupRequests.data.filter((r) => r.status !== "CANCELLED").slice(0, 20).map((r) => (
+          <div key={r.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13 }}><strong>{r.student?.name ?? "—"}</strong> <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>· {when(r.createdAt, locale)}</span></span>
+              <Pill status={r.status} />
+            </div>
+            <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12.5 }}>
+              {r.lines.map((l) => (
+                <li key={l.id}>{l.product ? productName(l.product, lang) : ""}{l.alternativeName ? ` → ${l.alternativeName}` : ""} × {l.quantity}</li>
+              ))}
+            </ul>
           </div>
         ))}
       </PanelCard>

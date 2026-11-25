@@ -10,15 +10,18 @@ import { addToGroupOrder, groupsFor, intQty, jerr, OrderLocked, requestsWithLine
 export async function GET(req: NextRequest) {
   const me = await currentSession(req);
   if (!me) return jerr("sign in required", 401);
+  // A student can also ask for ?group=1: what the OTHER students of their group requested (names and products, no dietary info).
+  const groupView = me.role === "student" && req.nextUrl.searchParams.get("group") === "1";
   let where: Record<string, any> | undefined;
-  if (me.role === "student") where = { studentId: me.workerId };
+  if (groupView) where = { groupId: me.groupId ?? "none" };
+  else if (me.role === "student") where = { studentId: me.workerId };
   else if (me.role === "coordinator") where = { groupId: { in: (await groupsFor(me)).map((g: any) => g.id) } };
   else if (!["admin", "manager"].includes(me.role)) return jerr("forbidden", 403);
   const rows = await db.studentRequest.findMany({ where, include: { student: true, group: true }, orderBy: { createdAt: "desc" }, take: 300 });
-  const full = await requestsWithLines(rows);
+  const full = await requestsWithLines(groupView ? rows.filter((r: any) => r.studentId !== me.workerId) : rows);
   return NextResponse.json(full.map((r: any) => ({
     ...r,
-    student: r.student ? { id: r.student.id, name: r.student.name, dietary: r.student.dietary ?? [] } : null,
+    student: r.student ? { id: r.student.id, name: r.student.name, dietary: groupView ? [] : (r.student.dietary ?? []) } : null,
     group: r.group ? { id: r.group.id, name: r.group.name } : null,
   })));
 }
