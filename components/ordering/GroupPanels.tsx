@@ -141,12 +141,16 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
   const [coordinatorId, setCoordinatorId] = useState(group?.coordinator?.id ?? "");
   const [houseId, setHouseId] = useState(group?.house?.id ?? "");
   const [country, setCountry] = useState(group?.country ?? "");
+  const [limitText, setLimitText] = useState(""); // new group only: empty = no limit
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const limitNum = Math.floor(Number(limitText));
+  const limitValid = !limitText.trim() || (Number.isInteger(Number(limitText)) && limitNum >= 1 && limitNum <= 200);
   async function save() {
     setSaving(true); setError("");
     try {
-      const body = { name: name.trim(), coordinatorId: coordinatorId || null, houseId: houseId || null, country: country || null };
+      const body = { name: name.trim(), coordinatorId: coordinatorId || null, houseId: houseId || null, country: country || null,
+        ...(!group && limitText.trim() ? { memberLimit: limitNum } : {}) };
       if (group) await api(`/api/groups/${group.id}`, "PATCH", body); else await api("/api/groups", "POST", body);
       onSaved();
     } catch (e: any) { setError(e?.status === 409 ? tr("A group with that name already exists.") : saveError(e, tr)); setSaving(false); }
@@ -173,7 +177,14 @@ export function GroupEditor({ group, coordinators, houses, onClose, onSaved }: {
       <label style={S.label}>{tr("Country")}</label>
       <CountrySelect value={country} onChange={setCountry} firstLabel="—" />
       <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("Students of this group only see the products of this country, plus the products for all countries.")}</div>
-      <FormFooter saving={saving} canSave={!!name.trim()} onSave={save} onClose={onClose} onDelete={group ? remove : undefined} error={error}
+      {!group && (
+        <>
+          <label style={S.label}>{tr("Number of students in the group")}</label>
+          <input style={S.input} type="number" min={1} max={200} placeholder="—" value={limitText} onChange={(e) => setLimitText(e.target.value)} />
+          <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("Only this many students can join and order.")}</div>
+        </>
+      )}
+      <FormFooter saving={saving} canSave={!!name.trim() && limitValid} onSave={save} onClose={onClose} onDelete={group ? remove : undefined} error={error}
         confirmText={tr("Delete this group and its students? This cannot be undone.")} />
     </Modal>
   );

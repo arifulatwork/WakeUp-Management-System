@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { currentSession, requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { nameKey, normName } from "@/lib/houseMode";
-import { groupsFor, jerr, newGroupCode } from "@/lib/orderLogic";
+import { cleanMemberLimit, groupsFor, jerr, newGroupCode } from "@/lib/orderLogic";
 import { cleanCountry } from "@/lib/ordering";
 
 // GET /api/groups — the groups this person may see (admin/manager: all, coordinator: theirs, student: their own).
@@ -36,10 +36,12 @@ export async function POST(req: NextRequest) {
   }
   if (b.houseId && !(await db.house.findUnique({ where: { id: b.houseId } }))) return jerr("house not found", 404);
   if (String(b.country ?? "").trim() && !cleanCountry(b.country)) return jerr("invalid country");
+  const lim = cleanMemberLimit(b.memberLimit);
+  if (lim.error) return jerr(lim.error);
   if ((await db.group.findMany({})).some((x: any) => normName(x.name) === normName(name))) return jerr("a group with that name already exists", 409);
   try {
     const row = await db.group.create({
-      data: { name, nameKey: nameKey(name), accessCode: await newGroupCode(), coordinatorId: b.coordinatorId || null, houseId: b.houseId || null, country: cleanCountry(b.country) },
+      data: { name, nameKey: nameKey(name), accessCode: await newGroupCode(), coordinatorId: b.coordinatorId || null, houseId: b.houseId || null, country: cleanCountry(b.country), memberLimit: lim.value ?? null },
     });
     await logAudit(req, "group", row.id, "create", "Created group {name}", { name });
     return NextResponse.json({ id: row.id }, { status: 201 });
