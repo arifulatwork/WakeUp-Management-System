@@ -17,7 +17,8 @@ const OFFICE_PAGES = ["/admin", "/manager", "/coordinator", "/ops"];
 // use ONLY their own screen and the ordering APIs below; every other page / API is closed to them here,
 // before any route runs. (Each ordering route still checks the role and the group itself.)
 const LIMITED_ROLES = ["student", "supplier"];
-const LIMITED_API = ["/api/auth/", "/api/products", "/api/dietary", "/api/ordering", "/api/requests", "/api/orders", "/api/groups", "/api/events"];
+const LIMITED_API = ["/api/auth/", "/api/products", "/api/dietary", "/api/ordering", "/api/requests", "/api/orders", "/api/groups", "/api/events",
+  "/api/files", "/api/media/product"]; // product photos (R2 files, or older database photos) — never task / ticket media
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
