@@ -35,7 +35,8 @@ export default function StaffEditor({ worker, selfId, onClose, onSaved }: {
         await api(`/api/workers/${worker!.id}`, "PATCH", { name, area, language });
         if (password) await api("/api/auth/register", "POST", { workerId: worker!.id, username: username.trim(), password });
       } else {
-        await api("/api/workers", "POST", { name: name.trim(), area, language, username: username.trim(), password });
+        const isSupplier = area === "SUPPLIER"; // warehouse staff: role "supplier", the team is just a placeholder
+        await api("/api/workers", "POST", { name: name.trim(), area: isSupplier ? "CLEANING" : area, ...(isSupplier ? { role: "supplier" } : {}), language, username: username.trim(), password });
       }
       onSaved();
     } catch (e: any) {
@@ -61,7 +62,7 @@ export default function StaffEditor({ worker, selfId, onClose, onSaved }: {
       <input style={S.input} value={name} onChange={(e) => setName(e.target.value)} />
 
       <label style={S.label}>{tr("Team")}</label>
-      <Pills options={["CLEANING", "MAINTENANCE"]} value={area} onChange={setArea} label={ev} />
+      <Pills options={editing ? ["CLEANING", "MAINTENANCE"] : ["CLEANING", "MAINTENANCE", "SUPPLIER"]} value={area} onChange={setArea} label={(o) => (o === "SUPPLIER" ? tr("Supplier") : ev(o))} />
 
       <label style={S.label}>{tr("Language")}</label>
       <select style={S.input} value={language} onChange={(e) => setLanguage(e.target.value)}>
