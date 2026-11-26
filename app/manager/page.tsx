@@ -1,16 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
-import { useSectionVisibility } from "@/lib/useSectionVisibility";
+import PanelTabs, { useHashTab } from "@/components/PanelTabs";
+import { LoadError, SkeletonRows, useApiList } from "@/components/PanelKit";
 import { useEffect, useState } from "react";
-import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useI18n } from "@/lib/i18n";
-import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
-import TicketEditor from "@/components/editors/TicketEditor";
-import TaskReview from "@/components/TaskReview";
+import type { EdTask, EdWorker } from "@/components/editors/TaskEditor";
 import { formatMinutes } from "@/lib/formatDuration";
 import MaintenanceReview from "@/components/MaintenanceReview";
-import HouseEditor from "@/components/editors/HouseEditor";
 import { useCan } from "@/lib/useSession";
 import { Pills, S, SortTh, useSort } from "@/components/ui";
 import { Pager, norm } from "@/components/ordering/Pager";
@@ -26,8 +24,16 @@ const STATUS_LABEL: Record<string, string> = {
 const DATE_FILTERS = ["ALL", "TODAY", "NEXT7", "PAST"];
 const DATE_LABEL: Record<string, string> = { ALL: "All", TODAY: "Today", NEXT7: "Next 7 days", PAST: "Past" };
 const NOBODY = "__none__"; // value of "Unassigned" in the person dropdown
-const SECTIONS = ["stats", "tasks"] as const;
-const SECTION_LABEL: Record<(typeof SECTIONS)[number], string> = { stats: "Overview", tasks: "Tasks" };
+
+// The editors and the review pop-up are only downloaded when somebody opens one.
+const TaskEditor = dynamic(() => import("@/components/editors/TaskEditor"), { ssr: false });
+const TicketEditor = dynamic(() => import("@/components/editors/TicketEditor"), { ssr: false });
+const HouseEditor = dynamic(() => import("@/components/editors/HouseEditor"), { ssr: false });
+const TaskReview = dynamic(() => import("@/components/TaskReview"), { ssr: false });
+
+// Two tabs: the tasks table (opens first) and the maintenance work waiting for review.
+const TABS = ["tasks", "maintenance"] as const;
+type Tab = (typeof TABS)[number];
 
 type HouseInfo = { id: string; name: string; keyStatus?: string; hasPhoto?: boolean; hasVideo?: boolean; mediaUpdatedAt?: string | null };
 
@@ -44,15 +50,27 @@ type Task = EdTask & {
 };
 
 export default function ManagerDashboard() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const vis = useSectionVisibility("managerSections", SECTIONS);
   const { tr, ev, locale } = useI18n();
+  const [tab, chooseTab] = useHashTab<Tab>(TABS, "tasks");
+
+  // Each part loads on its own, one after the other, and shows as soon as ITS data arrives:
+  //  1. the tasks (what the manager came for)      2. the open maintenance tickets (review queue)
+  //  3. houses + workers, only needed by the pop-ups. A slow part no longer holds back the others.
+  const tasksQ = useApiList<Task[]>("/api/tasks", ["cleaningTask", "house", "worker"]);
+  const tasksSettled = tasksQ.data !== null || tasksQ.error;
+  const ticketsQ = useApiList<any[]>(tasksSettled ? "/api/tickets?open=1" : null, ["maintenanceTicket", "house", "worker"]);
+  const [wantLookups, setWantLookups] = useState(false); // a pop-up was opened before the lists had arrived
+  const lookupsOn = tasksSettled && (ticketsQ.data !== null || ticketsQ.error || wantLookups);
+  const housesQ = useApiList<HouseInfo[]>(lookupsOn ? "/api/houses" : null, ["house"]);
+  const workersQ = useApiList<EdWorker[]>(lookupsOn ? "/api/workers" : null, ["worker"]);
+  const tasks = tasksQ.data ?? [];
+  const tickets = ticketsQ.data ?? []; // open tickets (house, worker, media…) — also feeds the review card
+  const houses = housesQ.data ?? [];
+  const workers = workersQ.data ?? [];
+  const lookupsReady = housesQ.data !== null && workersQ.data !== null;
   const [ticketEd, setTicketEd] = useState(false);
-  const [houses, setHouses] = useState<HouseInfo[]>([]);
-  const [tickets, setTickets] = useState<any[]>([]) // open tickets (house, worker, media…) — also feeds the review card;
   // The task being reviewed before approval (Approve opens this pop-up; nothing is approved until "Confirm approve").
   const [reviewing, setReviewing] = useState<Task | null>(null);
-  const [workers, setWorkers] = useState<EdWorker[]>([]);
   const sort = useSort<"house" | "type" | "time" | "priority" | "assigned" | "status">("time");
   const [taskEd, setTaskEd] = useState<{ task: Task | null } | null>(null);
   const [houseEd, setHouseEd] = useState(false);
@@ -64,18 +82,12 @@ export default function ManagerDashboard() {
   useEffect(() => setPage(1), [statusF, dateF, personF, q]);
   const canCreateHouse = useCan("houses.create");
 
-  useEffect(() => {
-    load();
-  }, []);
-  useLiveRefresh(load); // instant updates via /api/events (polls only as a safety net)
-
-  async function load() {
-    const [res, hRes, wRes, kRes] = await Promise.all([fetch("/api/tasks"), fetch("/api/houses"), fetch("/api/workers"), fetch("/api/tickets?open=1")]);
-    setTasks(await res.json());
-    setHouses(await hRes.json());
-    setWorkers(await wRes.json());
-    if (kRes.ok) setTickets(await kRes.json());
+  // After a change made here: reload what it touched. (Other people's changes arrive by themselves, live.)
+  function load() {
+    tasksQ.reload();
+    ticketsQ.reload();
   }
+  const openEditor = (open: () => void) => { setWantLookups(true); open(); };
 
   async function sendBack(id: string, status?: string) {
     // Sending back an already-approved job reopens it for the cleaner, so ask first.
@@ -118,6 +130,8 @@ export default function ManagerDashboard() {
     return { text: `${hhmm(start)} → ${t.completedAt ? hhmm(end) : "…"} · ${formatMinutes(mins)}${est ? ` / ${formatMinutes(est)}` : ""}`, over: est > 0 && mins > est };
   };
 
+  const loaded = tasksQ.data !== null;
+  const waitingReview = tickets.filter((k: any) => k.status === "TO_BE_VERIFIED").length;
   const counts = {
     scheduled: tasks.filter((t) => t.status === "SCHEDULED" || t.status === "ASSIGNED").length,
     issue: tasks.filter((t) => t.status === "WITH_ISSUE").length,
@@ -171,29 +185,45 @@ export default function ManagerDashboard() {
   return (
     <PanelShell
       title={tr("Cleaning Tasks — Live")}
-      vis={vis}
-      labels={SECTION_LABEL}
       actions={
         <>
-          <button style={S.navDark} onClick={() => setTaskEd({ task: null })}>+ {tr("New task")}</button>
-          <button style={S.nav} onClick={() => setTicketEd(true)}>+ {tr("Report an Issue")}</button>
+          <button style={S.navDark} onClick={() => openEditor(() => setTaskEd({ task: null }))}>+ {tr("New task")}</button>
+          <button style={S.nav} onClick={() => openEditor(() => setTicketEd(true))}>+ {tr("Report an Issue")}</button>
           {canCreateHouse && <button style={S.nav} onClick={() => setHouseEd(true)}>+ {tr("New house")}</button>}
         </>
       }
     >
-      {vis.shown.stats && (
-        <StatGrid>
-          <StatCard n={counts.scheduled} label={tr("Scheduled / assigned")} />
-          <StatCard n={counts.issue} label={tr("With issue")} color="#C1503C" />
-          <StatCard n={counts.verify} label={tr("To be verified")} color="#D98A33" />
-          <StatCard n={counts.approved} label={tr("Approved")} color="#4F7A26" />
-        </StatGrid>
+      <PanelTabs
+        tabs={[
+          { id: "tasks" as const, label: tr("Tasks") },
+          { id: "maintenance" as const, label: tr("Maintenance to review"), badge: waitingReview },
+        ]}
+        value={tab}
+        onChange={chooseTab}
+        label={tr("Cleaning Tasks — Live")}
+      />
+
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+      {tab === "maintenance" && (
+        ticketsQ.data ? (
+          <MaintenanceReview tickets={tickets} onChanged={load} />
+        ) : (
+          <PanelCard title={tr("Maintenance to review")} flush>
+            {ticketsQ.error ? <LoadError onRetry={ticketsQ.reload} /> : <SkeletonRows rows={3} />}
+          </PanelCard>
+        )
       )}
 
-      <MaintenanceReview tickets={tickets} onChanged={load} />
+      {tab === "tasks" && (
+        <>
+        <StatGrid>
+          <StatCard n={loaded ? counts.scheduled : "…"} label={tr("Scheduled / assigned")} />
+          <StatCard n={loaded ? counts.issue : "…"} label={tr("With issue")} color="#C1503C" />
+          <StatCard n={loaded ? counts.verify : "…"} label={tr("To be verified")} color="#D98A33" />
+          <StatCard n={loaded ? counts.approved : "…"} label={tr("Approved")} color="#4F7A26" />
+        </StatGrid>
 
-      {vis.shown.tasks && (
-        <PanelCard title={`${tr("Tasks")} (${filteredTasks.length})`} flush>
+        <PanelCard title={loaded ? `${tr("Tasks")} (${filteredTasks.length})` : tr("Tasks")} flush>
           <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid var(--line)" }}>
             <Pills options={STATUS_FILTERS} value={statusF} onChange={setStatusF} label={(f) => `${tr(STATUS_LABEL[f])} (${statusCount(f)})`} />
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginTop: 4 }}>
@@ -216,6 +246,10 @@ export default function ManagerDashboard() {
               </div>
             </div>
           </div>
+          {!loaded ? (
+            tasksQ.error ? <LoadError onRetry={tasksQ.reload} /> : <SkeletonRows rows={6} />
+          ) : (
+          <>
           <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", fontSize: 13 }}>
             <thead>
               <tr>
@@ -242,7 +276,7 @@ export default function ManagerDashboard() {
                     {timing(t)?.text ?? "—"}
                   </td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>
-                    <button style={{ ...approveBtn, background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", marginRight: 6 }} onClick={() => setTaskEd({ task: t })}>
+                    <button style={{ ...approveBtn, background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", marginRight: 6 }} onClick={() => openEditor(() => setTaskEd({ task: t }))}>
                       {tr("Edit")}
                     </button>
                     {t.status === "APPROVED" && (
@@ -251,7 +285,7 @@ export default function ManagerDashboard() {
                       </button>
                     )}
                     {t.status === "TO_BE_VERIFIED" && (
-                      <button style={approveBtn} onClick={() => setReviewing(t)}>{tr("Approve")}</button>
+                      <button style={approveBtn} onClick={() => { setWantLookups(true); setReviewing(t); }}>{tr("Approve")}</button>
                     )}
                     {["TO_BE_VERIFIED", "COMPLETED", "APPROVED"].includes(t.status) && (
                       <button style={{ ...approveBtn, background: "#fff", color: "var(--ink)", border: "1px solid var(--line)", marginLeft: 6 }} onClick={() => sendBack(t.id, t.status)}>
@@ -266,10 +300,14 @@ export default function ManagerDashboard() {
           {!filteredTasks.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching tasks.")}</p>}
           <Pager page={curPage} pages={pages} onPage={setPage} />
           {tasks.length === 0 && <p style={{ color: "var(--ink-soft)", padding: 16, margin: 0 }}>{tr("No tasks yet.")}</p>}
+          </>
+          )}
         </PanelCard>
+        </>
       )}
+      </div>
 
-      {reviewing && (
+      {reviewing && lookupsReady && (
         <TaskReview
           task={reviewing}
           house={houses.find((h) => h.id === reviewing.houseId)}
@@ -280,7 +318,7 @@ export default function ManagerDashboard() {
         />
       )}
 
-      {ticketEd && (
+      {ticketEd && lookupsReady && (
         <TicketEditor
           ticket={null} houses={houses} workers={workers}
           onClose={() => setTicketEd(false)}
@@ -290,7 +328,7 @@ export default function ManagerDashboard() {
 
       {houseEd && <HouseEditor house={null} onClose={() => setHouseEd(false)} onSaved={() => { setHouseEd(false); load(); }} />}
 
-      {taskEd && (
+      {taskEd && lookupsReady && (
         <TaskEditor
           task={taskEd.task} houses={houses} workers={workers}
           onClose={() => setTaskEd(null)}

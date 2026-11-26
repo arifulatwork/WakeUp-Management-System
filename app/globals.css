@@ -112,3 +112,4 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .admin-toast > span { font-weight: 700; margin-right: 4px; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @media (prefers-reduced-motion: reduce) { .admin-toast { animation: none; } }
+.admin-tab-badge { display: inline-block; margin-left: 7px; min-width: 18px; padding: 1px 6px; border-radius: 999px; background: var(--orange); color: #fff; font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; }

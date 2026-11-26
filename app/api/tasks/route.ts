@@ -5,6 +5,7 @@ import { requirePerm, currentSession } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { pushAsync } from "@/lib/push";
+import { cachedJson } from "@/lib/serverCache";
 
 const json = (v: any, init?: ResponseInit) => NextResponse.json(slimAny(v), init);
 const PRIORITIES = ["YELLOW", "ORANGE", "RED"];
@@ -32,12 +33,16 @@ export async function GET(req: NextRequest) {
   else if (!can(me.role, "data.read")) return json({ error: "forbidden" }, { status: 403 });
   else if (asked) where = { assignedWorkerId: asked };
 
-  const tasks = await db.cleaningTask.findMany({
-    where,
-    include: { house: true, assignedWorker: true },
-    orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
-  });
-  return json(tasks);
+  // Answered from memory until a task, house or worker is written to (lib/serverCache.ts).
+  // The key includes who asks, because a cleaner only gets their own jobs.
+  const key = `tasks:${me.role === "worker" ? me.workerId : "office"}:${asked ?? ""}`;
+  return cachedJson(req, key, ["cleaningTask", "house", "worker"], async () =>
+    slimAny(await db.cleaningTask.findMany({
+      where,
+      include: { house: true, assignedWorker: true },
+      orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
+    }))
+  );
 }
 
 // POST /api/tasks — create a cleaning job.

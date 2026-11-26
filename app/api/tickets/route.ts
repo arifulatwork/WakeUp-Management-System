@@ -8,6 +8,7 @@ import { pushAsync, STAFF_ROLES } from "@/lib/push";
 import { isValidPhoto, isValidVideo } from "@/lib/photoValidation";
 import { MEDIA_ENABLED } from "@/lib/features";
 import { maybePurgeTickets } from "@/lib/retention";
+import { cachedJson } from "@/lib/serverCache";
 
 const json = (v: any, init?: ResponseInit) => NextResponse.json(slimAny(v), init);
 const PRIORITIES = ["YELLOW", "ORANGE", "RED"];
@@ -27,21 +28,26 @@ export async function GET(req: NextRequest) {
   const myId = me.role === "worker" ? me.workerId : asked || me.workerId;
   const office = can(me.role, "data.read");
 
-  let tickets = await db.maintenanceTicket.findMany({
-    include: { house: true, reportedBy: true, assignedWorker: true },
-    orderBy: { reportedAt: "desc" },
-  });
+  // Open tickets are filtered in the database (closed ones pile up over time and were all being loaded).
+  const onlyOpen = q.get("open") === "1" && q.get("mine") !== "1";
+  const key = `tickets:${office ? "office" : me.workerId}:${myId}:${q.toString()}`;
+  return cachedJson(req, key, ["maintenanceTicket", "house", "worker"], async () => {
+    let tickets = await db.maintenanceTicket.findMany({
+      where: onlyOpen ? { status: { notIn: ["CLOSED", "REJECTED"] } } : undefined,
+      include: { house: true, reportedBy: true, assignedWorker: true },
+      orderBy: { reportedAt: "desc" },
+    });
 
-  if (q.get("mine") === "1") {
-    tickets = tickets.filter((t: any) => t.assignedWorkerId === myId);
-    if (q.get("closed") === "1") tickets = tickets.filter((t: any) => t.status === "CLOSED");
-  } else {
-    // Field staff never get the full list: only new issues and their own.
-    if (!office) tickets = tickets.filter((t: any) => t.status === "OPEN" || t.assignedWorkerId === me.workerId || t.reportedById === me.workerId);
-    if (q.get("open") === "1") tickets = tickets.filter((t: any) => t.status !== "CLOSED" && t.status !== "REJECTED");
-    if (q.get("queue") === "1") tickets = tickets.filter((t: any) => t.status === "OPEN" || t.assignedWorkerId === myId);
-  }
-  return json(tickets);
+    if (q.get("mine") === "1") {
+      tickets = tickets.filter((t: any) => t.assignedWorkerId === myId);
+      if (q.get("closed") === "1") tickets = tickets.filter((t: any) => t.status === "CLOSED");
+    } else {
+      // Field staff never get the full list: only new issues and their own.
+      if (!office) tickets = tickets.filter((t: any) => t.status === "OPEN" || t.assignedWorkerId === me.workerId || t.reportedById === me.workerId);
+      if (q.get("queue") === "1") tickets = tickets.filter((t: any) => t.status === "OPEN" || t.assignedWorkerId === myId);
+    }
+    return slimAny(tickets);
+  });
 }
 
 // POST /api/tickets — anyone signed in can REPORT an issue.
