@@ -169,3 +169,18 @@ button:disabled { opacity: 0.6; cursor: progress; }
 button.switch:disabled { opacity: .5; cursor: wait; }
 button.switch:focus-visible { outline: 2px solid var(--green-dark); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .switch, .switch > span { transition: none; } }
+
+/* Catalogue products table (extends .h-table) */
+.p-table td { vertical-align: middle; }
+.p-table tr.p-off td { opacity: .6; }
+.p-table tr.p-off td:last-child, .p-table tr.p-off td:nth-last-child(2) { opacity: 1; }
+.p-table td img, .p-table td > div > span[aria-hidden] { border-radius: 10px !important; }
+.p-chips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px; }
+.p-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.p-chip.cat { background: #f0efe9; color: var(--ink-soft); }
+.p-chip.diet { background: var(--green-bg); color: var(--green-dark); }
+.p-chip.alt { background: #e6f0f8; color: #2e6b8a; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+.p-chip.more { background: #eee; color: var(--ink-soft); }
+@media (max-width: 760px) {
+  .p-table th:nth-child(5), .p-table td:nth-child(5) { display: none; }
+}

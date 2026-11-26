@@ -208,33 +208,76 @@ export default function CataloguePage() {
               value={stock} onChange={setStock} label={tr("Products")} />
           </div>
           {toggleErr && <p role="alert" style={{ margin: 0, padding: "6px 14px", fontSize: 12.5, color: "var(--red)" }}>{toggleErr}</p>}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr><th style={th} /><th style={th}>{tr("Product")}</th><th style={th}>{tr("Country")}</th><th style={th}>{tr("Standard")}</th><th style={th}>{tr("Suitable for")}</th><th style={th}>{tr("Alternatives")}</th><th style={th}>{tr("Status")}</th><th style={th} /></tr></thead>
+          {shownProducts.length > 0 && (
+          <table className="h-table p-table">
+            <thead>
+              <tr>
+                <th>{tr("Product")}</th>
+                <th>{tr("Country")}</th>
+                <th>{tr("Standard")}</th>
+                <th>{tr("Suitable for")}</th>
+                <th>{tr("Alternatives")}</th>
+                <th>{tr("Status")}</th>
+                <th />
+              </tr>
+            </thead>
             <tbody>
-              {pagedProducts.map((p) => (
-                <tr key={p.id} style={{ opacity: p.active ? 1 : 0.5 }}>
-                  <td style={td}><ProductThumb p={p} /></td>
-                  <td style={td}><strong>{p.name}</strong><div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{p.category}</div>
-                    {Object.entries(p.names ?? {}).length > 0 && <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{Object.entries(p.names ?? {}).map(([l, n]) => `${l.toUpperCase()}: ${n}`).join(" · ")}</div>}</td>
-                  <td style={td}>{p.country ? countryName(p.country, locale) : tr("All countries")}</td>
-                  <td style={td}>{p.standardQty} {p.unit}</td>
-                  <td style={{ ...td, fontSize: 12 }}>{p.dietaryTags.join(", ") || "—"}</td>
-                  <td style={{ ...td, fontSize: 12 }}>{p.alternatives.map((a) => a.name).join(", ") || "—"}</td>
-                  <td style={td}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", fontSize: 12, color: p.active ? "var(--green-dark)" : "var(--ink-soft)", fontWeight: 600 }}>
-                      {mayEdit(p) ? (
-                        <button type="button" role="switch" aria-checked={p.active} aria-label={`${p.name}: ${p.active ? tr("Available") : tr("Unavailable")}`}
-                          disabled={toggling === p.id} onClick={() => toggleActive(p)} className={`switch${p.active ? " on" : ""}`}><span /></button>
-                      ) : <span className={`switch${p.active ? " on" : ""}`} aria-hidden="true"><span /></span>}
-                      {p.active ? tr("Available") : tr("Unavailable")}
-                    </span>
-                  </td>
-                  <td style={td}>{mayEdit(p) && <button style={S.small} onClick={() => openEditing(p)}>{tr("Edit")}</button>}</td>
-                </tr>
-              ))}
+              {pagedProducts.map((p) => {
+                const countryLabel = p.country ? countryName(p.country, locale) : tr("All countries");
+                const translated = Object.entries(p.names ?? {});
+                return (
+                  <tr key={p.id} className={p.active ? "" : "p-off"}>
+                    <td>
+                      <div className="h-cell-name" style={{ minWidth: 220 }}>
+                        <ProductThumb p={p} size={46} />
+                        <div style={{ minWidth: 0 }}>
+                          <div className="h-name">{p.name}</div>
+                          <div style={{ marginTop: 3, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                            {p.category && <span className="p-chip cat">{p.category}</span>}
+                            {translated.length > 0 && <span style={{ fontSize: 11, color: "var(--ink-soft)" }}>{translated.map(([l, n]) => `${l.toUpperCase()}: ${n}`).join(" · ")}</span>}
+                          </div>
+                          <div className="h-sub">{countryLabel}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ color: "var(--ink-soft)", whiteSpace: "nowrap" }}>{countryLabel}</td>
+                    <td style={{ whiteSpace: "nowrap" }}><strong>{p.standardQty}</strong> <span style={{ color: "var(--ink-soft)" }}>{p.unit}</span></td>
+                    <td>
+                      {p.dietaryTags.length ? <div className="p-chips">{p.dietaryTags.map((t) => <span key={t} className="p-chip diet">{t}</span>)}</div> : <span style={{ color: "var(--ink-soft)" }}>—</span>}
+                    </td>
+                    <td>
+                      {p.alternatives.length ? (
+                        <div className="p-chips" title={p.alternatives.map((a) => a.name).join(", ")}>
+                          {p.alternatives.slice(0, 2).map((a) => <span key={a.id} className="p-chip alt">{a.name}</span>)}
+                          {p.alternatives.length > 2 && <span className="p-chip more">+{p.alternatives.length - 2}</span>}
+                        </div>
+                      ) : <span style={{ color: "var(--ink-soft)" }}>—</span>}
+                    </td>
+                    <td>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", fontSize: 12, color: p.active ? "var(--green-dark)" : "var(--ink-soft)", fontWeight: 600 }}>
+                        {mayEdit(p) ? (
+                          <button type="button" role="switch" aria-checked={p.active} aria-label={`${p.name}: ${p.active ? tr("Available") : tr("Unavailable")}`}
+                            disabled={toggling === p.id} onClick={() => toggleActive(p)} className={`switch${p.active ? " on" : ""}`}><span /></button>
+                        ) : <span className={`switch${p.active ? " on" : ""}`} aria-hidden="true"><span /></span>}
+                        {p.active ? tr("Available") : tr("Unavailable")}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="h-actions">{mayEdit(p) && <button className="h-btn primary" onClick={() => openEditing(p)}>{tr("Edit")}</button>}</div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-          {!shownProducts.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{stock === "unavailable" && !products.data.some((p) => !p.active) ? tr("No unavailable products.") : tr("No matching products.")}</p>}
+          )}
+          {!shownProducts.length && (
+            <div className="h-empty">
+              <div className="h-empty-icon" aria-hidden="true">{stock === "unavailable" ? "🗄️" : "🛒"}</div>
+              {stock === "unavailable" && !products.data.some((p) => !p.active) ? tr("No unavailable products.") : tr("No matching products.")}
+            </div>
+          )}
+          {shownProducts.length > 0 && <div className="h-count">{pagedProducts.length} / {shownProducts.length} {tr("Products")}</div>}
           <Pager page={curPage} pages={pages} onPage={setPage} />
           </>
           )}
