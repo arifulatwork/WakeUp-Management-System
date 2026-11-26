@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
+import PanelTabs from "@/components/PanelTabs";
 import { S, SortTh, useSort } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -15,9 +16,10 @@ const HouseEditor = dynamic(() => import("@/components/editors/HouseEditor"), { 
 
 export default function HousesSection() {
   const { tr, ev, locale } = useI18n();
-  const [showArchived, setShowArchived] = useState(false);
+  const [view, setView] = useState<"active" | "archived">("active");
+  const showArchived = view === "archived";
   const { data, error, reload } = useApiList<EdHouseFull[]>("/api/houses", ["house"]);
-  // Archived houses are only requested when asked for.
+  // Archived houses are only requested while the Archived tab is open, so the main list loads as fast as before.
   const archived = useApiList<EdHouseFull[]>(showArchived ? "/api/houses?archived=1" : null, ["house"]);
   const sort = useSort<"name" | "address" | "key" | "until">("name");
   const toast = useToast();
@@ -26,6 +28,13 @@ export default function HousesSection() {
 
   const houses = data ?? [];
   const temporary = houses.filter((h) => h.validFrom || h.validUntil).length;
+
+  const archivedRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (archived.data ?? [])
+      .filter((h) => !q || h.name.toLowerCase().includes(q) || (h.address ?? "").toLowerCase().includes(q))
+      .sort((a, b) => cmpText(a.name, b.name));
+  }, [archived.data, query]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -49,12 +58,12 @@ export default function HousesSection() {
   async function setArchived(h: EdHouseFull, value: boolean) {
     try {
       await api(`/api/houses/${h.id}`, "PATCH", { archived: value });
-      toast.show(tr("Changes saved."));
+      toast.show(value ? tr("House archived. You can find it in the Archived tab.") : tr("Changes saved."));
     } catch {
       toast.show(tr("Could not save. Please try again."), false);
     }
     reload();
-    if (showArchived) archived.reload();
+    archived.reload();
   }
 
   return (
@@ -67,7 +76,6 @@ export default function HousesSection() {
       <PanelCard
         title={tr("Houses")}
         action={<>
-          <button style={S.small} aria-pressed={showArchived} onClick={() => setShowArchived(!showArchived)}>{showArchived ? "✓ " : ""}{tr("Show archived")}</button>
           <button style={S.navDark} onClick={() => setHouseEd({ house: null })}>+ {tr("New house")}</button>
         </>}
         flush
@@ -75,8 +83,11 @@ export default function HousesSection() {
         <Toolbar>
           <SearchBox value={query} onChange={setQuery} placeholder={tr("Search by name or address")} />
         </Toolbar>
+        <PanelTabs<"active" | "archived">
+          tabs={[{ id: "active", label: tr("Houses") }, { id: "archived", label: tr("Archived") }]}
+          value={view} onChange={setView} label={tr("Houses")} />
 
-        {!data ? (
+        {view === "active" && (!data ? (
           error ? <LoadError onRetry={reload} /> : <SkeletonRows />
         ) : (
           <>
@@ -109,23 +120,25 @@ export default function HousesSection() {
             {houses.length === 0 && <EmptyNote>{tr("No houses yet.")}</EmptyNote>}
             {houses.length > 0 && rows.length === 0 && <EmptyNote>{tr("No houses match your search.")}</EmptyNote>}
           </>
-        )}
+        ))}
 
         {showArchived && (
           <>
-            <div style={{ ...th, padding: "12px 10px 6px", borderTop: "1px solid var(--line)" }}>{tr("Archived houses")}</div>
             {!archived.data ? (
               archived.error ? <LoadError onRetry={archived.reload} /> : <SkeletonRows rows={2} />
             ) : archived.data.length === 0 ? (
-              <EmptyNote>—</EmptyNote>
+              <EmptyNote>{tr("No archived houses.")}</EmptyNote>
+            ) : archivedRows.length === 0 ? (
+              <EmptyNote>{tr("No houses match your search.")}</EmptyNote>
             ) : (
               <table style={tableStyle}>
                 <tbody>
-                  {archived.data.map((h) => (
+                  {archivedRows.map((h) => (
                     <tr key={h.id} style={{ opacity: 0.65 }}>
                       <td style={td}>{h.name}<ModeBadge mode={h.mode} /></td>
                       <td style={{ ...td, color: "var(--ink-soft)" }}>{h.address}</td>
                       <td style={{ ...td, textAlign: "right" }}>
+                        <button style={S.small} onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>{" "}
                         <button style={S.small} onClick={() => setArchived(h, false)}>{tr("Restore")}</button>
                       </td>
                     </tr>
@@ -137,7 +150,7 @@ export default function HousesSection() {
         )}
       </PanelCard>
 
-      {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={() => { setHouseEd(null); toast.show(tr("Changes saved.")); reload(); }} />}
+      {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={() => { setHouseEd(null); toast.show(tr("Changes saved.")); reload(); if (showArchived) archived.reload(); }} />}
       {toast.node}
     </>
   );

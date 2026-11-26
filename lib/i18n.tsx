@@ -285,6 +285,8 @@ const ROWS: Row[] = [
   ["Materials", "Materiais", "Materiales", "Matériel", "Materiali", "Матеріали"],
   ["New request", "Novo pedido", "Nueva solicitud", "Nouvelle demande", "Nuova richiesta", "Новий запит"],
   ["New house", "Nova casa", "Nueva casa", "Nouveau logement", "Nuova casa", "Новий будинок"],
+  ["House archived. You can find it in the Archived tab.", "Casa arquivada. Encontre-a no separador Arquivadas.", "Casa archivada. La encontrarás en la pestaña Archivadas.", "Logement archivé. Retrouvez-le dans l'onglet Archivés.", "Casa archiviata. La trovi nella scheda Archiviate.", "Будинок архівовано. Його можна знайти у вкладці «Архівні»."],
+  ["No archived houses.", "Sem casas arquivadas.", "No hay casas archivadas.", "Aucun logement archivé.", "Nessuna casa archiviata.", "Немає архівних будинків."],
   ["Archive", "Arquivar", "Archivar", "Archiver", "Archivia", "Архівувати"],
   ["Restore", "Restaurar", "Restaurar", "Restaurer", "Ripristina", "Відновити"],
   ["Show archived", "Mostrar arquivadas", "Mostrar archivadas", "Afficher les archivées", "Mostra archiviate", "Показати архівні"],
