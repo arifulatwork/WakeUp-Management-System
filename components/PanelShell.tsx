@@ -81,7 +81,7 @@ export default function PanelShell({ title, subtitle, actions, vis, labels, wide
             <div key={g.label} className="panel-nav-group">
               <div className="panel-nav-label">{tr(g.label)}</div>
               {g.items.map((n) => (
-                <Link key={n.href} href={n.href} aria-current={pathname === n.href ? "page" : undefined}>
+                <Link key={n.href} href={n.href} aria-current={pathname === n.href || pathname?.startsWith(n.href + "/") ? "page" : undefined}>
                   <span className="ico" aria-hidden>{n.icon}</span>
                   <span>{tr(n.label)}</span>
                 </Link>

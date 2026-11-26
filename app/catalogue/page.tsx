@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
 import PanelTabs, { useHashTab } from "@/components/PanelTabs";
 import { LoadError, SkeletonRows } from "@/components/PanelKit";
@@ -14,9 +14,6 @@ import { Pills, S } from "@/components/ui";
 import { OrderingConfig, WEEKDAYS, countryName, countryOptions } from "@/lib/ordering";
 import { CountrySelect, Info, Pill, Product, ProductThumb, td, th, useJson } from "@/components/ordering/common";
 import { Pager, norm } from "@/components/ordering/Pager";
-
-// The product pop-up is only downloaded when somebody opens it.
-const ProductEditor = dynamic(() => import("@/components/ordering/ProductEditor"), { ssr: false });
 
 const PRODUCTS_PER_PAGE = 15;
 // One tab per section. Only the open tab loads its data (NEEDS), so the screen no longer asks the server
@@ -50,10 +47,8 @@ export default function CataloguePage() {
   // Coordinators may edit only the products of their own groups' countries, so for them the group list is needed
   // too (it loads right after the open tab's list). The dietary list is needed by the product pop-up.
   const needsGroups = !canEdit && canProducts;
-  const [wantDietary, setWantDietary] = useState(false);
   const want: Res[] = tab === "reports" && !canReports ? [] : [...NEEDS[tab]]; // the report is only for roles that may read it
   if (needsGroups) want.push("groups");
-  if (wantDietary && !want.includes("dietary")) want.push("dietary");
   const stages = useStages(want);
   const on = stages.on;
 
@@ -63,7 +58,7 @@ export default function CataloguePage() {
   const dietary = useJson<{ id: string; name: string; description?: string | null }[]>(on("dietary") ? "/api/dietary" : null, []);
   const report = useJson<Report | null>(on("report") ? `/api/reports?from=${from}&to=${to}` : null, null);
   useStagesAdvance(stages, { info: info.loaded, products: products.loaded, dietary: dietary.loaded, report: report.loaded, groups: myGroups.loaded });
-  const [editing, setEditing] = useState<{ product: Product | null } | null>(null);
+  const router = useRouter();
   const [cfg, setCfg] = useState<OrderingConfig | null>(null);
   const [saved, setSaved] = useState("");
   const [newDiet, setNewDiet] = useState("");
@@ -82,7 +77,7 @@ export default function CataloguePage() {
   useEffect(() => { if (info.data && !cfg) setCfg(info.data.config); }, [info.data, cfg]);
 
   // Opening the product pop-up starts loading the dietary list it needs.
-  const openEditing = (product: Product | null) => { setWantDietary(true); setEditing({ product }); };
+  const openEditing = (product: Product | null) => router.push(product ? `/catalogue/product?id=${encodeURIComponent(product.id)}` : "/catalogue/product");
   // A list that has not arrived (or could not be loaded) shows grey rows / a retry button instead of "nothing here".
   type L = { loaded: boolean; error: boolean; data: unknown; reload: () => void };
   const blocked = (q: L) => !q.loaded || (q.error && (Array.isArray(q.data) ? q.data.length === 0 : !q.data));
@@ -340,7 +335,6 @@ export default function CataloguePage() {
       )}
       </div>
 
-      {editing && dietary.loaded && <ProductEditor product={editing.product} dietary={names} countries={canEdit ? null : myCountries} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
     </PanelShell>
   );
 }

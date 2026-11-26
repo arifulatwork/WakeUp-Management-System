@@ -767,6 +767,7 @@ const ROWS: Row[] = [
   ["Add alternative", "Adicionar alternativa", "Añadir alternativa", "Ajouter une alternative", "Aggiungi alternativa", "Додати альтернативу"],
   ["Available", "Disponível", "Disponible", "Disponible", "Disponibile", "Доступний"],
   ["No unavailable products.", "Sem produtos indisponíveis.", "No hay productos no disponibles.", "Aucun produit indisponible.", "Nessun prodotto non disponibile.", "Немає недоступних товарів."],
+  ["Basic information", "Informação básica", "Información básica", "Informations de base", "Informazioni di base", "Основна інформація"],
   ["Available to order", "Disponível para encomenda", "Disponible para pedir", "Disponible à la commande", "Disponibile per l’ordine", "Доступний для замовлення"],
   ["Ordering is open until {time}.", "As encomendas estão abertas até às {time}.", "Los pedidos están abiertos hasta las {time}.", "Les commandes sont ouvertes jusqu’à {time}.", "Gli ordini sono aperti fino alle {time}.", "Замовлення відкриті до {time}."],
   ["Ordering closed for today (cut-off {time}).", "Encomendas fechadas por hoje (limite {time}).", "Pedidos cerrados por hoy (límite {time}).", "Commandes fermées pour aujourd’hui (heure limite {time}).", "Ordini chiusi per oggi (limite {time}).", "Замовлення на сьогодні закриті (кінцевий час {time})."],
