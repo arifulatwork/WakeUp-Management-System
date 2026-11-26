@@ -15,6 +15,7 @@ const PRIORITIES = ["YELLOW", "ORANGE", "RED"];
 
 // GET /api/tickets
 //   ?open=1            -> not closed and not rejected
+//   ?open=1&rejected=1 -> not closed (open + rejected; used by the Ops screen)
 //   ?open=1&queue=1    -> (maintenance app) new issues anyone can accept + the ones assigned to me
 //   ?mine=1&closed=1   -> my finished tickets (history)
 export async function GET(req: NextRequest) {
@@ -30,10 +31,11 @@ export async function GET(req: NextRequest) {
 
   // Open tickets are filtered in the database (closed ones pile up over time and were all being loaded).
   const onlyOpen = q.get("open") === "1" && q.get("mine") !== "1";
+  const withRejected = q.get("rejected") === "1";
   const key = `tickets:${office ? "office" : me.workerId}:${myId}:${q.toString()}`;
   return cachedJson(req, key, ["maintenanceTicket", "house", "worker"], async () => {
     let tickets = await db.maintenanceTicket.findMany({
-      where: onlyOpen ? { status: { notIn: ["CLOSED", "REJECTED"] } } : undefined,
+      where: onlyOpen ? { status: { notIn: withRejected ? ["CLOSED"] : ["CLOSED", "REJECTED"] } } : undefined,
       include: { house: true, reportedBy: true, assignedWorker: true },
       orderBy: { reportedAt: "desc" },
     });

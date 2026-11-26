@@ -1,9 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
-import { useSectionVisibility } from "@/lib/useSectionVisibility";
-import { useEffect, useState, useCallback } from "react";
-import { useLiveRefresh } from "@/lib/useLiveRefresh";
+import PanelTabs, { useHashTab } from "@/components/PanelTabs";
+import { LoadError, SkeletonRows, useApiList } from "@/components/PanelKit";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/useSession";
@@ -11,11 +12,16 @@ import { Pills, S, StatusBadge, PriorityDot, TicketSortBar } from "@/components/
 import { ShowMore, norm } from "@/components/ordering/Pager";
 import { PhotoStrip } from "@/components/Photos";
 import { cmpText, dayKey, KEY_RANK, sortTickets, TicketSort } from "@/lib/sort";
-import TicketEditor, { EdTicket } from "@/components/editors/TicketEditor";
 import MaintenanceReview from "@/components/MaintenanceReview";
-import HouseEditor, { EdHouseFull } from "@/components/editors/HouseEditor";
-import MaterialEditor, { EdMaterial } from "@/components/editors/MaterialEditor";
-import { EdWorker } from "@/components/editors/TaskEditor";
+import type { EdTicket } from "@/components/editors/TicketEditor";
+import type { EdHouseFull } from "@/components/editors/HouseEditor";
+import type { EdMaterial } from "@/components/editors/MaterialEditor";
+import type { EdWorker } from "@/components/editors/TaskEditor";
+
+// The editors are only downloaded when somebody opens one.
+const TicketEditor = dynamic(() => import("@/components/editors/TicketEditor"), { ssr: false });
+const MaterialEditor = dynamic(() => import("@/components/editors/MaterialEditor"), { ssr: false });
+const HouseEditor = dynamic(() => import("@/components/editors/HouseEditor"), { ssr: false });
 
 type Task = {
   id: string; houseId: string; status: string; scheduledDate: string; scheduledTime: string;
@@ -26,9 +32,22 @@ type Task = {
 type Ticket = EdTicket & { house: { id: string; name: string }; reportedBy: { name: string } };
 type MaterialReq = EdMaterial & { fulfilledAt?: string | null; house: { id: string; name: string }; requestedBy: { name: string }; createdAt: string };
 
-const SECTIONS = ["stats", "tickets", "materials", "keys", "workload"] as const;
-const SECTION_LABEL: Record<(typeof SECTIONS)[number], string> = {
-  stats: "Overview", tickets: "Tickets", materials: "Materials", keys: "Keys", workload: "Workload",
+// One tab per section. Only the open tab loads its data (see NEEDS), so the screen no longer
+// asks the server for every list at the same moment. The open tab is kept in the address (#keys).
+const TABS = ["overview", "tickets", "materials", "keys", "workload"] as const;
+type Tab = (typeof TABS)[number];
+const TAB_LABEL: Record<Tab, string> = {
+  overview: "Overview", tickets: "Tickets", materials: "Materials", keys: "Keys", workload: "Workload",
+};
+
+// The lists each tab needs, in the order they are fetched (one after the other, never all at once).
+type Res = "tasks" | "tickets" | "materials" | "houses" | "workers";
+const NEEDS: Record<Tab, Res[]> = {
+  overview: ["tasks", "tickets", "materials", "houses"], // the number tiles
+  tickets: ["tickets"],
+  materials: ["materials"],
+  keys: ["houses"],
+  workload: ["tasks"],
 };
 
 const KEY_STATES = ["AT_OFFICE", "WITH_CLEANER", "WITH_GUEST", "MISSING"];
@@ -42,14 +61,8 @@ export default function OpsOverview() {
   const { tr, ev } = useI18n();
   const canCreateHouse = useCan("houses.create");
   const canEditHouse = useCan("houses.edit");
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [materials, setMaterials] = useState<MaterialReq[]>([]);
-  const [houses, setHouses] = useState<EdHouseFull[]>([]);
-  const [workers, setWorkers] = useState<EdWorker[]>([]);
+  const [tab, chooseTab] = useHashTab<Tab>(TABS, "overview");
   const [ticketSort, setTicketSort] = useState<TicketSort>("priority");
-  const vis = useSectionVisibility("opsSections", SECTIONS);
-  const shown = vis.shown;
   const [matQ, setMatQ] = useState("");
   const [matShown, setMatShown] = useState(LIST_STEP);
   const [keyF, setKeyF] = useState("ALL");
@@ -62,28 +75,49 @@ export default function OpsOverview() {
   const [matEd, setMatEd] = useState<{ request: MaterialReq | null } | null>(null);
   const [houseEd, setHouseEd] = useState<{ house: EdHouseFull | null } | null>(null);
 
-  // Each list loads on its own: one slow or failing request can no longer stop the others
-  // from updating, and nothing is served from a browser cache after an edit.
-  const load = useCallback(async () => {
-    const get = async (url: string) => {
-      const res = await fetch(url, { cache: "no-cache" });
-      if (!res.ok) throw new Error(url);
-      return res.json();
-    };
-    const [t, k, m, h, w] = await Promise.allSettled([
-      get("/api/tasks"), get("/api/tickets"), get("/api/materials"), get("/api/houses"), get("/api/workers"),
-    ]);
-    if (t.status === "fulfilled") setTasks(t.value);
-    if (k.status === "fulfilled") setTickets(k.value);
-    if (m.status === "fulfilled") setMaterials(m.value);
-    if (h.status === "fulfilled") setHouses(h.value);
-    if (w.status === "fulfilled") setWorkers(w.value);
-  }, []);
+  // ---- staged loading ----
+  // `started` = lists whose request has been sent (it stays in the list, so a list is never fetched twice
+  // just because the tab changed). The next list of the OPEN tab starts only when the one before it has
+  // arrived (or failed). Lists of other tabs are not loaded until their tab is opened. The worker list
+  // (and houses) are only needed by the pop-ups, so they load when a pop-up is opened.
+  const [started, setStarted] = useState<Res[]>([]);
+  const [ready, setReady] = useState(false);        // wait one beat so a #keys link doesn't start the Overview lists first
+  const [wantLookups, setWantLookups] = useState(false);
+  useEffect(() => setReady(true), []);
+  const on = (r: Res) => started.includes(r);
 
+  const tasksQ = useApiList<Task[]>(on("tasks") ? "/api/tasks" : null, ["cleaningTask", "house", "worker"]);
+  // open + rejected tickets only: closed ones pile up over time and this screen never shows them
+  const ticketsQ = useApiList<Ticket[]>(on("tickets") ? "/api/tickets?open=1&rejected=1" : null, ["maintenanceTicket", "house", "worker"]);
+  const materialsQ = useApiList<MaterialReq[]>(on("materials") ? "/api/materials" : null, ["materialRequest", "house"]);
+  const housesQ = useApiList<EdHouseFull[]>(on("houses") ? "/api/houses" : null, ["house"]);
+  const workersQ = useApiList<EdWorker[]>(on("workers") ? "/api/workers" : null, ["worker"]);
+  const tasks = tasksQ.data ?? [];
+  const tickets = ticketsQ.data ?? [];
+  const materials = materialsQ.data ?? [];
+  const houses = housesQ.data ?? [];
+  const workers = workersQ.data ?? [];
+
+  const settled = (q: { data: unknown; error: boolean }) => q.data !== null || q.error;
+  const settledBy: Record<Res, boolean> = {
+    tasks: settled(tasksQ), tickets: settled(ticketsQ), materials: settled(materialsQ), houses: settled(housesQ), workers: settled(workersQ),
+  };
+  const settledKey = (Object.keys(settledBy) as Res[]).map((r) => (settledBy[r] ? 1 : 0)).join("");
   useEffect(() => {
-    load();
-  }, [load]);
-  useLiveRefresh(load);
+    if (!ready) return;
+    const want: Res[] = [...NEEDS[tab]];
+    if (wantLookups) (["houses", "workers"] as Res[]).forEach((r) => { if (!want.includes(r)) want.push(r); });
+    const next = want.find((r) => !started.includes(r));
+    if (!next) return;
+    if (want.slice(0, want.indexOf(next)).every((r) => settledBy[r])) setStarted((s) => (s.includes(next) ? s : [...s, next]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, ready, wantLookups, started, settledKey]);
+
+  const lookupsReady = housesQ.data !== null && workersQ.data !== null;
+  const openEditor = (open: () => void) => { setWantLookups(true); open(); };
+
+  // After a change made here: reload the lists on screen. (Other people's changes arrive by themselves, live.)
+  const load = () => { tasksQ.reload(); ticketsQ.reload(); materialsQ.reload(); housesQ.reload(); };
 
   const saved = () => { setTicketEd(null); setMatEd(null); setHouseEd(null); load(); };
 
@@ -92,7 +126,7 @@ export default function OpsOverview() {
     load();
   }
   async function setKey(id: string, keyStatus: string) {
-    setHouses((hs) => hs.map((h) => (h.id === id ? { ...h, keyStatus } : h)));
+    housesQ.mutate((hs) => (hs ? hs.map((h) => (h.id === id ? { ...h, keyStatus } : h)) : hs)); // optimistic
     await api(`/api/houses/${id}`, "PATCH", { keyStatus });
     load();
   }
@@ -182,40 +216,59 @@ export default function OpsOverview() {
 
   const houseOpts = houses.map((h) => ({ id: h.id, name: h.mode === "TOURISM" ? `${h.name} · ${ev("TOURISM")}` : h.name }));
 
+  // A tile shows "…" until its list has arrived ("–" if it could not be loaded).
+  const sv = (q: { data: unknown; error: boolean }, n: number) => (q.data !== null ? n : q.error ? "–" : "…");
+  // Grey rows while a tab's list loads (or a retry button if it failed).
+  const waiting = (q: { data: unknown; error: boolean; reload: () => void }, rows = 4) =>
+    q.error && q.data === null ? <LoadError onRetry={q.reload} /> : <SkeletonRows rows={rows} />;
+  const narrow: React.CSSProperties = { maxWidth: 860 };
+
   return (
-    <PanelShell title={tr("Operations Overview")} vis={vis} labels={SECTION_LABEL} wide>
+    <PanelShell title={tr("Operations Overview")} wide>
+      <PanelTabs
+        tabs={TABS.map((t) => ({
+          id: t,
+          label: tr(TAB_LABEL[t]),
+          badge: t === "tickets" ? tickets.filter((k) => k.status === "TO_BE_VERIFIED").length
+            : t === "materials" ? pending.length : undefined,
+        }))}
+        value={tab}
+        onChange={chooseTab}
+        label={tr("Operations Overview")}
+      />
+
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
       {ticketErr && (
         <div role="alert" style={{ background: "#FBEAE6", color: "#C1503C", padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 14 }}>
           {ticketErr}
         </div>
       )}
-      {shown.stats && (
+
+      {/* ---- Overview: the number tiles. Each one fills in as its own list arrives. ---- */}
+      {tab === "overview" && (
         <StatGrid>
-          <StatCard n={activeHouses} label={tr("Houses with activity")} />
-          <StatCard n={urgent} label={tr("Urgent problems")} color="#C1503C" />
-          <StatCard n={checkOutsToday} label={tr("Check-outs today")} />
-          <StatCard n={checkInsToday} label={tr("Check-ins today")} />
-          <StatCard n={checkInsReady} label={tr("Check-ins ready")} color="#4F7A26" />
-          <StatCard n={completedToday} label={tr("Completed today")} color="#4F7A26" />
-          <StatCard n={overdue} label={tr("Overdue work")} color="#D98A33" />
-          <StatCard n={openTasks} label={tr("Open tasks")} />
-          <StatCard n={pending.length} label={tr("Pending material requests")} color={pending.length ? "#D98A33" : undefined} />
-          <StatCard n={houses.filter((h) => h.keyStatus === "MISSING").length} label={tr("Keys missing")} color="#C1503C" />
+          <StatCard n={sv(tasksQ, activeHouses)} label={tr("Houses with activity")} />
+          <StatCard n={sv(ticketsQ, urgent)} label={tr("Urgent problems")} color="#C1503C" />
+          <StatCard n={sv(tasksQ, checkOutsToday)} label={tr("Check-outs today")} />
+          <StatCard n={sv(tasksQ, checkInsToday)} label={tr("Check-ins today")} />
+          <StatCard n={sv(tasksQ, checkInsReady)} label={tr("Check-ins ready")} color="#4F7A26" />
+          <StatCard n={sv(tasksQ, completedToday)} label={tr("Completed today")} color="#4F7A26" />
+          <StatCard n={sv(tasksQ, overdue)} label={tr("Overdue work")} color="#D98A33" />
+          <StatCard n={sv(tasksQ, openTasks)} label={tr("Open tasks")} />
+          <StatCard n={sv(materialsQ, pending.length)} label={tr("Pending material requests")} color={pending.length ? "#D98A33" : undefined} />
+          <StatCard n={sv(housesQ, houses.filter((h) => h.keyStatus === "MISSING").length)} label={tr("Keys missing")} color="#C1503C" />
         </StatGrid>
       )}
 
-      <MaintenanceReview tickets={tickets} onChanged={load} />
-
-      {/* Two independent stacks instead of one row-based grid: each card sits directly
-          under the previous one in its own column, so a tall card (tickets) can never
-          push a card in the next row down and leave empty space. On narrow screens the
-          stacks wrap into a single column (tickets → workload → materials → keys). */}
-      <div className="panel-masonry">
-       {(shown.tickets || shown.workload) && (
-        <div className="panel-stack">
-        {/* ---- maintenance tickets ---- */}
-        {shown.tickets && (
-          <PanelCard title={tr("Open maintenance tickets")} action={<button style={S.smallDark} onClick={() => setTicketEd({ ticket: null })}>+ {tr("Report an Issue")}</button>}>
+      {/* ---- Tickets: maintenance work to review, open tickets, rejected tickets ---- */}
+      {tab === "tickets" && (
+        ticketsQ.data === null ? (
+          <PanelCard title={tr("Open maintenance tickets")} flush>{waiting(ticketsQ)}</PanelCard>
+        ) : (
+          <>
+          <MaintenanceReview tickets={tickets} onChanged={load} />
+          <div style={narrow}>
+          <PanelCard title={tr("Open maintenance tickets")} action={<button style={S.smallDark} onClick={() => openEditor(() => setTicketEd({ ticket: null }))}>+ {tr("Report an Issue")}</button>}>
             <TicketSortBar value={ticketSort} onChange={setTicketSort} />
             {openTickets.map((t) => (
               <div key={t.id} style={row}>
@@ -237,11 +290,11 @@ export default function OpsOverview() {
                     <>
                       <button style={S.smallDark} onClick={() => ticketStatus(t.id, "confirm")}>✓ {tr("Confirm fixed")}</button>
                       <button style={S.small} onClick={() => ticketStatus(t.id, "sendBack")}>{tr("Send back")}</button>
-                      <button style={S.small} onClick={() => setTicketEd({ ticket: t })}>{tr("Review")}</button>
+                      <button style={S.small} onClick={() => openEditor(() => setTicketEd({ ticket: t }))}>{tr("Review")}</button>
                     </>
                   ) : (
                     <>
-                      <button style={S.small} onClick={() => setTicketEd({ ticket: t })}>{tr("Edit")}</button>
+                      <button style={S.small} onClick={() => openEditor(() => setTicketEd({ ticket: t }))}>{tr("Edit")}</button>
                       {/* Reject only while nobody has taken it. Once accepted / started, the office takes it back with Reopen. */}
                       {t.status === "OPEN" ? (
                         <button style={S.small} onClick={() => ticketStatus(t.id, "reject")}>{tr("Reject")}</button>
@@ -255,62 +308,37 @@ export default function OpsOverview() {
             ))}
             {openTickets.length === 0 && <p style={empty}>{tr("None right now.")}</p>}
           </PanelCard>
-        )}
 
-        {/* ---- rejected tickets: kept visible so a rejection never just vanishes ---- */}
-        {shown.tickets && rejectedTickets.length > 0 && (
-          <PanelCard title={tr("Rejected tickets")}>
-            {rejectedTickets.map((t) => (
-              <div key={t.id} style={row}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, width: "100%" }}>
-                  <PriorityDot p={t.priority} />
-                  <b style={{ flex: 1, minWidth: 0 }}>{t.house.name}</b>
-                  <StatusBadge status={t.status} />
+          {/* rejected tickets: kept visible so a rejection never just vanishes */}
+          {rejectedTickets.length > 0 && (
+            <PanelCard title={tr("Rejected tickets")}>
+              {rejectedTickets.map((t) => (
+                <div key={t.id} style={row}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, width: "100%" }}>
+                    <PriorityDot p={t.priority} />
+                    <b style={{ flex: 1, minWidth: 0 }}>{t.house.name}</b>
+                    <StatusBadge status={t.status} />
+                  </div>
+                  <div style={sub}>{tr(t.area)} — {tr(t.description)}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+                    <button style={S.smallDark} onClick={() => ticketStatus(t.id, "reopen")}>{tr("Reopen")}</button>
+                    <button style={S.small} onClick={() => openEditor(() => setTicketEd({ ticket: t }))}>{tr("Edit")}</button>
+                  </div>
                 </div>
-                <div style={sub}>{tr(t.area)} — {tr(t.description)}</div>
-                <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-                  <button style={S.smallDark} onClick={() => ticketStatus(t.id, "reopen")}>{tr("Reopen")}</button>
-                  <button style={S.small} onClick={() => setTicketEd({ ticket: t })}>{tr("Edit")}</button>
-                </div>
-              </div>
-            ))}
-          </PanelCard>
-        )}
+              ))}
+            </PanelCard>
+          )}
+          </div>
+          </>
+        )
+      )}
 
-        {/* ---- workload ---- */}
-        {shown.workload && (
-          <PanelCard title={tr("Workload today (hours)")}>
-            {loadRows.length > 0 && (
-              <div style={{ display: "flex", gap: 12, fontSize: 10.5, color: "var(--ink-soft)", marginBottom: 8 }}>
-                <span><span style={{ ...dot, background: "var(--green-dark)" }} /> {tr("worked")}</span>
-                <span><span style={{ ...dot, background: "#C9DDB0" }} /> {tr("planned")}</span>
-              </div>
-            )}
-            {loadRows.map(([name, l]) => (
-              <div key={name} style={row}>
-                <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                  <span>{name}</span>
-                  <span style={{ fontWeight: 700 }}>{hours(l.worked)} {tr("worked")}</span>
-                </div>
-                <div style={{ display: "flex", width: "100%", height: 10, borderRadius: 6, background: "#EEE", overflow: "hidden" }}>
-                  <div style={{ width: `${(l.worked / scale) * 100}%`, background: "var(--green-dark)" }} />
-                  <div style={{ width: `${(l.planned / scale) * 100}%`, background: "#C9DDB0" }} />
-                </div>
-                <div style={sub}>{hours(l.planned)} {tr("planned")} · {l.open} {tr("open")}</div>
-              </div>
-            ))}
-            {loadRows.length === 0 && <p style={empty}>{tr("No assignments yet.")}</p>}
-          </PanelCard>
-        )}
-        </div>
-       )}
-
-       {(shown.materials || shown.keys) && (
-        <div className="panel-stack">
-
-        {/* ---- material requests ---- */}
-        {shown.materials && (
-          <PanelCard title={tr("Pending material requests")} action={<button style={S.smallDark} onClick={() => setMatEd({ request: null })}>+ {tr("New request")}</button>}>
+      {/* ---- Materials ---- */}
+      {tab === "materials" && (
+        <div style={narrow}>
+        <PanelCard title={tr("Pending material requests")} action={<button style={S.smallDark} onClick={() => openEditor(() => setMatEd({ request: null }))}>+ {tr("New request")}</button>}>
+          {materialsQ.data === null ? waiting(materialsQ) : (
+          <>
             {pending.length > LIST_STEP && (
               <input type="search" value={matQ} onChange={(e) => setMatQ(e.target.value)} maxLength={60} aria-label={tr("Search houses, items or people…")}
                 placeholder={tr("Search houses, items or people…")} style={{ ...S.input, boxSizing: "border-box", marginBottom: 8 }} />
@@ -320,7 +348,7 @@ export default function OpsOverview() {
                 <b>{m.house.name}</b>
                 <div style={sub}>{tr("{items} — requested by {name}", { items: tr(m.items), name: m.requestedBy.name })}</div>
                 <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-                  <button style={S.small} onClick={() => setMatEd({ request: m })}>{tr("Edit")}</button>
+                  <button style={S.small} onClick={() => openEditor(() => setMatEd({ request: m }))}>{tr("Edit")}</button>
                   <button style={S.smallDark} onClick={() => materialAction(m.id, "fulfill")}>{tr("Mark fulfilled")}</button>
                 </div>
               </div>
@@ -337,19 +365,25 @@ export default function OpsOverview() {
                     <b>{m.house.name}</b>
                     <div style={sub}>{tr(m.items)}</div>
                     <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-                      <button style={S.small} onClick={() => setMatEd({ request: m })}>{tr("Edit")}</button>
+                      <button style={S.small} onClick={() => openEditor(() => setMatEd({ request: m }))}>{tr("Edit")}</button>
                       <button style={S.small} onClick={() => materialAction(m.id, "reopen")}>{tr("Reopen")}</button>
                     </div>
                   </div>
                 ))}
               </>
             )}
-          </PanelCard>
-        )}
+          </>
+          )}
+        </PanelCard>
+        </div>
+      )}
 
-        {/* ---- houses & keys ---- */}
-        {shown.keys && (
-          <PanelCard title={tr("Key status")} action={canCreateHouse ? <button style={S.smallDark} onClick={() => setHouseEd({ house: null })}>+ {tr("New house")}</button> : undefined}>
+      {/* ---- Keys (houses) ---- */}
+      {tab === "keys" && (
+        <div style={narrow}>
+        <PanelCard title={tr("Key status")} action={canCreateHouse ? <button style={S.smallDark} onClick={() => setHouseEd({ house: null })}>+ {tr("New house")}</button> : undefined}>
+          {housesQ.data === null ? waiting(housesQ) : (
+          <>
             {houses.length > 0 && (
               <div style={{ marginBottom: 8 }}>
                 <Pills options={KEY_FILTERS} value={keyF} onChange={setKeyF} label={(k) => `${k === "ALL" ? tr("All") : ev(k)} (${keyCount(k)})`} />
@@ -373,15 +407,47 @@ export default function OpsOverview() {
               onMore={() => setKeyShown(keyShown + KEYS_STEP)} onAll={() => setKeyShown(keysMatching.length)} />
             {houses.length === 0 && <p style={empty}>{tr("No houses yet.")}</p>}
             {houses.length > 0 && keysMatching.length === 0 && <p style={empty}>{tr("No matching houses.")}</p>}
-          </PanelCard>
-        )}
+          </>
+          )}
+        </PanelCard>
         </div>
-       )}
+      )}
 
+      {/* ---- Workload ---- */}
+      {tab === "workload" && (
+        <div style={narrow}>
+        <PanelCard title={tr("Workload today (hours)")}>
+          {tasksQ.data === null ? waiting(tasksQ) : (
+          <>
+            {loadRows.length > 0 && (
+              <div style={{ display: "flex", gap: 12, fontSize: 10.5, color: "var(--ink-soft)", marginBottom: 8 }}>
+                <span><span style={{ ...dot, background: "var(--green-dark)" }} /> {tr("worked")}</span>
+                <span><span style={{ ...dot, background: "#C9DDB0" }} /> {tr("planned")}</span>
+              </div>
+            )}
+            {loadRows.map(([name, l]) => (
+              <div key={name} style={row}>
+                <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                  <span>{name}</span>
+                  <span style={{ fontWeight: 700 }}>{hours(l.worked)} {tr("worked")}</span>
+                </div>
+                <div style={{ display: "flex", width: "100%", height: 10, borderRadius: 6, background: "#EEE", overflow: "hidden" }}>
+                  <div style={{ width: `${(l.worked / scale) * 100}%`, background: "var(--green-dark)" }} />
+                  <div style={{ width: `${(l.planned / scale) * 100}%`, background: "#C9DDB0" }} />
+                </div>
+                <div style={sub}>{hours(l.planned)} {tr("planned")} · {l.open} {tr("open")}</div>
+              </div>
+            ))}
+            {loadRows.length === 0 && <p style={empty}>{tr("No assignments yet.")}</p>}
+          </>
+          )}
+        </PanelCard>
+        </div>
+      )}
       </div>
 
-      {ticketEd && <TicketEditor ticket={ticketEd.ticket} houses={houseOpts} workers={workers} onClose={() => setTicketEd(null)} onSaved={saved} />}
-      {matEd && <MaterialEditor request={matEd.request} houses={houseOpts} onClose={() => setMatEd(null)} onSaved={saved} />}
+      {ticketEd && lookupsReady && <TicketEditor ticket={ticketEd.ticket} houses={houseOpts} workers={workers} onClose={() => setTicketEd(null)} onSaved={saved} />}
+      {matEd && housesQ.data !== null && <MaterialEditor request={matEd.request} houses={houseOpts} onClose={() => setMatEd(null)} onSaved={saved} />}
       {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={saved} />}
     </PanelShell>
   );
