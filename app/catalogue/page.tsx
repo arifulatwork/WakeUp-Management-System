@@ -71,11 +71,11 @@ export default function CataloguePage() {
   const [countryFilter, setCountryFilter] = useState(""); // "" = every product, "ALL" = products for all countries, else a country code
   const [categoryFilter, setCategoryFilter] = useState(""); // "" = every category
   const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState(""); // "" = all, "on" = available to order, "off" = switched off
+  const [stock, setStock] = useState<"available" | "unavailable">("available"); // which sub-tab of Products is open
   const [toggling, setToggling] = useState<string | null>(null);
   const [toggleErr, setToggleErr] = useState("");
   const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [q, countryFilter, categoryFilter, statusFilter]);
+  useEffect(() => setPage(1), [q, countryFilter, categoryFilter, stock]);
 
   const refresh = () => { info.reload(); products.reload(); dietary.reload(); report.reload(); };
   useLiveRefresh(refresh, { models: ["product", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
@@ -124,7 +124,7 @@ export default function CataloguePage() {
   const shownProducts = products.data.filter((p) =>
     (!countryFilter || (countryFilter === "ALL" ? !p.country : p.country === countryFilter)) &&
     (!categoryFilter || p.category === categoryFilter) &&
-    (!statusFilter || (statusFilter === "on") === p.active) &&
+    (stock === "available") === p.active &&
     (!needle || [p.name, p.brand, p.category, ...Object.values(p.names ?? {})].some((v) => norm(v).includes(needle))));
   const pages = Math.max(1, Math.ceil(shownProducts.length / PRODUCTS_PER_PAGE));
   const curPage = Math.min(page, pages);
@@ -198,14 +198,14 @@ export default function CataloguePage() {
                 {countryOptions(locale, usedCountries).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
               </select>
             </div>
-            <div style={{ flex: "1 1 140px", minWidth: 0 }}>
-              <label style={S.label}>{tr("Status")}</label>
-              <select aria-label={tr("Status")} style={{ ...S.input, width: "100%", minWidth: 0, boxSizing: "border-box" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="">{tr("All")}</option>
-                <option value="on">{tr("Available")}</option>
-                <option value="off">{tr("Unavailable")}</option>
-              </select>
-            </div>
+          </div>
+          <div className="h-tabs" style={{ marginTop: 4 }}>
+            <PanelTabs<"available" | "unavailable">
+              tabs={[
+                { id: "available", label: `${tr("Available")} · ${products.data.filter((p) => p.active).length}` },
+                { id: "unavailable", label: `${tr("Unavailable")} · ${products.data.filter((p) => !p.active).length}` },
+              ]}
+              value={stock} onChange={setStock} label={tr("Products")} />
           </div>
           {toggleErr && <p role="alert" style={{ margin: 0, padding: "6px 14px", fontSize: 12.5, color: "var(--red)" }}>{toggleErr}</p>}
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -234,7 +234,7 @@ export default function CataloguePage() {
               ))}
             </tbody>
           </table>
-          {!shownProducts.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching products.")}</p>}
+          {!shownProducts.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{stock === "unavailable" && !products.data.some((p) => !p.active) ? tr("No unavailable products.") : tr("No matching products.")}</p>}
           <Pager page={curPage} pages={pages} onPage={setPage} />
           </>
           )}
