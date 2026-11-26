@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from "react";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
+import PanelTabs, { useHashTab } from "@/components/PanelTabs";
+import { LoadError, SkeletonRows } from "@/components/PanelKit";
+import { Pager } from "@/components/ordering/Pager";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
@@ -10,6 +13,12 @@ import { productName } from "@/lib/ordering";
 import { altLabel, Flow, Line, Order, Pill, ProductThumb, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
 
 const ACTIVE = ["APPROVED", "PREPARING", "PREPARED"];
+const DONE_PER_PAGE = 15;
+
+// Three tabs: what is still to prepare (opens first), what is on the way, and the delivered history.
+const TABS = ["prepare", "onTheWay", "delivered"] as const;
+type Tab = (typeof TABS)[number];
+const TAB_LABEL: Record<Tab, string> = { prepare: "To prepare", onTheWay: "On the way", delivered: "Delivered" };
 
 // SUPPLIER / WAREHOUSE SCREEN — approved orders, consolidated quantities, preparing each group's products,
 // recording what is missing, and marking orders dispatched / delivered.
@@ -18,12 +27,17 @@ export default function SupplierPage() {
   const orders = useJson<Order[]>("/api/orders", []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [showDone, setShowDone] = useState(false);
+  const [tab, chooseTab] = useHashTab<Tab>(TABS, "prepare");
+  const [donePage, setDonePage] = useState(1);
   useLiveRefresh(() => orders.reload(), { models: ["order", "orderLine", "product"] });
 
   const active = orders.data.filter((o) => ACTIVE.includes(o.status));
   const dispatched = orders.data.filter((o) => o.status === "DISPATCHED");
-  const done = orders.data.filter((o) => o.status === "DELIVERED");
+  // newest delivery first
+  const done = orders.data.filter((o) => o.status === "DELIVERED").sort((a, b) => (b.deliveredAt ?? "").localeCompare(a.deliveredAt ?? ""));
+  const donePages = Math.max(1, Math.ceil(done.length / DONE_PER_PAGE));
+  const curDonePage = Math.min(donePage, donePages);
+  const doneShown = done.slice((curDonePage - 1) * DONE_PER_PAGE, curDonePage * DONE_PER_PAGE);
   const missing = orders.data.filter((o) => ACTIVE.includes(o.status)).flatMap((o) => o.lines).filter((l) => l.status === "UNAVAILABLE").length;
 
   // Consolidated: every product summed across the orders still to prepare, with how many groups need it.
@@ -59,6 +73,24 @@ export default function SupplierPage() {
       </StatGrid>
       {err && <p style={{ color: "var(--red)", fontSize: 12.5 }}>{err}</p>}
 
+      <PanelTabs
+        tabs={TABS.map((t) => ({
+          id: t,
+          label: tr(TAB_LABEL[t]),
+          badge: !orders.loaded ? undefined : t === "prepare" ? active.length : t === "onTheWay" ? dispatched.length : undefined,
+        }))}
+        value={tab}
+        onChange={chooseTab}
+        label={tr("Order Fulfilment")}
+      />
+
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+      {!orders.loaded || (orders.error && !orders.data.length) ? (
+        <PanelCard flush>{orders.loaded ? <LoadError onRetry={orders.reload} /> : <SkeletonRows rows={4} />}</PanelCard>
+      ) : (
+      <>
+      {tab === "prepare" && (
+        <>
       <PanelCard title={tr("Consolidated quantities")} subtitle={tr("Everything to pick, summed over all groups still to prepare.")} flush>
         {!consolidated.length
           ? <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("Nothing to prepare right now.")}</p>
@@ -79,19 +111,65 @@ export default function SupplierPage() {
           )}
       </PanelCard>
 
-      {[...active, ...dispatched].sort((a, b) => a.orderDate.localeCompare(b.orderDate)).map((o) => (
+
+      {active.slice().sort((a, b) => a.orderDate.localeCompare(b.orderDate)).map((o) => (
         <OrderCard key={o.id} order={o} busy={busy} onAct={(b) => act(o.id, b)} locale={locale} />
       ))}
+        </>
+      )}
 
-      <PanelCard title={`${tr("Delivered")} (${done.length})`} action={<button style={S.small} onClick={() => setShowDone((v) => !v)}>{showDone ? tr("Hide") : tr("Show")}</button>}>
-        {showDone
-          ? done.map((o) => (
-              <div key={o.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--line)", fontSize: 13 }}>
-                <strong>{o.group?.name}</strong> · {o.orderDate} · {unitsOf(o.lines)} {tr("units")} · {tr("delivered")} {when(o.deliveredAt, locale)}
+      {tab === "onTheWay" && (
+        <>
+          {!dispatched.length && <PanelCard><p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)", textAlign: "center", padding: "6px 0" }}>{tr("Nothing on the way.")}</p></PanelCard>}
+          {dispatched.slice().sort((a, b) => a.orderDate.localeCompare(b.orderDate)).map((o) => (
+            <OrderCard key={o.id} order={o} busy={busy} onAct={(b) => act(o.id, b)} locale={locale} />
+          ))}
+        </>
+      )}
+
+      {tab === "delivered" && (
+        <PanelCard title={`${tr("Delivered")} (${done.length})`} flush>
+          {!done.length ? (
+            <p style={{ margin: 0, padding: "22px 16px", fontSize: 13, textAlign: "center", color: "var(--ink-soft)" }}>{tr("No orders yet.")}</p>
+          ) : (
+            <>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#F7F8F4" }}>
+                      <th style={th}>{tr("Group")}</th>
+                      <th style={th}>{tr("Date")}</th>
+                      <th style={th}>{tr("Delivery")}</th>
+                      <th style={{ ...th, textAlign: "center" }}>{tr("Units")}</th>
+                      <th style={th}>{tr("Delivered")}</th>
+                      <th style={{ ...th, textAlign: "right" }}>{tr("Received")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {doneShown.map((o, i) => {
+                      const cell: React.CSSProperties = { ...td, verticalAlign: "middle", borderBottom: i === doneShown.length - 1 ? "none" : td.borderBottom };
+                      return (
+                        <tr key={o.id}>
+                          <td style={{ ...cell, fontWeight: 600 }}>{o.group?.name ?? "—"}</td>
+                          <td style={{ ...cell, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>{o.orderDate}</td>
+                          <td style={{ ...cell, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>{o.deliveryDate ?? "—"}</td>
+                          <td style={{ ...cell, textAlign: "center" }}>{unitsOf(o.lines)}</td>
+                          <td style={{ ...cell, whiteSpace: "nowrap" }}>{when(o.deliveredAt, locale)}</td>
+                          <td style={{ ...cell, textAlign: "right", whiteSpace: "nowrap", color: o.receivedAt ? "var(--green-dark)" : "var(--ink-soft)" }}>{o.receivedAt ? `✓ ${when(o.receivedAt, locale)}` : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            ))
-          : <p style={{ margin: 0, fontSize: 12.5, color: "var(--ink-soft)" }}>{tr("Hidden")}</p>}
-      </PanelCard>
+              <Pager page={curDonePage} pages={donePages} onPage={setDonePage} />
+            </>
+          )}
+        </PanelCard>
+      )}
+      </>
+      )}
+      </div>
     </PanelShell>
   );
 }

@@ -645,6 +645,7 @@ const ROWS: Row[] = [
   ["To prepare", "Por preparar", "Por preparar", "À préparer", "Da preparare", "До підготовки"],
   ["Ready to dispatch", "Prontas a enviar", "Listos para enviar", "Prêtes à expédier", "Pronti da spedire", "Готові до відправлення"],
   ["On the way", "A caminho", "En camino", "En route", "In viaggio", "У дорозі"],
+  ["Nothing on the way.", "Nada a caminho.", "Nada en camino.", "Rien en cours de livraison.", "Niente in consegna.", "Немає відправлених замовлень."],
   ["Missing products", "Produtos em falta", "Productos que faltan", "Produits manquants", "Prodotti mancanti", "Відсутні продукти"],
   ["Consolidated quantities", "Quantidades consolidadas", "Cantidades consolidadas", "Quantités consolidées", "Quantità consolidate", "Загальні кількості"],
   ["Everything to pick, summed over all groups still to prepare.", "Tudo o que é preciso separar, somado de todos os grupos ainda por preparar.", "Todo lo que hay que recoger, sumado de todos los grupos que quedan por preparar.", "Tout ce qu’il faut prélever, additionné pour tous les groupes restant à préparer.", "Tutto da prelevare, sommato su tutti i gruppi ancora da preparare.", "Усе, що потрібно зібрати, підсумовано по всіх групах, які ще треба підготувати."],

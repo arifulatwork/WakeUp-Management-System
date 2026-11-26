@@ -174,16 +174,43 @@ export default function GroupOrdersPage() {
         <PanelCard title={`${tr("Student requests")} (${pending.length})`} subtitle={cfg?.model === "COORDINATOR_ORDERS" ? tr("Students do not send requests in the current ordering model.") : undefined}>
           {blocked(requests) ? waiting(requests) : (
           <>
-          {!pendingShown.length && <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: 0 }}>{pending.length ? tr("No matching requests.") : tr("No requests waiting.")}</p>}
+          {!pendingShown.length && (
+            <div style={{ padding: "18px 14px", textAlign: "center", fontSize: 13, color: "var(--ink-soft)", background: "#F7F8F4", border: "1px dashed var(--line)", borderRadius: 10 }}>
+              {pending.length ? tr("No matching requests.") : tr("No requests waiting.")}
+            </div>
+          )}
           {pendingShown.map((r) => <RequestCard key={r.id} req={r} canReview={canReview} onDone={refresh} />)}
           {decidedShown.length > 0 && (
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 6 }}>{tr("Recently decided")}</div>
-              {decidedShown.map((r) => (
-                <div key={r.id} style={{ fontSize: 12.5, padding: "5px 0", borderBottom: "1px solid var(--line)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <Pill status={r.status} /> <strong>{r.student?.name}</strong> · {r.group?.name} · {r.lines.length} {tr("products")} · {when(r.createdAt, locale)}
-                </div>
-              ))}
+            <div style={{ marginTop: pendingShown.length ? 22 : 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--ink-soft)", marginBottom: 8 }}>{tr("Recently decided")}</div>
+              <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: 10 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#F7F8F4" }}>
+                      <th style={th}>{tr("Student")}</th>
+                      <th style={th}>{tr("Group")}</th>
+                      <th style={{ ...th, textAlign: "center" }}>{tr("Products")}</th>
+                      <th style={th}>{tr("Date")}</th>
+                      <th style={{ ...th, textAlign: "right" }}>{tr("Status")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {decidedShown.map((r, i) => {
+                      const last = i === decidedShown.length - 1;
+                      const cell: React.CSSProperties = { ...td, verticalAlign: "middle", borderBottom: last ? "none" : td.borderBottom };
+                      return (
+                        <tr key={r.id}>
+                          <td style={{ ...cell, fontWeight: 600 }}>{r.student?.name}</td>
+                          <td style={{ ...cell, color: "var(--ink-soft)" }}>{r.group?.name}</td>
+                          <td style={{ ...cell, textAlign: "center" }}>{r.lines.length}</td>
+                          <td style={{ ...cell, color: "var(--ink-soft)", whiteSpace: "nowrap" }}>{when(r.createdAt, locale)}</td>
+                          <td style={{ ...cell, textAlign: "right" }}><Pill status={r.status} /></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
           </>
