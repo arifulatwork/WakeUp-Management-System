@@ -10,7 +10,31 @@ import { useI18n } from "@/lib/i18n";
 import { applyDir, cmpText, KEY_RANK } from "@/lib/sort";
 import { ModeBadge, CheckInGuideButton } from "@/components/CheckInGuide";
 import type { EdHouseFull } from "@/components/editors/HouseEditor";
-import { EmptyNote, LoadError, SearchBox, SkeletonRows, Toolbar, td, th, tableStyle, useApiList, useToast } from "./shared";
+import { LoadError, SearchBox, SkeletonRows, Toolbar, useApiList, useToast } from "./shared";
+
+
+const KEY_TONE: Record<string, string> = { AT_OFFICE: "ok", WITH_CLEANER: "info", WITH_GUEST: "warn", MISSING: "bad" };
+const DAY = 86400000;
+
+function Avatar({ h, archived }: { h: EdHouseFull; archived?: boolean }) {
+  return <div className={`h-avatar${h.mode === "TOURISM" ? " tourism" : ""}${archived ? " archived" : ""}`} aria-hidden="true">{(h.name.trim()[0] ?? "?").toUpperCase()}</div>;
+}
+
+function NameCell({ h, archived }: { h: EdHouseFull; archived?: boolean }) {
+  return (
+    <div className="h-cell-name">
+      <Avatar h={h} archived={archived} />
+      <div style={{ minWidth: 0 }}>
+        <div className="h-name">{h.name}<ModeBadge mode={h.mode} /></div>
+        <div className="h-sub">{h.address}</div>
+      </div>
+    </div>
+  );
+}
+
+function Empty({ icon, text }: { icon: string; text: string }) {
+  return <div className="h-empty"><div className="h-empty-icon" aria-hidden="true">{icon}</div>{text}</div>;
+}
 
 const HouseEditor = dynamic(() => import("@/components/editors/HouseEditor"), { ssr: false });
 
@@ -83,71 +107,101 @@ export default function HousesSection() {
         <Toolbar>
           <SearchBox value={query} onChange={setQuery} placeholder={tr("Search by name or address")} />
         </Toolbar>
-        <PanelTabs<"active" | "archived">
-          tabs={[{ id: "active", label: tr("Houses") }, { id: "archived", label: tr("Archived") }]}
-          value={view} onChange={setView} label={tr("Houses")} />
+        <div className="h-tabs">
+          <PanelTabs<"active" | "archived">
+            tabs={[
+              { id: "active", label: data ? `${tr("Houses")} · ${houses.length}` : tr("Houses") },
+              { id: "archived", label: archived.data ? `${tr("Archived")} · ${archived.data.length}` : tr("Archived") },
+            ]}
+            value={view} onChange={setView} label={tr("Houses")} />
+        </div>
 
         {view === "active" && (!data ? (
           error ? <LoadError onRetry={reload} /> : <SkeletonRows />
+        ) : houses.length === 0 ? (
+          <Empty icon="🏠" text={tr("No houses yet.")} />
+        ) : rows.length === 0 ? (
+          <Empty icon="🔍" text={tr("No houses match your search.")} />
         ) : (
           <>
-            <table style={tableStyle}>
+            <table className="h-table">
               <thead>
                 <tr>
-                  <SortTh label={tr("Name")} k="name" sort={sort} style={th} />
-                  <SortTh label={tr("Address")} k="address" sort={sort} style={th} />
-                  <SortTh label={tr("Key status")} k="key" sort={sort} style={th} />
-                  <SortTh label={tr("Valid until")} k="until" sort={sort} style={th} />
-                  <th style={th} />
+                  <SortTh label={tr("Name")} k="name" sort={sort} />
+                  <SortTh label={tr("Address")} k="address" sort={sort} />
+                  <SortTh label={tr("Key status")} k="key" sort={sort} />
+                  <SortTh label={tr("Valid until")} k="until" sort={sort} />
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((h) => (
-                  <tr key={h.id}>
-                    <td style={td}>{h.name}<ModeBadge mode={h.mode} /></td>
-                    <td style={{ ...td, color: "var(--ink-soft)" }}>{h.address}</td>
-                    <td style={td}>{ev(h.keyStatus)}</td>
-                    <td style={td}>{h.validUntil ? new Date(h.validUntil).toLocaleDateString(locale) : "—"}</td>
-                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-                      <CheckInGuideButton house={h} />{" "}
-                      <button style={S.small} onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>{" "}
-                      <button style={S.small} onClick={() => setArchived(h, true)}>{tr("Archive")}</button>
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((h) => {
+                  const left = h.validUntil ? Math.ceil((+new Date(h.validUntil) - Date.now()) / DAY) : null;
+                  return (
+                    <tr key={h.id}>
+                      <td><NameCell h={h} /></td>
+                      <td className="h-addr">{h.address || "—"}</td>
+                      <td><span className={`h-pill ${KEY_TONE[h.keyStatus] ?? "muted"}`}>{ev(h.keyStatus)}</span></td>
+                      <td className="h-valid">
+                        {h.validUntil ? (
+                          <>
+                            {new Date(h.validUntil).toLocaleDateString(locale)}
+                            {left !== null && left < 0 && <small className="bad">{tr("Expired")}</small>}
+                            {left !== null && left >= 0 && left <= 7 && <small className="warn">{tr("Ends soon")}</small>}
+                          </>
+                        ) : <span style={{ color: "var(--ink-soft)" }}>{tr("Permanent")}</span>}
+                      </td>
+                      <td>
+                        <div className="h-actions">
+                          <CheckInGuideButton house={h} style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, border: "1px solid var(--line)", background: "#fff", cursor: "pointer" }} />
+                          <button className="h-btn primary" onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>
+                          <button className="h-btn quiet" onClick={() => setArchived(h, true)}>{tr("Archive")}</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-            {houses.length === 0 && <EmptyNote>{tr("No houses yet.")}</EmptyNote>}
-            {houses.length > 0 && rows.length === 0 && <EmptyNote>{tr("No houses match your search.")}</EmptyNote>}
+            <div className="h-count">{rows.length} / {houses.length} {tr("Houses")}</div>
           </>
         ))}
 
-        {showArchived && (
-          <>
-            {!archived.data ? (
-              archived.error ? <LoadError onRetry={archived.reload} /> : <SkeletonRows rows={2} />
-            ) : archived.data.length === 0 ? (
-              <EmptyNote>{tr("No archived houses.")}</EmptyNote>
-            ) : archivedRows.length === 0 ? (
-              <EmptyNote>{tr("No houses match your search.")}</EmptyNote>
-            ) : (
-              <table style={tableStyle}>
-                <tbody>
-                  {archivedRows.map((h) => (
-                    <tr key={h.id} style={{ opacity: 0.65 }}>
-                      <td style={td}>{h.name}<ModeBadge mode={h.mode} /></td>
-                      <td style={{ ...td, color: "var(--ink-soft)" }}>{h.address}</td>
-                      <td style={{ ...td, textAlign: "right" }}>
-                        <button style={S.small} onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>{" "}
-                        <button style={S.small} onClick={() => setArchived(h, false)}>{tr("Restore")}</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </>
-        )}
+        {showArchived && (!archived.data ? (
+          archived.error ? <LoadError onRetry={archived.reload} /> : <SkeletonRows rows={3} />
+        ) : archived.data.length === 0 ? (
+          <Empty icon="🗄️" text={tr("No archived houses.")} />
+        ) : archivedRows.length === 0 ? (
+          <Empty icon="🔍" text={tr("No houses match your search.")} />
+        ) : (
+          <table className="h-table is-archived">
+            <thead>
+              <tr>
+                <th>{tr("Name")}</th>
+                <th>{tr("Address")}</th>
+                <th>{tr("Key status")}</th>
+                <th>{tr("Valid until")}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {archivedRows.map((h) => (
+                <tr key={h.id}>
+                  <td><NameCell h={h} archived /></td>
+                  <td className="h-addr">{h.address || "—"}</td>
+                  <td><span className="h-pill muted">{tr("Archived")}</span></td>
+                  <td className="h-valid"><span style={{ color: "var(--ink-soft)" }}>{h.validUntil ? new Date(h.validUntil).toLocaleDateString(locale) : tr("Permanent")}</span></td>
+                  <td>
+                    <div className="h-actions">
+                      <button className="h-btn" onClick={() => setHouseEd({ house: h })}>{tr("Edit")}</button>
+                      <button className="h-btn primary" onClick={() => setArchived(h, false)}>{tr("Restore")}</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ))}
       </PanelCard>
 
       {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={() => { setHouseEd(null); toast.show(tr("Changes saved.")); reload(); if (showArchived) archived.reload(); }} />}
