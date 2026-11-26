@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   // A person changing their own display language needs no admin rights —
   // it's the only field that can be changed without an admin session.
-  const LANGS = ["en", "pt", "es", "fr", "it", "uk"];
+  const LANGS = ["en", "pt", "es", "fr", "it", "uk", "pl"];
   const languageOnly = Object.keys(body).length === 1 && !!language;
   if (languageOnly) {
     if (!LANGS.includes(language)) {

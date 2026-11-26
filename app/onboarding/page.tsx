@@ -11,6 +11,7 @@ const LANGUAGES = [
   { code: "fr", label: "Français" },
   { code: "it", label: "Italiano" },
   { code: "uk", label: "Українська" },
+  { code: "pl", label: "Polski" },
 ];
 
 export default function Onboarding() {

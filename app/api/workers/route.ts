@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const area = body.area;
   const role = body.role ?? "worker";
 
-  const LANGS = ["en", "pt", "es", "fr", "it", "uk"];
+  const LANGS = ["en", "pt", "es", "fr", "it", "uk", "pl"];
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (area !== "CLEANING" && area !== "MAINTENANCE") return NextResponse.json({ error: "invalid area" }, { status: 400 });
   if (!LANGS.includes(language)) return NextResponse.json({ error: "invalid language" }, { status: 400 });

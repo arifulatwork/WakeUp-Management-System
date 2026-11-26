@@ -14,7 +14,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-export type Lang = "en" | "pt" | "es" | "fr" | "it" | "uk";
+export type Lang = "en" | "pt" | "es" | "fr" | "it" | "uk" | "pl";
 
 export const LANGS: { code: Lang; label: string; locale: string }[] = [
   { code: "pt", label: "Português", locale: "pt-PT" },
@@ -23,6 +23,7 @@ export const LANGS: { code: Lang; label: string; locale: string }[] = [
   { code: "fr", label: "Français", locale: "fr-FR" },
   { code: "it", label: "Italiano", locale: "it-IT" },
   { code: "uk", label: "Українська", locale: "uk-UA" },
+  { code: "pl", label: "Polski", locale: "pl-PL" },
 ];
 
 // Column order: [en, pt, es, fr, it, uk]
@@ -799,8 +800,86 @@ const ROWS: Row[] = [
   ["Edit default checklist & extra task fields (cleaning staff)", "Editar checklist padrão e campos extra (equipa de limpeza)", "Editar checklist predeterminada y campos extra (equipo de limpieza)", "Modifier la checklist par défaut et les champs supplémentaires (équipe de ménage)", "Modifica checklist predefinita e campi extra (team pulizie)", "Редагувати типовий чек-лист і додаткові поля (команда прибирання)"],
 ];
 
+// Polish: a separate list (English text -> Polish) so the six-column table above stays as it is.
+// Anything not listed here shows in English until it is translated.
+const PL: Record<string, string> = {
+  "Edit": "Edytuj",
+  "Archive": "Archiwizuj",
+  "Restore": "Przywróć",
+  "Cancel": "Anuluj",
+  "Save": "Zapisz",
+  "Delete": "Usuń",
+  "Name": "Nazwa",
+  "Address": "Adres",
+  "Products": "Produkty",
+  "Product": "Produkt",
+  "Status": "Status",
+  "Country": "Kraj",
+  "Category": "Kategoria",
+  "Search": "Szukaj",
+  "Remove": "Usuń",
+  "Language": "Język",
+  "Houses": "Domy",
+  "Archived": "Zarchiwizowane",
+  "Available": "Dostępny",
+  "Unavailable": "Niedostępny",
+  "All": "Wszystkie",
+  "Add product": "Dodaj produkt",
+  "Edit product": "Edytuj produkt",
+  "Name in other languages": "Nazwa w innych językach",
+  "Shown to people who use that language. Empty = the name above.": "Widoczna dla osób używających tego języka. Puste = nazwa powyżej.",
+  "Available to order": "Dostępny do zamówienia",
+  "Alternatives": "Alternatywy",
+  "Suitable for": "Odpowiedni dla",
+  "Standard": "Standard",
+  "Add alternative": "Dodaj alternatywę",
+  "Brand": "Marka",
+  "Dietary requirements": "Wymagania dietetyczne",
+  "My dietary requirements": "Moje wymagania dietetyczne",
+  "Ordering rules": "Zasady zamawiania",
+  "Reports & history": "Raporty i historia",
+  "Catalogue & Ordering": "Katalog i zamówienia",
+  "My Orders": "Moje zamówienia",
+  "Order Fulfilment": "Realizacja zamówień",
+  "Students": "Uczniowie",
+  "Hide students": "Ukryj uczniów",
+  "All countries": "Wszystkie kraje",
+  "All categories": "Wszystkie kategorie",
+  "All products": "Wszystkie produkty",
+  "No matching products.": "Brak pasujących produktów.",
+  "No unavailable products.": "Brak niedostępnych produktów.",
+  "New house": "Nowy dom",
+  "Edit house": "Edytuj dom",
+  "Key status": "Status klucza",
+  "Valid until": "Ważny do",
+  "Permanent": "Bezterminowo",
+  "Expired": "Wygasł",
+  "Ends soon": "Wkrótce wygasa",
+  "Changes saved.": "Zmiany zapisane.",
+  "Could not save. Please try again.": "Nie udało się zapisać. Spróbuj ponownie.",
+  "You don't have permission to do this.": "Nie masz uprawnień do tej czynności.",
+  "Previous": "Poprzednia",
+  "Next": "Następna",
+  "Search by name or address": "Szukaj po nazwie lub adresie",
+  "No houses yet.": "Brak domów.",
+  "No houses match your search.": "Żaden dom nie pasuje do wyszukiwania.",
+  "No archived houses.": "Brak zarchiwizowanych domów.",
+  "Staff & Roles": "Pracownicy i role",
+  "Mode": "Tryb",
+  "Notifications on": "Powiadomienia włączone",
+  "Enable notifications": "Włącz powiadomienia",
+  "Turn off": "Wyłącz",
+  "Send a test": "Wyślij test",
+  "Requests": "Prośby",
+  "Orders": "Zamówienia",
+  "Dispatched": "Wysłane",
+  "Delivered": "Dostarczone",
+  "Prepared": "Przygotowane",
+  "Preparing": "W przygotowaniu",
+};
+
 const ORDER: Lang[] = ["en", "pt", "es", "fr", "it", "uk"];
-const DICT: Record<string, Record<string, string>> = {};
+const DICT: Record<string, Record<string, string>> = { pl: { ...PL } };
 for (const row of ROWS) {
   ORDER.forEach((l, i) => {
     if (l === "en") return;

@@ -128,7 +128,7 @@ export function countryName(code: string, locale = "en-GB"): string {
   try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code; } catch { return code; }
 }
 // Keep in step with LANGS in lib/i18n.tsx (that file is browser-only, so the codes are repeated here).
-export const PRODUCT_LANGS = ["en", "pt", "es", "fr", "it", "uk"];
+export const PRODUCT_LANGS = ["en", "pt", "es", "fr", "it", "uk", "pl"];
 // The product name in the viewer's language; the default name when that language was not filled in.
 export const productName = (p: { name: string; names?: unknown }, lang: string): string => {
   const n = (p.names as Record<string, unknown> | null | undefined)?.[lang];
