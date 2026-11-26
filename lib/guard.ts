@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifySession, SESSION_COOKIE, SessionPayload } from "@/lib/session";
-import { can, Perm } from "@/lib/permissions";
+import { can, canEditSettings, Perm } from "@/lib/permissions";
 import { cachedValue } from "@/lib/serverCache";
 import { groupEnded } from "@/lib/ordering";
 
@@ -50,5 +50,13 @@ export async function requirePerm(
   const session = await currentSession(req);
   if (!session) return { error: NextResponse.json({ error: "sign in required" }, { status: 401 }) };
   if (!can(session.role, perm)) return { error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
+  return { session };
+}
+
+// Cleaning settings: the Super Admin and CLEANING staff (not maintenance staff). Checked on the server.
+export async function requireSettingsEdit(req: NextRequest): Promise<{ session: FullSession; error?: undefined } | { session?: undefined; error: NextResponse }> {
+  const session = await currentSession(req);
+  if (!session) return { error: NextResponse.json({ error: "sign in required" }, { status: 401 }) };
+  if (!canEditSettings(session.role, session.area)) return { error: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   return { session };
 }

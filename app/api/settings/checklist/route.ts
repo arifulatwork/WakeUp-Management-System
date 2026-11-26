@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentSession, requirePerm } from "@/lib/guard";
+import { currentSession, requireSettingsEdit } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { cleanChecklist, getChecklistDefaults, setChecklistDefaults } from "@/lib/settings";
 
@@ -9,9 +9,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ items: await getChecklistDefaults() });
 }
 
-// PUT /api/settings/checklist  { items: string[] }  (Super Admin only)
+// PUT /api/settings/checklist  { items: string[] }  (Super Admin and cleaning staff)
 export async function PUT(req: NextRequest) {
-  const g = await requirePerm(req, "settings.edit");
+  const g = await requireSettingsEdit(req);
   if (g.error) return g.error;
   const b = await req.json().catch(() => ({}));
   const items = cleanChecklist(b.items);

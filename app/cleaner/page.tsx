@@ -14,6 +14,12 @@ import { HouseThumb, HouseGallery } from "@/components/HouseMedia";
 import { CheckInGuideBody, ModeBadge } from "@/components/CheckInGuide";
 import { DONE_TASK, PRIORITY_RANK, taskWhen, cmpText, dayKey } from "@/lib/sort";
 import { MEDIA_ENABLED } from "@/lib/features";
+import dynamic from "next/dynamic";
+import { Modal } from "@/components/ui";
+import { canEditSettings } from "@/lib/permissions";
+
+// Only downloaded when a cleaner opens the settings.
+const TaskSettings = dynamic(() => import("@/components/editors/TaskSettings"), { ssr: false });
 
 type Task = {
   id: string;
@@ -53,6 +59,8 @@ export default function CleanerApp() {
   const [materialsSubmitting, setMaterialsSubmitting] = useState(false);
   const [materialsDone, setMaterialsDone] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [mayEditSettings, setMayEditSettings] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { tr, ev, locale } = useI18n();
   const [historyLimit, setHistoryLimit] = useState(15);
   const router = useRouter();
@@ -72,6 +80,8 @@ export default function CleanerApp() {
   useEffect(() => {
     // Extra task fields defined by the Super Admin (shown read-only on the job).
     fetch("/api/settings/task-fields").then((r) => (r.ok ? r.json() : null)).then((d) => d && setTaskFields(d.fields ?? [])).catch(() => {});
+    // Cleaning staff (and the Super Admin) may edit the cleaning settings. The server checks this again on every save.
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((m) => m && setMayEditSettings(canEditSettings(m.role, m.area))).catch(() => {});
     (async () => {
       const id = await restoreWorkerId(); // the saved id, or the one the login cookie belongs to
       setWorkerId(id);
@@ -575,6 +585,21 @@ export default function CleanerApp() {
         <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>
           <p>{tr("No tasks assigned yet.")}</p>
         </div>
+      )}
+      {mayEditSettings && (
+        <button style={ghostBtn} onClick={() => setSettingsOpen(true)}>⚙ {tr("Cleaning settings")}</button>
+      )}
+      {settingsOpen && (
+        <Modal
+          title={tr("Cleaning settings")}
+          onClose={() => {
+            setSettingsOpen(false);
+            // show new extra fields on the job screen right away
+            fetch("/api/settings/task-fields").then((r) => (r.ok ? r.json() : null)).then((d) => d && setTaskFields(d.fields ?? [])).catch(() => {});
+          }}
+        >
+          <div style={{ margin: "0 -20px -20px" }}><TaskSettings /></div>
+        </Modal>
       )}
       <AppFooter />
     </main>

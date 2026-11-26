@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentSession, requirePerm } from "@/lib/guard";
+import { currentSession, requireSettingsEdit } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
 import { cleanFields, getTaskFields, setTaskFields } from "@/lib/settings";
 
@@ -9,9 +9,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ fields: await getTaskFields() });
 }
 
-// PUT /api/settings/task-fields  { fields: [{ id?, label, type }] }  (Super Admin only)
+// PUT /api/settings/task-fields  { fields: [{ id?, label, type }] }  (Super Admin and cleaning staff)
 export async function PUT(req: NextRequest) {
-  const g = await requirePerm(req, "settings.edit");
+  const g = await requireSettingsEdit(req);
   if (g.error) return g.error;
   const b = await req.json().catch(() => ({}));
   const fields = cleanFields(b.fields);

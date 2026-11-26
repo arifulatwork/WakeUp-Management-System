@@ -787,6 +787,7 @@ const ROWS: Row[] = [
   ["{name} is now {role}.", "{name} é agora {role}.", "{name} ahora es {role}.", "{name} est maintenant {role}.", "{name} ora è {role}.", "{name} тепер має роль: {role}."],
   ["Login saved for {name}.", "Acesso guardado para {name}.", "Acceso guardado para {name}.", "Accès enregistré pour {name}.", "Accesso salvato per {name}.", "Вхід збережено для {name}."],
   ["Changes saved.", "Alterações guardadas.", "Cambios guardados.", "Modifications enregistrées.", "Modifiche salvate.", "Зміни збережено."],
+  ["Edit default checklist & extra task fields (cleaning staff)", "Editar checklist padrão e campos extra (equipa de limpeza)", "Editar checklist predeterminada y campos extra (equipo de limpieza)", "Modifier la checklist par défaut et les champs supplémentaires (équipe de ménage)", "Modifica checklist predefinita e campi extra (team pulizie)", "Редагувати типовий чек-лист і додаткові поля (команда прибирання)"],
 ];
 
 const ORDER: Lang[] = ["en", "pt", "es", "fr", "it", "uk"];

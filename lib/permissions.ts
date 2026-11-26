@@ -43,7 +43,7 @@ export const PERMS = {
   "houses.delete": ADMIN,
   // staff
   "staff.manage": ADMIN,
-  "settings.edit": ADMIN,   // default checklist + extra task fields
+  "settings.edit": ["worker", "admin"] as Role[], // default checklist + extra task fields: Super Admin and CLEANING staff (see canEditSettings)
   "audit.read": ADMIN,      // see the change history    // add / edit / remove staff, roles, logins, passwords
   // reading the all-houses dashboards
   "data.read": OPS,         // every task, every ticket, every material request
@@ -62,6 +62,11 @@ export const PERMS = {
 } as const;
 
 export type Perm = keyof typeof PERMS;
+
+// Cleaning staff (role "worker" in the CLEANING team) may edit the cleaning settings together with the
+// Super Admin. Maintenance staff may not: the role alone cannot tell them apart, so the team is checked too.
+export const canEditSettings = (role: string | null | undefined, area: string | null | undefined): boolean =>
+  role === "admin" || (role === "worker" && area === "CLEANING");
 
 export const can = (role: string | null | undefined, perm: Perm): boolean =>
   !!role && (PERMS[perm] as readonly string[]).includes(role);
@@ -99,7 +104,7 @@ export const MATRIX: { label: string; roles: readonly Role[] }[] = [
   { label: "Delete houses", roles: PERMS["houses.delete"] },
   { label: "Staff, roles, logins & passwords (Admin screen)", roles: PERMS["staff.manage"] },
   { label: "See the change history (who changed what)", roles: PERMS["audit.read"] },
-  { label: "Edit default checklist & extra task fields", roles: PERMS["settings.edit"] },
+  { label: "Edit default checklist & extra task fields (cleaning staff)", roles: PERMS["settings.edit"] },
   // product ordering
   { label: "See products, standard quantities & own order status", roles: ["student", "coordinator", "manager", "admin", "supplier"] },
   { label: "Send product requests / quantity exceptions (when students order)", roles: ["student"] },

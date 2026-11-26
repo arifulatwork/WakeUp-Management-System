@@ -19,10 +19,12 @@ export default function TaskSettings() {
   const [newType, setNewType] = useState<TaskFieldType>("text");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  // Saving is blocked until the real settings have arrived, so the built-in defaults can never overwrite them.
+  const [loaded, setLoaded] = useState({ items: false, fields: false });
 
   useEffect(() => {
-    fetch("/api/settings/checklist").then((r) => (r.ok ? r.json() : null)).then((d) => d && setItems(d.items ?? []));
-    fetch("/api/settings/task-fields").then((r) => (r.ok ? r.json() : null)).then((d) => d && setFields(d.fields ?? []));
+    fetch("/api/settings/checklist").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setItems(d.items ?? []); setLoaded((l) => ({ ...l, items: true })); } }).catch(() => {});
+    fetch("/api/settings/task-fields").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { setFields(d.fields ?? []); setLoaded((l) => ({ ...l, fields: true })); } }).catch(() => {});
   }, []);
 
   function addItem() {
@@ -56,20 +58,22 @@ export default function TaskSettings() {
     setSaving(false);
   }
 
-  const row: React.CSSProperties = { display: "flex", gap: 6, marginBottom: 5, alignItems: "center" };
+  const row: React.CSSProperties = { display: "flex", gap: 6, marginBottom: 5, alignItems: "center", flexWrap: "wrap" };
+  // Text boxes share the row and drop onto their own line on a narrow phone.
+  const grow: React.CSSProperties = { ...S.input, flex: "1 1 150px", width: "auto", minWidth: 0 };
   return (
     <div style={{ padding: 14, background: "#fff" }}>
       <label style={S.label}>{tr("Default checklist for new cleaning tasks")}</label>
       {items.map((it, i) => (
         <div key={i} style={row}>
-          <input style={S.input} value={it} onChange={(e) => setItems(items.map((x, j) => (j === i ? e.target.value : x)))} />
+          <input style={grow} value={it} onChange={(e) => setItems(items.map((x, j) => (j === i ? e.target.value : x)))} />
           <button type="button" style={S.small} aria-label={tr("Move up")} onClick={() => setItems(move(items, i, -1))}>↑</button>
           <button type="button" style={S.small} aria-label={tr("Move down")} onClick={() => setItems(move(items, i, 1))}>↓</button>
           <button type="button" style={S.small} aria-label={tr("Remove")} onClick={() => setItems(items.filter((_, j) => j !== i))}>×</button>
         </div>
       ))}
       <div style={row}>
-        <input style={S.input} value={newItem} placeholder={tr("New checklist item")} onChange={(e) => setNewItem(e.target.value)}
+        <input style={grow} value={newItem} placeholder={tr("New checklist item")} onChange={(e) => setNewItem(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") addItem(); }} />
         <button type="button" style={S.small} onClick={addItem}>{tr("Add")}</button>
       </div>
@@ -78,7 +82,7 @@ export default function TaskSettings() {
       {fields.length === 0 && <p style={{ fontSize: 12, color: "var(--ink-soft)", margin: "0 0 8px" }}>{tr("No extra fields yet.")}</p>}
       {fields.map((f, i) => (
         <div key={f.id} style={row}>
-          <input style={S.input} value={f.label} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+          <input style={grow} value={f.label} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
           <select style={{ ...S.input, width: 120 }} value={f.type} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, type: e.target.value as TaskFieldType } : x)))}>
             {TASK_FIELD_TYPES.map((t) => <option key={t} value={t}>{tr(TYPE_LABEL[t])}</option>)}
           </select>
@@ -88,7 +92,7 @@ export default function TaskSettings() {
         </div>
       ))}
       <div style={row}>
-        <input style={S.input} value={newField} placeholder={tr("New field name, e.g. Number of guests")} onChange={(e) => setNewField(e.target.value)}
+        <input style={grow} value={newField} placeholder={tr("New field name, e.g. Number of guests")} onChange={(e) => setNewField(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") addField(); }} />
         <select style={{ ...S.input, width: 120 }} value={newType} onChange={(e) => setNewType(e.target.value as TaskFieldType)}>
           {TASK_FIELD_TYPES.map((t) => <option key={t} value={t}>{tr(TYPE_LABEL[t])}</option>)}
@@ -99,7 +103,7 @@ export default function TaskSettings() {
         {tr("Changing these does not alter tasks that already exist; a removed field only disappears from the screens.")}
       </p>
 
-      <button style={{ ...S.primary, flex: "none", padding: "10px 18px" }} disabled={saving} onClick={save}>
+      <button style={{ ...S.primary, flex: "none", padding: "10px 18px" }} disabled={saving || !loaded.items || !loaded.fields} onClick={save}>
         {saving ? tr("Saving…") : tr("Save settings")}
       </button>
       {msg && <p style={{ fontSize: 12.5, marginTop: 8, color: msg.ok ? "var(--green-dark)" : "var(--red)" }}>{msg.text}</p>}
