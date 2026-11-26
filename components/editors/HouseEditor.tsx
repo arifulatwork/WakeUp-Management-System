@@ -105,8 +105,10 @@ export default function HouseEditor({ house, onClose, onSaved }: {
     try {
       await api(`/api/houses/${house!.id}`, "DELETE");
       onSaved();
-    } catch (e) {
-      setError(saveError(e, tr));
+    } catch (e: any) {
+      setError(e?.message === "has history"
+        ? tr("This house has tasks, tickets or requests on record, so it can't be deleted. Archive it instead.")
+        : saveError(e, tr));
       setSaving(false);
     }
   }
@@ -241,7 +243,7 @@ export default function HouseEditor({ house, onClose, onSaved }: {
 
       <FormFooter saving={saving} canSave={!!name.trim() && !!address.trim() && !duplicate} onSave={save} onClose={onClose}
         onDelete={editing && canDelete ? remove : undefined} error={error}
-        confirmText={tr("Delete this house and all its tasks, tickets and requests? This cannot be undone.")} />
+        confirmText={tr("Delete this house? This cannot be undone. Houses that already have tasks, tickets or requests can only be archived.")} />
     </Modal>
   );
 }
