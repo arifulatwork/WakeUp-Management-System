@@ -71,8 +71,11 @@ export default function CataloguePage() {
   const [countryFilter, setCountryFilter] = useState(""); // "" = every product, "ALL" = products for all countries, else a country code
   const [categoryFilter, setCategoryFilter] = useState(""); // "" = every category
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState(""); // "" = all, "on" = available to order, "off" = switched off
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [toggleErr, setToggleErr] = useState("");
   const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [q, countryFilter, categoryFilter]);
+  useEffect(() => setPage(1), [q, countryFilter, categoryFilter, statusFilter]);
 
   const refresh = () => { info.reload(); products.reload(); dietary.reload(); report.reload(); };
   useLiveRefresh(refresh, { models: ["product", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
@@ -84,6 +87,14 @@ export default function CataloguePage() {
   type L = { loaded: boolean; error: boolean; data: unknown; reload: () => void };
   const blocked = (q: L) => !q.loaded || (q.error && (Array.isArray(q.data) ? q.data.length === 0 : !q.data));
   const waiting = (q: L, rows = 4) => (q.error ? <LoadError onRetry={q.reload} /> : <SkeletonRows rows={rows} />);
+
+  // Switch a product on/off for ordering straight from the list (no need to open the pop-up).
+  async function toggleActive(p: Product) {
+    setToggling(p.id); setToggleErr("");
+    try { await api(`/api/products/${p.id}`, "PATCH", { active: !p.active }); products.reload(); }
+    catch (e) { setToggleErr(saveError(e, tr)); }
+    setToggling(null);
+  }
 
   async function saveRules() {
     if (!cfg) return;
@@ -113,6 +124,7 @@ export default function CataloguePage() {
   const shownProducts = products.data.filter((p) =>
     (!countryFilter || (countryFilter === "ALL" ? !p.country : p.country === countryFilter)) &&
     (!categoryFilter || p.category === categoryFilter) &&
+    (!statusFilter || (statusFilter === "on") === p.active) &&
     (!needle || [p.name, p.brand, p.category, ...Object.values(p.names ?? {})].some((v) => norm(v).includes(needle))));
   const pages = Math.max(1, Math.ceil(shownProducts.length / PRODUCTS_PER_PAGE));
   const curPage = Math.min(page, pages);
@@ -186,20 +198,37 @@ export default function CataloguePage() {
                 {countryOptions(locale, usedCountries).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
               </select>
             </div>
+            <div style={{ flex: "1 1 140px", minWidth: 0 }}>
+              <label style={S.label}>{tr("Status")}</label>
+              <select aria-label={tr("Status")} style={{ ...S.input, width: "100%", minWidth: 0, boxSizing: "border-box" }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">{tr("All")}</option>
+                <option value="on">{tr("Available")}</option>
+                <option value="off">{tr("Unavailable")}</option>
+              </select>
+            </div>
           </div>
+          {toggleErr && <p role="alert" style={{ margin: 0, padding: "6px 14px", fontSize: 12.5, color: "var(--red)" }}>{toggleErr}</p>}
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead><tr><th style={th} /><th style={th}>{tr("Product")}</th><th style={th}>{tr("Country")}</th><th style={th}>{tr("Brand")}</th><th style={th}>{tr("Standard")}</th><th style={th}>{tr("Suitable for")}</th><th style={th}>{tr("Alternatives")}</th><th style={th} /></tr></thead>
+            <thead><tr><th style={th} /><th style={th}>{tr("Product")}</th><th style={th}>{tr("Country")}</th><th style={th}>{tr("Standard")}</th><th style={th}>{tr("Suitable for")}</th><th style={th}>{tr("Alternatives")}</th><th style={th}>{tr("Status")}</th><th style={th} /></tr></thead>
             <tbody>
               {pagedProducts.map((p) => (
                 <tr key={p.id} style={{ opacity: p.active ? 1 : 0.5 }}>
                   <td style={td}><ProductThumb p={p} /></td>
-                  <td style={td}><strong>{p.name}</strong><div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{p.category}{!p.active && ` · ${tr("inactive")}`}</div>
+                  <td style={td}><strong>{p.name}</strong><div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{p.category}</div>
                     {Object.entries(p.names ?? {}).length > 0 && <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{Object.entries(p.names ?? {}).map(([l, n]) => `${l.toUpperCase()}: ${n}`).join(" · ")}</div>}</td>
                   <td style={td}>{p.country ? countryName(p.country, locale) : tr("All countries")}</td>
-                  <td style={td}>{p.brand ?? "—"}</td>
                   <td style={td}>{p.standardQty} {p.unit}</td>
                   <td style={{ ...td, fontSize: 12 }}>{p.dietaryTags.join(", ") || "—"}</td>
                   <td style={{ ...td, fontSize: 12 }}>{p.alternatives.map((a) => a.name).join(", ") || "—"}</td>
+                  <td style={td}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", fontSize: 12, color: p.active ? "var(--green-dark)" : "var(--ink-soft)", fontWeight: 600 }}>
+                      {mayEdit(p) ? (
+                        <button type="button" role="switch" aria-checked={p.active} aria-label={`${p.name}: ${p.active ? tr("Available") : tr("Unavailable")}`}
+                          disabled={toggling === p.id} onClick={() => toggleActive(p)} className={`switch${p.active ? " on" : ""}`}><span /></button>
+                      ) : <span className={`switch${p.active ? " on" : ""}`} aria-hidden="true"><span /></span>}
+                      {p.active ? tr("Available") : tr("Unavailable")}
+                    </span>
+                  </td>
                   <td style={td}>{mayEdit(p) && <button style={S.small} onClick={() => openEditing(p)}>{tr("Edit")}</button>}</td>
                 </tr>
               ))}
