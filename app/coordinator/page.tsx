@@ -1,29 +1,36 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
-import { useSectionVisibility } from "@/lib/useSectionVisibility";
-import { useEffect, useState, useCallback } from "react";
+import PanelTabs, { useHashTab } from "@/components/PanelTabs";
+import { LoadError, SkeletonRows, useApiList } from "@/components/PanelKit";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/useSession";
-import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { S, StatusBadge, PriorityDot } from "@/components/ui";
 import { PhotoStrip } from "@/components/Photos";
 import { MEDIA_ENABLED } from "@/lib/features";
 import { cmpText, sortTickets, taskWhen } from "@/lib/sort";
 import { checkReadiness, REASON_TEXT } from "@/lib/readiness";
-import TaskEditor, { EdTask, EdWorker } from "@/components/editors/TaskEditor";
-import TicketEditor, { EdTicket } from "@/components/editors/TicketEditor";
-import HouseEditor, { EdHouseFull } from "@/components/editors/HouseEditor";
-import MaterialEditor from "@/components/editors/MaterialEditor";
-import TaskReview from "@/components/TaskReview";
+import type { EdTask, EdWorker } from "@/components/editors/TaskEditor";
+import type { EdTicket } from "@/components/editors/TicketEditor";
+import type { EdHouseFull } from "@/components/editors/HouseEditor";
 import MaintenanceReview from "@/components/MaintenanceReview";
 
 type Task = EdTask & { house: { id: string; name: string } };
 type Ticket = EdTicket & { house: { id: string; name: string } };
 
-const SECTIONS = ["stats", "houses"] as const;
-const SECTION_LABEL: Record<(typeof SECTIONS)[number], string> = { stats: "Overview", houses: "Houses" };
+// The editors and the review pop-up are only downloaded when somebody opens one.
+const TaskEditor = dynamic(() => import("@/components/editors/TaskEditor"), { ssr: false });
+const TicketEditor = dynamic(() => import("@/components/editors/TicketEditor"), { ssr: false });
+const HouseEditor = dynamic(() => import("@/components/editors/HouseEditor"), { ssr: false });
+const MaterialEditor = dynamic(() => import("@/components/editors/MaterialEditor"), { ssr: false });
+const TaskReview = dynamic(() => import("@/components/TaskReview"), { ssr: false });
+
+// Two tabs: the houses (opens first) and the maintenance work waiting for review.
+const TABS = ["houses", "maintenance"] as const;
+type Tab = (typeof TABS)[number];
 
 const KEY_STATES = ["AT_OFFICE", "WITH_CLEANER", "WITH_GUEST", "MISSING"];
 
@@ -35,11 +42,24 @@ export default function CoordinatorView() {
   const { tr, ev } = useI18n();
   const canCreateHouse = useCan("houses.create");
   const canEditHouse = useCan("houses.edit");
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [houses, setHouses] = useState<EdHouseFull[]>([]);
-  const [workers, setWorkers] = useState<EdWorker[]>([]);
-  const vis = useSectionVisibility("coordinatorSections", SECTIONS);
+  const [tab, chooseTab] = useHashTab<Tab>(TABS, "houses");
+
+  // Each list loads on its own and shows as soon as it arrives; a slow one no longer holds back the others.
+  // The house cards appear first; their jobs and issues fill in when those lists arrive.
+  // Workers are only needed by the task / issue pop-ups, so they load last (or when a pop-up is opened).
+  const housesQ = useApiList<EdHouseFull[]>("/api/houses", ["house"]);
+  const tasksQ = useApiList<Task[]>("/api/tasks", ["cleaningTask", "house", "worker"]);
+  const ticketsQ = useApiList<Ticket[]>("/api/tickets?open=1", ["maintenanceTicket", "house", "worker"]);
+  const settled = (q: { data: unknown; error: boolean }) => q.data !== null || q.error;
+  const [wantLookups, setWantLookups] = useState(false);
+  const workersQ = useApiList<EdWorker[]>(
+    (settled(housesQ) && settled(tasksQ) && settled(ticketsQ)) || wantLookups ? "/api/workers" : null, ["worker"]);
+  const houses = housesQ.data ?? [];
+  const tasks = tasksQ.data ?? [];
+  const tickets = ticketsQ.data ?? [];
+  const workers = workersQ.data ?? [];
+  const detailsReady = tasksQ.data !== null && ticketsQ.data !== null; // readiness needs both
+  const lookupsReady = workersQ.data !== null;
   const [order, setOrder] = useState<"attention" | "name">("attention");
 
   // which editor is open
@@ -49,20 +69,10 @@ export default function CoordinatorView() {
   const [matEd, setMatEd] = useState<{ houseId?: string } | null>(null);
   const [reviewing, setReviewing] = useState<Task | null>(null); // the job being reviewed before it is confirmed
 
-  const load = useCallback(async () => {
-    const [t, k, h, w] = await Promise.all([
-      fetch("/api/tasks"), fetch("/api/tickets?open=1"), fetch("/api/houses"), fetch("/api/workers"),
-    ]);
-    setTasks(await t.json());
-    setTickets(await k.json());
-    setHouses(await h.json());
-    setWorkers(await w.json());
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-  useLiveRefresh(load); // instant updates (falls back to polling if the connection drops)
+  // After a change made here: reload what it touched. (Other people's changes arrive by themselves, live.)
+  const load = () => { housesQ.reload(); tasksQ.reload(); ticketsQ.reload(); };
+  // Opening a pop-up that needs the worker list starts loading it at once.
+  useEffect(() => { if (taskEd || ticketEd || reviewing) setWantLookups(true); }, [taskEd, ticketEd, reviewing]);
 
   const done = () => {
     setTaskEd(null); setTicketEd(null); setHouseEd(null); setMatEd(null);
@@ -84,7 +94,7 @@ export default function CoordinatorView() {
     await patchTask(id, "unapprove");
   }
   async function setKey(houseId: string, keyStatus: string) {
-    setHouses((hs) => hs.map((h) => (h.id === houseId ? { ...h, keyStatus } : h))); // optimistic
+    housesQ.mutate((hs) => (hs ? hs.map((h) => (h.id === houseId ? { ...h, keyStatus } : h)) : hs)); // optimistic
     await api(`/api/houses/${houseId}`, "PATCH", { keyStatus });
     load();
   }
@@ -103,7 +113,7 @@ export default function CoordinatorView() {
     return ts.length === 0 ? 4 : 5;
   };
   const sortedHouses = [...houses].sort((a, b) =>
-    order === "attention" ? attention(a) - attention(b) || cmpText(a.name, b.name) : cmpText(a.name, b.name)
+    order === "attention" && detailsReady ? attention(a) - attention(b) || cmpText(a.name, b.name) : cmpText(a.name, b.name)
   );
 
   // Summary tiles
@@ -120,8 +130,6 @@ export default function CoordinatorView() {
     <PanelShell
       title={tr("Check-in Readiness")}
       subtitle={tr("Verify cleaning, maintenance, linens and keys before confirming a house is ready.")}
-      vis={vis}
-      labels={SECTION_LABEL}
       actions={
         <>
           <button style={S.navDark} onClick={() => setTaskEd({ task: null })}>+ {tr("New task")}</button>
@@ -131,18 +139,36 @@ export default function CoordinatorView() {
         </>
       }
     >
-      {vis.shown.stats && (
-        <StatGrid>
-          <StatCard n={readyCount} label={tr("Houses ready")} color="#4F7A26" />
-          <StatCard n={toVerify} label={tr("To be verified")} color="#D98A33" />
-          <StatCard n={tickets.length} label={tr("Open issues")} color="#C1503C" />
-          <StatCard n={keysMissing} label={tr("Keys missing")} color="#C1503C" />
-        </StatGrid>
+      <PanelTabs
+        tabs={[
+          { id: "houses" as const, label: tr("Houses") },
+          { id: "maintenance" as const, label: tr("Maintenance to review"), badge: tickets.filter((k) => k.status === "TO_BE_VERIFIED").length },
+        ]}
+        value={tab}
+        onChange={chooseTab}
+        label={tr("Check-in Readiness")}
+      />
+
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+      {tab === "maintenance" && (
+        ticketsQ.data ? (
+          <MaintenanceReview tickets={tickets} onChanged={load} />
+        ) : (
+          <PanelCard title={tr("Maintenance to review")} flush>
+            {ticketsQ.error ? <LoadError onRetry={ticketsQ.reload} /> : <SkeletonRows rows={3} />}
+          </PanelCard>
+        )
       )}
 
-      <MaintenanceReview tickets={tickets} onChanged={load} />
+      {tab === "houses" && (
+      <>
+      <StatGrid>
+        <StatCard n={detailsReady ? readyCount : "…"} label={tr("Houses ready")} color="#4F7A26" />
+        <StatCard n={detailsReady ? toVerify : "…"} label={tr("To be verified")} color="#D98A33" />
+        <StatCard n={ticketsQ.data ? tickets.length : "…"} label={tr("Open issues")} color="#C1503C" />
+        <StatCard n={housesQ.data ? keysMissing : "…"} label={tr("Keys missing")} color="#C1503C" />
+      </StatGrid>
 
-      {vis.shown.houses && (
       <PanelCard
         title={tr("Houses")}
         action={
@@ -157,12 +183,16 @@ export default function CoordinatorView() {
           </>
         }
       >
+      {!housesQ.data ? (
+        housesQ.error ? <LoadError onRetry={housesQ.reload} /> : <SkeletonRows rows={4} />
+      ) : (
+      <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))", gap: 14 }}>
         {sortedHouses.map((h) => {
           const hTasks = tasks.filter((t) => t.house.id === h.id).sort((a, b) => cmpText(taskWhen(a), taskWhen(b)));
           const hTickets = sortTickets(tickets.filter((k) => k.house.id === h.id), "priority");
-          const hasIssue = hTickets.length > 0 || hTasks.some((t) => t.status === "WITH_ISSUE");
-          const ready = hTasks.length > 0 && !hasIssue && hTasks.every((t) => ["APPROVED", "COMPLETED"].includes(t.status));
+          const hasIssue = detailsReady && (hTickets.length > 0 || hTasks.some((t) => t.status === "WITH_ISSUE"));
+          const ready = detailsReady && hTasks.length > 0 && !hasIssue && hTasks.every((t) => ["APPROVED", "COMPLETED"].includes(t.status));
           return (
             <div key={h.id} style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 14, background: ready ? "#EEF6E6" : hasIssue ? "#F8E5E0" : "#fff" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
@@ -179,6 +209,8 @@ export default function CoordinatorView() {
                 {KEY_STATES.map((k) => <option key={k} value={k}>🔑 {ev(k)}</option>)}
               </select>
 
+              {!detailsReady && <SkeletonRows rows={2} />}
+              {detailsReady && <>
               {hTasks.length === 0 && <p style={{ fontSize: 11.5, color: "var(--ink-soft)", marginBottom: 8 }}>{tr("No tasks for this house.")}</p>}
               {hTasks.map((t) => (
                 <div key={t.id} style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: 9, padding: "7px 9px", marginBottom: 6 }}>
@@ -245,6 +277,7 @@ export default function CoordinatorView() {
                   ))}
                 </div>
               )}
+              </>}
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                 <button style={S.small} onClick={() => setTaskEd({ task: null, houseId: h.id })}>+ {tr("Task")}</button>
@@ -256,10 +289,14 @@ export default function CoordinatorView() {
         })}
       </div>
       {houses.length === 0 && <p style={{ color: "var(--ink-soft)", margin: 0 }}>{tr("No houses yet.")}</p>}
-      </PanelCard>
+      </>
       )}
+      </PanelCard>
+      </>
+      )}
+      </div>
 
-      {reviewing && (
+      {reviewing && detailsReady && (
         <TaskReview
           task={reviewing}
           house={houses.find((h) => h.id === reviewing.house.id)}
@@ -271,8 +308,8 @@ export default function CoordinatorView() {
         />
       )}
 
-      {taskEd && <TaskEditor task={taskEd.task} defaultHouseId={taskEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTaskEd(null)} onSaved={done} />}
-      {ticketEd && <TicketEditor ticket={ticketEd.ticket} defaultHouseId={ticketEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTicketEd(null)} onSaved={done} />}
+      {taskEd && lookupsReady && <TaskEditor task={taskEd.task} defaultHouseId={taskEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTaskEd(null)} onSaved={done} />}
+      {ticketEd && lookupsReady && <TicketEditor ticket={ticketEd.ticket} defaultHouseId={ticketEd.houseId} houses={houseOpts} workers={workers} onClose={() => setTicketEd(null)} onSaved={done} />}
       {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={done} />}
       {matEd && <MaterialEditor defaultHouseId={matEd.houseId} houses={houseOpts} onClose={() => setMatEd(null)} onSaved={done} />}
     </PanelShell>
