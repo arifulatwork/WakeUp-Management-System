@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { applyDir, cmpText, KEY_RANK } from "@/lib/sort";
 import { ModeBadge, CheckInGuideButton } from "@/components/CheckInGuide";
 import type { EdHouseFull } from "@/components/editors/HouseEditor";
-import { EmptyNote, LoadError, SearchBox, SkeletonRows, Toolbar, td, th, tableStyle, useApiList } from "./shared";
+import { EmptyNote, LoadError, SearchBox, SkeletonRows, Toolbar, td, th, tableStyle, useApiList, useToast } from "./shared";
 
 const HouseEditor = dynamic(() => import("@/components/editors/HouseEditor"), { ssr: false });
 
@@ -20,6 +20,7 @@ export default function HousesSection() {
   // Archived houses are only requested when asked for.
   const archived = useApiList<EdHouseFull[]>(showArchived ? "/api/houses?archived=1" : null, ["house"]);
   const sort = useSort<"name" | "address" | "key" | "until">("name");
+  const toast = useToast();
   const [query, setQuery] = useState("");
   const [houseEd, setHouseEd] = useState<{ house: EdHouseFull | null } | null>(null);
 
@@ -46,7 +47,12 @@ export default function HousesSection() {
   }, [houses, query, sort.key, sort.dir]);
 
   async function setArchived(h: EdHouseFull, value: boolean) {
-    await api(`/api/houses/${h.id}`, "PATCH", { archived: value }).catch(() => {});
+    try {
+      await api(`/api/houses/${h.id}`, "PATCH", { archived: value });
+      toast.show(tr("Changes saved."));
+    } catch {
+      toast.show(tr("Could not save. Please try again."), false);
+    }
     reload();
     if (showArchived) archived.reload();
   }
@@ -131,7 +137,8 @@ export default function HousesSection() {
         )}
       </PanelCard>
 
-      {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={() => { setHouseEd(null); reload(); }} />}
+      {houseEd && <HouseEditor house={houseEd.house} onClose={() => setHouseEd(null)} onSaved={() => { setHouseEd(null); toast.show(tr("Changes saved.")); reload(); }} />}
+      {toast.node}
     </>
   );
 }

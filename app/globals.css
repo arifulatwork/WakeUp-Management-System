@@ -107,3 +107,8 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .skel { border-radius: 6px; background: linear-gradient(90deg, #eee 25%, #f6f6f3 50%, #eee 75%); background-size: 200% 100%; animation: skel-shine 1.2s ease-in-out infinite; }
 @keyframes skel-shine { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+.admin-toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 80; max-width: min(92vw, 460px); padding: 11px 16px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 13px; box-shadow: 0 6px 22px rgba(0,0,0,.25); animation: toast-in .18s ease-out; }
+.admin-toast.err { background: var(--red); }
+.admin-toast > span { font-weight: 700; margin-right: 4px; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) { .admin-toast { animation: none; } }

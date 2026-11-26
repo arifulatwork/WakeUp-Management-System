@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useI18n } from "@/lib/i18n";
 import { S } from "@/components/ui";
@@ -32,7 +32,8 @@ export function useApiList<T>(url: string | null, models: string[]) {
   useEffect(() => { load(); }, [load]);
   useLiveRefresh(load, { models });
 
-  return { data, error, reload: load };
+  // mutate: change the list on screen at once (before the server has answered).
+  return { data, error, reload: load, mutate: setData };
 }
 
 // Grey placeholder rows while a tab loads: the card header is already usable.
@@ -76,4 +77,22 @@ export function SearchBox({ value, onChange, placeholder }: { value: string; onC
       style={{ ...S.input, width: 260, maxWidth: "100%", padding: "7px 10px" }}
     />
   );
+}
+
+// Small confirmation message at the bottom of the screen ("Saved", "Could not save…").
+export function useToast() {
+  const [msg, setMsg] = useState<{ text: string; ok: boolean; n: number } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const show = useCallback((text: string, ok = true) => {
+    clearTimeout(timer.current);
+    setMsg((m) => ({ text, ok, n: (m?.n ?? 0) + 1 }));
+    timer.current = setTimeout(() => setMsg(null), ok ? 3500 : 6000);
+  }, []);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const node = msg ? (
+    <div key={msg.n} role={msg.ok ? "status" : "alert"} aria-live={msg.ok ? "polite" : "assertive"} className={"admin-toast" + (msg.ok ? "" : " err")}>
+      <span aria-hidden>{msg.ok ? "✓" : "!"}</span> {msg.text}
+    </div>
+  ) : null;
+  return { show, node };
 }

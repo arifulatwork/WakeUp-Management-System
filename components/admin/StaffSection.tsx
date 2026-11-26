@@ -8,7 +8,7 @@ import { api, saveError } from "@/lib/api";
 import { useI18n, Lang } from "@/lib/i18n";
 import { applyDir, AREA_RANK, cmpText, ROLE_RANK } from "@/lib/sort";
 import type { EdStaff } from "@/components/editors/StaffEditor";
-import { EmptyNote, LoadError, SearchBox, SkeletonRows, Toolbar, td, th, tableStyle, useApiList } from "./shared";
+import { EmptyNote, LoadError, SearchBox, SkeletonRows, Toolbar, td, th, tableStyle, useApiList, useToast } from "./shared";
 
 // The editor is only downloaded the first time someone clicks Add / Edit.
 const StaffEditor = dynamic(() => import("@/components/editors/StaffEditor"), { ssr: false });
@@ -19,14 +19,15 @@ const ROLES = ["worker", "manager", "coordinator", "admin", "supplier"];
 
 export default function StaffSection({ selfId }: { selfId?: string }) {
   const { tr, ev, locale, setLang } = useI18n();
-  const { data, error, reload } = useApiList<Worker[]>("/api/workers", ["worker"]);
+  const { data, error, reload, mutate } = useApiList<Worker[]>("/api/workers", ["worker"]);
+  const toast = useToast();
+  const [flashId, setFlashId] = useState<string | null>(null);
   const workers = data ?? [];
 
   const sort = useSort<"name" | "team" | "joined" | "role">("role");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all"); // all | a role | nologin
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [roleError, setRoleError] = useState("");
   const [confirmAdmin, setConfirmAdmin] = useState<Worker | null>(null);
   const [staffEd, setStaffEd] = useState<{ worker: EdStaff | null } | null>(null);
 
@@ -64,16 +65,22 @@ export default function StaffSection({ selfId }: { selfId?: string }) {
     setCredError("");
   }
 
+  // The new role shows on screen at once; if the server refuses, it goes back and an error message appears.
   async function applyRole(w: Worker, role: string) {
+    const setRole = (r: string) => mutate((list) => (list ? list.map((x) => (x.id === w.id ? { ...x, role: r } : x)) : list));
     setSavingId(w.id);
-    setRoleError("");
+    setRole(role);
+    setFlashId(w.id);
+    setTimeout(() => setFlashId((cur) => (cur === w.id ? null : cur)), 1800);
     try {
       await api(`/api/workers/${w.id}`, "PATCH", { role });
-      await reload();
+      toast.show(tr("{name} is now {role}.", { name: w.name, role: role === "worker" ? tr("Staff") : ev(role) }));
+      reload(); // confirm with the server in the background
       // Everyone signs in. No credentials yet? Ask for them right away.
       if (!w.username) openCreds({ ...w, role });
     } catch (e) {
-      setRoleError(saveError(e, tr));
+      setRole(w.role);
+      toast.show(saveError(e, tr), false);
     } finally {
       setSavingId(null);
     }
@@ -101,6 +108,7 @@ export default function StaffSection({ selfId }: { selfId?: string }) {
         setCredError(d.error ?? tr("Could not save credentials."));
         return;
       }
+      toast.show(tr("Login saved for {name}.", { name: credsFor.name }));
       setCredsFor(null);
       reload();
     } finally {
@@ -138,13 +146,6 @@ export default function StaffSection({ selfId }: { selfId?: string }) {
           <Pills options={filterOptions} value={filter} onChange={setFilter} label={filterLabel} />
         </Toolbar>
 
-        {roleError && (
-          <p role="alert" style={{ margin: 0, padding: "8px 16px", background: "var(--red-bg)", color: "var(--red)", fontSize: 12.5 }}>
-            {roleError}{" "}
-            <button style={S.small} onClick={() => setRoleError("")}>×</button>
-          </p>
-        )}
-
         {!data ? (
           error ? <LoadError onRetry={reload} /> : <SkeletonRows />
         ) : (
@@ -164,7 +165,7 @@ export default function StaffSection({ selfId }: { selfId?: string }) {
                 {rows.map((w) => {
                   const isMe = w.id === selfId;
                   return (
-                    <tr key={w.id}>
+                    <tr key={w.id} style={flashId === w.id ? { background: "var(--green-bg)" } : undefined}>
                       <td style={td}>
                         {w.name}
                         {isMe && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--ink-soft)" }}>({tr("You")})</span>}
@@ -209,7 +210,7 @@ export default function StaffSection({ selfId }: { selfId?: string }) {
         )}
       </PanelCard>
 
-      {staffEd && <StaffEditor worker={staffEd.worker} selfId={selfId} onClose={() => setStaffEd(null)} onSaved={() => { setStaffEd(null); reload(); }} />}
+      {staffEd && <StaffEditor worker={staffEd.worker} selfId={selfId} onClose={() => setStaffEd(null)} onSaved={() => { setStaffEd(null); toast.show(tr("Changes saved.")); reload(); }} />}
 
       {confirmAdmin && (
         <Modal title={tr("Role")} onClose={() => setConfirmAdmin(null)}>
@@ -245,6 +246,7 @@ export default function StaffSection({ selfId }: { selfId?: string }) {
           </form>
         </Modal>
       )}
+      {toast.node}
     </>
   );
 }

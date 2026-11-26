@@ -784,6 +784,9 @@ const ROWS: Row[] = [
   ["Search by name or address", "Pesquisar por nome ou morada", "Buscar por nombre o dirección", "Rechercher par nom ou adresse", "Cerca per nome o indirizzo", "Пошук за назвою або адресою"],
   ["No houses match your search.", "Nenhuma casa corresponde à pesquisa.", "Ninguna casa coincide con la búsqueda.", "Aucune maison ne correspond à la recherche.", "Nessuna casa corrisponde alla ricerca.", "Жодного будинку не знайдено."],
   ["These rules are fixed in the app. Ask your developer to change them.", "Estas regras estão fixas na aplicação. Peça ao programador para as alterar.", "Estas reglas están fijas en la aplicación. Pide al desarrollador que las cambie.", "Ces règles sont fixes dans l'application. Demandez au développeur de les modifier.", "Queste regole sono fisse nell'app. Chiedi allo sviluppatore di modificarle.", "Ці правила закріплені в застосунку. Попросіть розробника їх змінити."],
+  ["{name} is now {role}.", "{name} é agora {role}.", "{name} ahora es {role}.", "{name} est maintenant {role}.", "{name} ora è {role}.", "{name} тепер має роль: {role}."],
+  ["Login saved for {name}.", "Acesso guardado para {name}.", "Acceso guardado para {name}.", "Accès enregistré pour {name}.", "Accesso salvato per {name}.", "Вхід збережено для {name}."],
+  ["Changes saved.", "Alterações guardadas.", "Cambios guardados.", "Modifications enregistrées.", "Modifiche salvate.", "Зміни збережено."],
 ];
 
 const ORDER: Lang[] = ["en", "pt", "es", "fr", "it", "uk"];
