@@ -3,13 +3,17 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
+import { cachedJson } from "@/lib/serverCache";
 
 // GET /api/workers — the staff list (never includes password hashes).
 // Signed-in users only (middleware). One-person reads live in /api/workers/[id].
-export async function GET() {
-  const workers = await db.worker.findMany({ orderBy: { name: "asc" } });
-  // Students (group-code sign-in) are not staff: they are listed per group on the Groups & Orders screen.
-  return NextResponse.json(workers.filter((w: any) => w.role !== "student").map(({ passwordHash, ...safe }: any) => safe));
+// Answered from memory until the Worker table is written to (lib/serverCache.ts).
+export async function GET(req: NextRequest) {
+  return cachedJson(req, "workers:list", ["worker"], async () => {
+    const workers = await db.worker.findMany({ orderBy: { name: "asc" } });
+    // Students (group-code sign-in) are not staff: they are listed per group on the Groups & Orders screen.
+    return workers.filter((w: any) => w.role !== "student").map(({ passwordHash, ...safe }: any) => safe);
+  });
 }
 
 // POST /api/workers — Super Admin adds a staff member (username + password required).

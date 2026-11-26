@@ -95,3 +95,15 @@ input[type="password"]::-webkit-contacts-auto-fill-button {
 /* A tap on any button gives instant feedback, even before the server answers. */
 button:not(:disabled):active { transform: scale(0.97); }
 button:disabled { opacity: 0.6; cursor: progress; }
+
+/* ---------- Staff & Roles tabs (app/admin/page.tsx) ---------- */
+.admin-tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); margin-bottom: 18px; scrollbar-width: none; }
+.admin-tabs::-webkit-scrollbar { display: none; }
+.admin-tab { flex: 0 0 auto; padding: 10px 14px; border: none; background: none; font-size: 13px; color: var(--ink-soft); border-bottom: 3px solid transparent; margin-bottom: -1px; border-radius: 8px 8px 0 0; white-space: nowrap; }
+.admin-tab:hover { color: var(--ink); background: rgba(255,255,255,.7); }
+.admin-tab[aria-selected="true"] { color: var(--green-dark); font-weight: 700; border-bottom-color: var(--green); }
+.admin-tab:focus-visible { outline: 2px solid var(--green-dark); outline-offset: -2px; }
+.admin-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.skel { border-radius: 6px; background: linear-gradient(90deg, #eee 25%, #f6f6f3 50%, #eee 75%); background-size: 200% 100%; animation: skel-shine 1.2s ease-in-out infinite; }
+@keyframes skel-shine { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }

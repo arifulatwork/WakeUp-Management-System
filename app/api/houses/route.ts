@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/guard";
 import { logAudit } from "@/lib/audit";
+import { cachedJson } from "@/lib/serverCache";
 import { normMode, nameKey, isUniqueViolation, MAX_CHECKIN_TEXT } from "@/lib/houseMode";
 import { parseMedia, writeMedia } from "@/lib/houseMedia";
 
@@ -18,8 +19,10 @@ const toDate = (v: unknown): Date | null | undefined => {
 // Archived houses are left out; ?archived=1 returns only the archived ones.
 export async function GET(req: NextRequest) {
   const archived = req.nextUrl.searchParams.get("archived") === "1";
-  const houses = await db.house.findMany({ where: { archivedAt: archived ? { not: null } : null }, orderBy: { name: "asc" } });
-  return NextResponse.json(houses);
+  // Answered from memory until the House table is written to (lib/serverCache.ts).
+  return cachedJson(req, `houses:${archived ? "archived" : "active"}`, ["house"], () =>
+    db.house.findMany({ where: { archivedAt: archived ? { not: null } : null }, orderBy: { name: "asc" } })
+  );
 }
 
 // POST /api/houses — add a house / temporary listing.

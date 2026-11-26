@@ -771,6 +771,19 @@ const ROWS: Row[] = [
   ["Friday", "Sexta-feira", "Viernes", "Vendredi", "Venerdì", "П’ятниця"],
   ["Saturday", "Sábado", "Sábado", "Samedi", "Sabato", "Субота"],
   ["Sent", "Enviada", "Enviado", "Envoyée", "Inviato", "Надіслано"],
+  ["You", "Você", "Tú", "Vous", "Tu", "Ви"],
+  ["Search by name or username", "Pesquisar por nome ou utilizador", "Buscar por nombre o usuario", "Rechercher par nom ou identifiant", "Cerca per nome o utente", "Пошук за іменем або логіном"],
+  ["All roles", "Todas as funções", "Todos los roles", "Tous les rôles", "Tutti i ruoli", "Усі ролі"],
+  ["Without login", "Sem acesso", "Sin acceso", "Sans accès", "Senza accesso", "Без входу"],
+  ["Try again", "Tentar novamente", "Intentar de nuevo", "Réessayer", "Riprova", "Спробувати ще раз"],
+  ["Could not load this section. Check your connection.", "Não foi possível carregar esta secção. Verifique a ligação.", "No se pudo cargar esta sección. Revisa la conexión.", "Impossible de charger cette section. Vérifiez la connexion.", "Impossibile caricare questa sezione. Controlla la connessione.", "Не вдалося завантажити розділ. Перевірте з'єднання."],
+  ["Load more", "Carregar mais", "Cargar más", "Charger plus", "Carica altri", "Завантажити ще"],
+  ["Make {name} a Super Admin? They will be able to change every role, login and setting.", "Tornar {name} Super Admin? Poderá alterar todas as funções, acessos e definições.", "¿Hacer a {name} Super Admin? Podrá cambiar todos los roles, accesos y ajustes.", "Faire de {name} un Super Admin ? Cette personne pourra modifier tous les rôles, accès et réglages.", "Rendere {name} Super Admin? Potrà modificare tutti i ruoli, gli accessi e le impostazioni.", "Зробити {name} суперадміністратором? Ця особа зможе змінювати всі ролі, входи та налаштування."],
+  ["Yes, make Super Admin", "Sim, tornar Super Admin", "Sí, hacer Super Admin", "Oui, faire Super Admin", "Sì, rendi Super Admin", "Так, зробити суперадміністратором"],
+  ["No staff match your search.", "Nenhum funcionário corresponde à pesquisa.", "Ningún miembro coincide con la búsqueda.", "Aucun membre ne correspond à la recherche.", "Nessun addetto corrisponde alla ricerca.", "Жодного працівника не знайдено."],
+  ["Search by name or address", "Pesquisar por nome ou morada", "Buscar por nombre o dirección", "Rechercher par nom ou adresse", "Cerca per nome o indirizzo", "Пошук за назвою або адресою"],
+  ["No houses match your search.", "Nenhuma casa corresponde à pesquisa.", "Ninguna casa coincide con la búsqueda.", "Aucune maison ne correspond à la recherche.", "Nessuna casa corrisponde alla ricerca.", "Жодного будинку не знайдено."],
+  ["These rules are fixed in the app. Ask your developer to change them.", "Estas regras estão fixas na aplicação. Peça ao programador para as alterar.", "Estas reglas están fijas en la aplicación. Pide al desarrollador que las cambie.", "Ces règles sont fixes dans l'application. Demandez au développeur de les modifier.", "Queste regole sono fisse nell'app. Chiedi allo sviluppatore di modificarle.", "Ці правила закріплені в застосунку. Попросіть розробника їх змінити."],
 ];
 
 const ORDER: Lang[] = ["en", "pt", "es", "fr", "it", "uk"];
