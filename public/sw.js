@@ -15,7 +15,7 @@
 //    Safari, which doesn't support the Background Sync API this
 //    service worker would otherwise need for queued writes).
 
-const CACHE_NAME = "wakeup-shell-v5"; // bumped: clears the old cache that held stale page code
+const CACHE_NAME = "wakeup-shell-v6"; // bumped: clears the old cache (v6: login redirects are no longer stored as pages)
 const APP_SHELL = [
   "/",
   "/login",
@@ -68,8 +68,12 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          // Keep only real answers. A redirect (e.g. to /login when signed out) must never be stored as the
+          // page, or the installed app could open the login screen from cache for a signed-in student / supplier.
+          if (res.ok && !res.redirected) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
           return res;
         })
         .catch(() => caches.match(request).then((cached) => cached || caches.match("/")))

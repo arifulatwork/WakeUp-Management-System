@@ -5,9 +5,9 @@ import { useI18n } from "@/lib/i18n";
 import { usePush } from "@/lib/usePush";
 
 // 🔔 button (bottom-left, above the language picker) to switch phone notifications on/off.
-// Shown only on the office screens, and only when the server has VAPID keys.
+// Shown on the office screens and on the student / supplier screens, and only when the server has VAPID keys.
 // (The cleaner and maintenance screens have their own bell in the header — see NotificationBell.)
-const SCREENS = ["/coordinator", "/manager", "/ops", "/admin"];
+const SCREENS = ["/coordinator", "/manager", "/ops", "/admin", "/student", "/supplier"];
 
 export default function PushToggle() {
   const { tr } = useI18n();

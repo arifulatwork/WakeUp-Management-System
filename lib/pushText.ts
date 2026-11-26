@@ -124,6 +124,14 @@ export const PUSH_TEXT = {
       "La chiave di {house} è segnata come mancante.", "Ключ від {house} позначено як відсутній.",
     ],
   },
+  order_new: {
+    title: ["New order to prepare", "Nova encomenda para preparar", "Nuevo pedido para preparar", "Nouvelle commande à préparer", "Nuovo ordine da preparare", "Нове замовлення для підготовки"],
+    body: ["{group} sent an order.", "{group} enviou uma encomenda.", "{group} envió un pedido.", "{group} a envoyé une commande.", "{group} ha inviato un ordine.", "{group} надіслала замовлення."],
+  },
+  order_dispatched: {
+    title: ["Your order is on its way", "A sua encomenda está a caminho", "Tu pedido está en camino", "Votre commande est en route", "Il tuo ordine è in arrivo", "Ваше замовлення в дорозі"],
+    body: ["The order of {group} was dispatched.", "A encomenda de {group} foi enviada.", "El pedido de {group} fue enviado.", "La commande de {group} a été expédiée.", "L'ordine di {group} è stato spedito.", "Замовлення {group} відправлено."],
+  },
   test: {
     title: ["WakeUp", "WakeUp", "WakeUp", "WakeUp", "WakeUp", "WakeUp"],
     body: [

@@ -1,3 +1,4 @@
+import { notifyOrderSent, notifyOrderDispatched } from "@/lib/orderPush";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { currentSession } from "@/lib/guard";
@@ -76,6 +77,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (!lines.some((l: any) => l.status === "PREPARED")) return jerr("nothing was prepared", 409);
       await db.order.update({ where: { id: order.id }, data: { status: "DISPATCHED", dispatchedAt: new Date() } });
       await logAudit(req, "order", order.id, "dispatch", "Dispatched the order of {group}", { group: gname });
+      await notifyOrderDispatched(order, gname);
       return NextResponse.json({ ok: true });
     }
 
@@ -106,6 +108,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (waiting) return NextResponse.json({ error: "requests waiting", waiting }, { status: 409 });
     await db.order.update({ where: { id: order.id }, data: { status: "APPROVED", approvedAt: new Date() } });
     await logAudit(req, "order", order.id, "submit", "Sent the order of {group} to the supplier", { group: gname });
+    notifyOrderSent(order, gname);
     return NextResponse.json({ ok: true });
   }
 

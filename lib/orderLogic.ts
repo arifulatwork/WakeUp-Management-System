@@ -1,3 +1,4 @@
+import { notifyOrderSent } from "@/lib/orderPush";
 import { NextResponse } from "next/server";
 import { randomInt } from "crypto";
 import { db } from "@/lib/db";
@@ -134,6 +135,7 @@ export async function autoSendDueOrders() {
       if (waiting.length) continue;
       await db.order.update({ where: { id: o.id }, data: { status: "APPROVED", approvedAt: new Date() } });
       await logAudit(null, "order", o.id, "submit", "Sent the order of {group} to the supplier", { group: o.group?.name ?? "" });
+      notifyOrderSent(o, o.group?.name ?? "");
     }
   } catch (e) {
     console.error("[orders] automatic send failed", e); // never breaks loading the list

@@ -31,7 +31,8 @@ export function pushConfigured(): boolean {
 
 // Where tapping the notification should open.
 const homeFor = (w: { role: string; area: string }) =>
-  w.role === "worker" ? (w.area === "MAINTENANCE" ? "/maintenance" : "/cleaner") : "/coordinator";
+  w.role === "worker" ? (w.area === "MAINTENANCE" ? "/maintenance" : "/cleaner")
+  : w.role === "student" ? "/student" : w.role === "supplier" ? "/supplier" : "/coordinator";
 
 export type PushTarget = {
   workerIds?: string[];
