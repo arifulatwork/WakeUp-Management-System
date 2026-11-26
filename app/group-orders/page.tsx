@@ -1,20 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
+import PanelTabs, { useHashTab } from "@/components/PanelTabs";
+import { LoadError, SkeletonRows } from "@/components/PanelKit";
 import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useCan } from "@/lib/useSession";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
-import { useSectionVisibility } from "@/lib/useSectionVisibility";
+import { useStages, useStagesAdvance } from "@/lib/useStagedLoad";
 import { Pills, S } from "@/components/ui";
 import { dateKey, productName } from "@/lib/ordering";
 import { Flow, Info, Order, OrderingBanner, Pill, Product, Req, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
 import { Pager, norm } from "@/components/ordering/Pager";
-import { Group, GroupCard, GroupEditor, OrderBuilder } from "@/components/ordering/GroupPanels";
+import { Group, GroupCard } from "@/components/ordering/GroupPanels";
 
-const SECTIONS = ["requests", "orders", "groups"] as const;
-const LABELS: Record<(typeof SECTIONS)[number], string> = { requests: "Student requests", orders: "Orders", groups: "Groups & codes" };
+// The two pop-ups are only downloaded when somebody opens one.
+const GroupEditor = dynamic(() => import("@/components/ordering/GroupPanels").then((m) => m.GroupEditor), { ssr: false });
+const OrderBuilder = dynamic(() => import("@/components/ordering/GroupPanels").then((m) => m.OrderBuilder), { ssr: false });
+
+// One tab per section. Only the open tab loads its data, one list after the other (NEEDS), so the
+// screen no longer asks the server for everything at the same moment. The open tab is kept in the
+// address (#orders).
+const TABS = ["requests", "orders", "groups"] as const;
+type Tab = (typeof TABS)[number];
+const TAB_LABEL: Record<Tab, string> = { requests: "Student requests", orders: "Orders", groups: "Groups & codes" };
+type Res = "info" | "requests" | "orders" | "groups" | "dietary" | "products" | "people" | "houses";
+const NEEDS: Record<Tab, Res[]> = {
+  requests: ["info", "requests"],
+  orders: ["info", "orders", "groups"],          // groups: only for "Edit order"
+  groups: ["info", "groups", "orders", "dietary"], // orders: to know which groups already ordered today
+};
 
 // Paging and filtering of the long lists.
 const ORDERS_PER_PAGE = 10;
@@ -31,16 +48,31 @@ export default function GroupOrdersPage() {
   const canCode = useCan("groups.code");
   const canManage = useCan("groups.manage");
   const canCreate = useCan("orders.create");
-  const vis = useSectionVisibility("groupOrderSections", SECTIONS);
+  const [tab, chooseTab] = useHashTab<Tab>(TABS, "requests");
 
-  const info = useJson<Info | null>("/api/ordering", null);
-  const groups = useJson<Group[]>("/api/groups", []);
-  const requests = useJson<Req[]>("/api/requests", []);
-  const orders = useJson<Order[]>("/api/orders", []);
-  const products = useJson<Product[]>("/api/products", []);
-  const dietary = useJson<{ id: string; name: string }[]>("/api/dietary", []);
-  const [people, setPeople] = useState<{ id: string; name: string; role: string }[]>([]);
-  const [houses, setHouses] = useState<{ id: string; name: string }[]>([]);
+  // Products (order builder) and people / houses (group editor) are only needed by the pop-ups: they load when one opens.
+  const [wantProducts, setWantProducts] = useState(false);
+  const [wantPeople, setWantPeople] = useState(false);
+  const want: Res[] = [...NEEDS[tab]];
+  if (wantProducts) want.push("products");
+  if (wantPeople && canManage) want.push("people", "houses");
+  const stages = useStages(want);
+  const on = stages.on;
+
+  const info = useJson<Info | null>(on("info") ? "/api/ordering" : null, null);
+  const groups = useJson<Group[]>(on("groups") ? "/api/groups" : null, []);
+  const requests = useJson<Req[]>(on("requests") ? "/api/requests" : null, []);
+  const orders = useJson<Order[]>(on("orders") ? "/api/orders" : null, []);
+  const products = useJson<Product[]>(on("products") ? "/api/products" : null, []);
+  const dietary = useJson<{ id: string; name: string }[]>(on("dietary") ? "/api/dietary" : null, []);
+  const peopleQ = useJson<{ id: string; name: string; role: string }[]>(on("people") ? "/api/workers" : null, []);
+  const housesQ = useJson<{ id: string; name: string }[]>(on("houses") ? "/api/houses" : null, []);
+  useStagesAdvance(stages, {
+    info: info.loaded, requests: requests.loaded, orders: orders.loaded, groups: groups.loaded,
+    dietary: dietary.loaded, products: products.loaded, people: peopleQ.loaded, houses: housesQ.loaded,
+  });
+  const people = peopleQ.data.filter((x) => ["coordinator", "admin"].includes(x.role));
+  const houses = housesQ.data;
   const [groupEd, setGroupEd] = useState<{ group: Group | null } | null>(null);
   const [builder, setBuilder] = useState<{ group: Group; order: Order | null } | null>(null);
   const [err, setErr] = useState("");
@@ -53,11 +85,9 @@ export default function GroupOrdersPage() {
 
   const refresh = () => { info.reload(); groups.reload(); requests.reload(); orders.reload(); products.reload(); dietary.reload(); };
   useLiveRefresh(refresh, { models: ["group", "worker", "studentRequest", "requestLine", "order", "orderLine", "product", "dietaryRequirement", "appSetting"] });
-  useEffect(() => {
-    if (!canManage) return;
-    fetch("/api/workers").then((r) => (r.ok ? r.json() : [])).then((w) => setPeople(w.filter((x: any) => ["coordinator", "admin"].includes(x.role)))).catch(() => {});
-    fetch("/api/houses").then((r) => (r.ok ? r.json() : [])).then(setHouses).catch(() => {});
-  }, [canManage]);
+  // Opening a pop-up starts loading what it needs.
+  const openBuilder = (b: { group: Group; order: Order | null }) => { setWantProducts(true); setBuilder(b); };
+  const openGroupEditor = (g: Group | null) => { setWantPeople(true); setGroupEd({ group: g }); };
 
   const today = dateKey();
   const cfg = info.data?.config;
@@ -102,19 +132,32 @@ export default function GroupOrdersPage() {
     orders.reload();
   }
 
+  // A list that has not arrived (or could not be loaded) shows grey rows / a retry button instead of "nothing here".
+  type L = { loaded: boolean; error: boolean; data: unknown; reload: () => void };
+  const blocked = (q: L) => !q.loaded || (q.error && (Array.isArray(q.data) ? q.data.length === 0 : !q.data));
+  const waiting = (q: L, rows = 4) => (q.loaded ? <LoadError onRetry={q.reload} /> : <SkeletonRows rows={rows} />);
+  const n = (q: L, v: number) => (q.loaded ? v : "…");
+
   return (
     <PanelShell
       title={tr("Groups & Orders")}
       subtitle={tr("Student groups, their requests and orders — from request to delivery.")}
-      vis={vis} labels={LABELS}
-      actions={canManage ? <button style={S.navDark} onClick={() => setGroupEd({ group: null })}>+ {tr("Add group")}</button> : undefined}
+      actions={canManage ? <button style={S.navDark} onClick={() => openGroupEditor(null)}>+ {tr("Add group")}</button> : undefined}
     >
+      <PanelTabs
+        tabs={TABS.map((t) => ({ id: t, label: tr(TAB_LABEL[t]), badge: t === "requests" && requests.loaded ? pending.length : undefined }))}
+        value={tab}
+        onChange={chooseTab}
+        label={tr("Groups & Orders")}
+      />
+
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
       <OrderingBanner info={info.data} />
       <StatGrid>
-        <StatCard n={currentGroups.length} label={tr("Groups")} />
-        <StatCard n={pending.length} label={tr("Requests to review")} color="#B8860B" />
-        <StatCard n={orders.data.filter((o) => ["APPROVED", "PREPARING", "PREPARED"].includes(o.status)).length} label={tr("With the supplier")} color="#2E6B8A" />
-        <StatCard n={orders.data.filter((o) => o.status === "DISPATCHED").length} label={tr("On the way")} color="#4F7A26" />
+        {tab === "requests" && <StatCard n={n(requests, pending.length)} label={tr("Requests to review")} color="#B8860B" />}
+        {tab === "orders" && <StatCard n={n(orders, orders.data.filter((o) => ["APPROVED", "PREPARING", "PREPARED"].includes(o.status)).length)} label={tr("With the supplier")} color="#2E6B8A" />}
+        {tab === "orders" && <StatCard n={n(orders, orders.data.filter((o) => o.status === "DISPATCHED").length)} label={tr("On the way")} color="#4F7A26" />}
+        {tab === "groups" && <StatCard n={n(groups, currentGroups.length)} label={tr("Groups")} />}
       </StatGrid>
       {err && <p style={{ color: "var(--red)", fontSize: 12.5 }}>{err}</p>}
 
@@ -127,8 +170,10 @@ export default function GroupOrdersPage() {
         {searching && <button type="button" style={S.small} onClick={() => setQ("")}>{tr("Clear")}</button>}
       </div>
 
-      {vis.shown.requests && (
+      {tab === "requests" && (
         <PanelCard title={`${tr("Student requests")} (${pending.length})`} subtitle={cfg?.model === "COORDINATOR_ORDERS" ? tr("Students do not send requests in the current ordering model.") : undefined}>
+          {blocked(requests) ? waiting(requests) : (
+          <>
           {!pendingShown.length && <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: 0 }}>{pending.length ? tr("No matching requests.") : tr("No requests waiting.")}</p>}
           {pendingShown.map((r) => <RequestCard key={r.id} req={r} canReview={canReview} onDone={refresh} />)}
           {decidedShown.length > 0 && (
@@ -141,11 +186,15 @@ export default function GroupOrdersPage() {
               ))}
             </div>
           )}
+          </>
+          )}
         </PanelCard>
       )}
 
-      {vis.shown.orders && (
+      {tab === "orders" && (
         <PanelCard title={tr("Orders")} subtitle={tr("Follow each group's order until it is delivered.")} flush>
+          {blocked(orders) ? waiting(orders) : (
+          <>
           {sortedOrders.length > 0 && (
             <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
               <Pills
@@ -163,7 +212,7 @@ export default function GroupOrdersPage() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {canCreate && o.status === "OPEN" && (
                     <>
-                      {mayBuild && <button style={S.small} onClick={() => { const g = groups.data.find((x) => x.id === o.groupId); if (g) setBuilder({ group: g, order: o }); }}>{tr("Edit order")}</button>}
+                      {mayBuild && <button style={S.small} disabled={!groups.loaded} onClick={() => { const g = groups.data.find((x) => x.id === o.groupId); if (g) openBuilder({ group: g, order: o }); }}>{tr("Edit order")}</button>}
                       <button style={S.smallDark} onClick={() => orderAction(o, "submit")}>{tr("Send to supplier")}</button>
                     </>
                   )}
@@ -190,10 +239,13 @@ export default function GroupOrdersPage() {
             </div>
           ))}
           <Pager page={curOrderPage} pages={orderPages} onPage={setOrderPage} />
+          </>
+          )}
         </PanelCard>
       )}
 
-      {vis.shown.groups && (
+      {tab === "groups" && (
+        blocked(groups) ? <PanelCard flush>{waiting(groups)}</PanelCard> : (
         <>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <button style={showArchive ? S.small : S.smallDark} onClick={() => setShowArchive(false)}>{tr("Current")} ({currentGroups.length})</button>
@@ -203,15 +255,17 @@ export default function GroupOrdersPage() {
           {(showArchive ? archivedGroups : currentGroups).length > 0 && !groupsMatching.length && <PanelCard><p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching groups.")}</p></PanelCard>}
           {pagedGroups.map((g) => (
             <GroupCard key={g.id} group={g} dietary={dietary.data.map((d) => d.name)} canCode={canCode} canManage={canManage}
-              onChanged={refresh} onEdit={() => setGroupEd({ group: g })}
-              onOrder={mayBuild && !g.archived && !orders.data.some((o) => o.groupId === g.id && o.orderDate === today && o.status !== "CANCELLED") ? () => setBuilder({ group: g, order: null }) : undefined} />
+              onChanged={refresh} onEdit={() => openGroupEditor(g)}
+              onOrder={mayBuild && orders.loaded && !g.archived && !orders.data.some((o) => o.groupId === g.id && o.orderDate === today && o.status !== "CANCELLED") ? () => openBuilder({ group: g, order: null }) : undefined} />
           ))}
           <Pager page={curGroupPage} pages={groupPages} onPage={setGroupPage} />
         </>
+        )
       )}
+      </div>
 
-      {groupEd && <GroupEditor group={groupEd.group} coordinators={people} houses={houses} onClose={() => setGroupEd(null)} onSaved={() => { setGroupEd(null); refresh(); }} />}
-      {builder && <OrderBuilder group={builder.group} order={builder.order} products={products.data} onClose={() => setBuilder(null)} onSaved={() => { setBuilder(null); refresh(); }} />}
+      {groupEd && peopleQ.loaded && housesQ.loaded && <GroupEditor group={groupEd.group} coordinators={people} houses={houses} onClose={() => setGroupEd(null)} onSaved={() => { setGroupEd(null); refresh(); }} />}
+      {builder && products.loaded && <OrderBuilder group={builder.group} order={builder.order} products={products.data} onClose={() => setBuilder(null)} onSaved={() => { setBuilder(null); refresh(); }} />}
     </PanelShell>
   );
 }

@@ -103,18 +103,24 @@ export function OrderingBanner({ info }: { info: Info | null }) {
 }
 
 // Loads a URL as JSON and keeps it fresh: call reload() after a change. Pass the models to refresh on via useLiveRefresh in the page.
-export function useJson<T>(url: string, fallback: T) {
+// Load one list. `url = null` means "don't load (yet)". `loaded` = an attempt has finished;
+// `error` = the last attempt failed (the previous data, if any, stays on screen).
+export function useJson<T>(url: string | null, fallback: T) {
   const [data, setData] = useState<T>(fallback);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
   const reload = useCallback(async () => {
+    if (!url) return;
     try {
       const r = await fetch(url, { cache: "no-store" });
-      if (r.ok) setData(await r.json());
-    } catch { /* offline: keep the last data */ }
+      if (!r.ok) throw new Error(String(r.status));
+      setData(await r.json());
+      setError(false);
+    } catch { setError(true); /* offline: keep the last data */ }
     setLoaded(true);
   }, [url]);
   useEffect(() => { reload(); }, [reload]);
-  return { data, reload, loaded };
+  return { data, reload, loaded, error };
 }
 
 export function Stepper({ value, onChange, min = 0, max = MAX_QTY, disabled }: { value: number; onChange: (n: number) => void; min?: number; max?: number; disabled?: boolean }) {

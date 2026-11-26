@@ -1,21 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
+import PanelTabs, { useHashTab } from "@/components/PanelTabs";
+import { LoadError, SkeletonRows } from "@/components/PanelKit";
 import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useCan } from "@/lib/useSession";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
-import { useSectionVisibility } from "@/lib/useSectionVisibility";
+import { useStages, useStagesAdvance } from "@/lib/useStagedLoad";
 import { Pills, S } from "@/components/ui";
 import { OrderingConfig, WEEKDAYS, countryName, countryOptions } from "@/lib/ordering";
 import { CountrySelect, Info, Pill, Product, ProductThumb, td, th, useJson } from "@/components/ordering/common";
-import ProductEditor from "@/components/ordering/ProductEditor";
 import { Pager, norm } from "@/components/ordering/Pager";
 
+// The product pop-up is only downloaded when somebody opens it.
+const ProductEditor = dynamic(() => import("@/components/ordering/ProductEditor"), { ssr: false });
+
 const PRODUCTS_PER_PAGE = 15;
-const SECTIONS = ["rules", "products", "dietary", "reports"] as const;
-const LABELS: Record<(typeof SECTIONS)[number], string> = { rules: "Ordering rules", products: "Products", dietary: "Dietary requirements", reports: "Reports & history" };
+// One tab per section. Only the open tab loads its data (NEEDS), so the screen no longer asks the server
+// for products, rules, dietary requirements and the report at the same moment. The open tab is kept in
+// the address (#rules).
+const TABS = ["products", "rules", "dietary", "reports"] as const;
+type Tab = (typeof TABS)[number];
+const TAB_LABEL: Record<Tab, string> = { products: "Products", rules: "Ordering rules", dietary: "Dietary requirements", reports: "Reports & history" };
+type Res = "info" | "products" | "dietary" | "report" | "groups";
+const NEEDS: Record<Tab, Res[]> = { products: ["products"], rules: ["info"], dietary: ["dietary"], reports: ["report"] };
 
 type Report = {
   totals: { orders: number; units: number; requests: number }; byStatus: Record<string, number>;
@@ -32,14 +43,26 @@ export default function CataloguePage() {
   const canConfigure = useCan("ordering.configure");
   const canProducts = useCan("catalogue.products");   // admin, or a coordinator (only for the countries of their own groups)
   const canReports = useCan("reports.read");
-  const myGroups = useJson<{ country?: string | null }[]>("/api/groups", []);
-  const vis = useSectionVisibility("catalogueSections", SECTIONS);
-  const info = useJson<Info | null>("/api/ordering", null);
-  const products = useJson<Product[]>("/api/products", []);
-  const dietary = useJson<{ id: string; name: string; description?: string | null }[]>("/api/dietary", []);
+  const [tab, chooseTab] = useHashTab<Tab>(TABS, "products");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const report = useJson<Report | null>(`/api/reports?from=${from}&to=${to}`, null);
+
+  // Coordinators may edit only the products of their own groups' countries, so for them the group list is needed
+  // too (it loads right after the open tab's list). The dietary list is needed by the product pop-up.
+  const needsGroups = !canEdit && canProducts;
+  const [wantDietary, setWantDietary] = useState(false);
+  const want: Res[] = tab === "reports" && !canReports ? [] : [...NEEDS[tab]]; // the report is only for roles that may read it
+  if (needsGroups) want.push("groups");
+  if (wantDietary && !want.includes("dietary")) want.push("dietary");
+  const stages = useStages(want);
+  const on = stages.on;
+
+  const myGroups = useJson<{ country?: string | null }[]>(on("groups") ? "/api/groups" : null, []);
+  const info = useJson<Info | null>(on("info") ? "/api/ordering" : null, null);
+  const products = useJson<Product[]>(on("products") ? "/api/products" : null, []);
+  const dietary = useJson<{ id: string; name: string; description?: string | null }[]>(on("dietary") ? "/api/dietary" : null, []);
+  const report = useJson<Report | null>(on("report") ? `/api/reports?from=${from}&to=${to}` : null, null);
+  useStagesAdvance(stages, { info: info.loaded, products: products.loaded, dietary: dietary.loaded, report: report.loaded, groups: myGroups.loaded });
   const [editing, setEditing] = useState<{ product: Product | null } | null>(null);
   const [cfg, setCfg] = useState<OrderingConfig | null>(null);
   const [saved, setSaved] = useState("");
@@ -54,6 +77,13 @@ export default function CataloguePage() {
   const refresh = () => { info.reload(); products.reload(); dietary.reload(); report.reload(); };
   useLiveRefresh(refresh, { models: ["product", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
   useEffect(() => { if (info.data && !cfg) setCfg(info.data.config); }, [info.data, cfg]);
+
+  // Opening the product pop-up starts loading the dietary list it needs.
+  const openEditing = (product: Product | null) => { setWantDietary(true); setEditing({ product }); };
+  // A list that has not arrived (or could not be loaded) shows grey rows / a retry button instead of "nothing here".
+  type L = { loaded: boolean; error: boolean; data: unknown; reload: () => void };
+  const blocked = (q: L) => !q.loaded || (q.error && (Array.isArray(q.data) ? q.data.length === 0 : !q.data));
+  const waiting = (q: L, rows = 4) => (q.error ? <LoadError onRetry={q.reload} /> : <SkeletonRows rows={rows} />);
 
   async function saveRules() {
     if (!cfg) return;
@@ -89,11 +119,18 @@ export default function CataloguePage() {
   const pagedProducts = shownProducts.slice((curPage - 1) * PRODUCTS_PER_PAGE, curPage * PRODUCTS_PER_PAGE);
 
   return (
-    <PanelShell title={tr("Catalogue & Ordering")} subtitle={tr("Products, standard quantities, dietary requirements and the ordering workflow.")} vis={vis} labels={LABELS}
-      actions={canEdit || (canProducts && myCountries.length > 0) ? <button style={S.navDark} onClick={() => setEditing({ product: null })}>+ {tr("Add product")}</button> : undefined}>
+    <PanelShell title={tr("Catalogue & Ordering")} subtitle={tr("Products, standard quantities, dietary requirements and the ordering workflow.")} actions={canEdit || (canProducts && myCountries.length > 0) ? <button style={S.navDark} onClick={() => openEditing(null)}>+ {tr("Add product")}</button> : undefined}>
+      <PanelTabs
+        tabs={TABS.filter((t) => t !== "reports" || canReports).map((t) => ({ id: t, label: tr(TAB_LABEL[t]) }))}
+        value={tab}
+        onChange={chooseTab}
+        label={tr("Catalogue & Ordering")}
+      />
+
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
       {err && <p style={{ color: "var(--red)", fontSize: 12.5 }}>{err}</p>}
 
-      {vis.shown.rules && cfg && (
+      {tab === "rules" && (!cfg ? <PanelCard title={tr("Ordering rules")} flush>{waiting(info)}</PanelCard> : (
         <PanelCard title={tr("Ordering rules")} subtitle={tr("Who orders, when ordering is open, and whether requests need approval.")}>
           <label style={S.label}>{tr("Who places the order?")}</label>
           <Pills options={["STUDENT_REQUESTS", "COORDINATOR_ORDERS"]} value={cfg.model} onChange={(m) => canConfigure && setCfg({ ...cfg, model: m })}
@@ -122,10 +159,12 @@ export default function CataloguePage() {
             </div>
           )}
         </PanelCard>
-      )}
+      ))}
 
-      {vis.shown.products && (
-        <PanelCard title={`${tr("Products")} (${shownProducts.length})`} flush>
+      {tab === "products" && (
+        <PanelCard title={products.loaded ? `${tr("Products")} (${shownProducts.length})` : tr("Products")} flush>
+          {blocked(products) ? waiting(products) : (
+          <>
           <div style={{ padding: "12px 14px 10px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ flex: "2 1 220px", minWidth: 0 }}>
               <label style={S.label}>{tr("Search")}</label>
@@ -161,18 +200,22 @@ export default function CataloguePage() {
                   <td style={td}>{p.standardQty} {p.unit}</td>
                   <td style={{ ...td, fontSize: 12 }}>{p.dietaryTags.join(", ") || "—"}</td>
                   <td style={{ ...td, fontSize: 12 }}>{p.alternatives.map((a) => a.name).join(", ") || "—"}</td>
-                  <td style={td}>{mayEdit(p) && <button style={S.small} onClick={() => setEditing({ product: p })}>{tr("Edit")}</button>}</td>
+                  <td style={td}>{mayEdit(p) && <button style={S.small} onClick={() => openEditing(p)}>{tr("Edit")}</button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {!shownProducts.length && <p style={{ padding: 16, margin: 0, fontSize: 13, color: "var(--ink-soft)" }}>{tr("No matching products.")}</p>}
           <Pager page={curPage} pages={pages} onPage={setPage} />
+          </>
+          )}
         </PanelCard>
       )}
 
-      {vis.shown.dietary && (
+      {tab === "dietary" && (
         <PanelCard title={tr("Dietary requirements")} subtitle={tr("Register them on students (Groups & Orders) and tag the products that suit them.")}>
+          {blocked(dietary) ? waiting(dietary) : (
+          <>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             {dietary.data.map((d) => (
               <span key={d.id} style={{ fontSize: 12.5, padding: "5px 10px", borderRadius: 999, background: "var(--green-bg)", display: "inline-flex", gap: 6, alignItems: "center" }}>
@@ -186,16 +229,18 @@ export default function CataloguePage() {
               <button style={S.smallDark} onClick={addDiet}>{tr("Add")}</button>
             </div>
           )}
+          </>
+          )}
         </PanelCard>
       )}
 
-      {vis.shown.reports && canReports && (
+      {tab === "reports" && canReports && (
         <PanelCard title={tr("Reports & history")}
           action={<>
             <input style={{ ...S.input, width: 140 }} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             <input style={{ ...S.input, width: 140 }} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </>}>
-          {R && (
+          {blocked(report) ? waiting(report) : R && (
             <>
               <StatGrid>
                 <StatCard n={R.totals.orders} label={tr("Orders")} />
@@ -221,8 +266,9 @@ export default function CataloguePage() {
           )}
         </PanelCard>
       )}
+      </div>
 
-      {editing && <ProductEditor product={editing.product} dietary={names} countries={canEdit ? null : myCountries} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
+      {editing && dietary.loaded && <ProductEditor product={editing.product} dietary={names} countries={canEdit ? null : myCountries} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
     </PanelShell>
   );
 }

@@ -5,6 +5,7 @@ import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShe
 import PanelTabs, { useHashTab } from "@/components/PanelTabs";
 import { LoadError, SkeletonRows, useApiList } from "@/components/PanelKit";
 import { useEffect, useState } from "react";
+import { useStages, useStagesAdvance } from "@/lib/useStagedLoad";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import { useCan } from "@/lib/useSession";
@@ -75,16 +76,13 @@ export default function OpsOverview() {
   const [matEd, setMatEd] = useState<{ request: MaterialReq | null } | null>(null);
   const [houseEd, setHouseEd] = useState<{ house: EdHouseFull | null } | null>(null);
 
-  // ---- staged loading ----
-  // `started` = lists whose request has been sent (it stays in the list, so a list is never fetched twice
-  // just because the tab changed). The next list of the OPEN tab starts only when the one before it has
-  // arrived (or failed). Lists of other tabs are not loaded until their tab is opened. The worker list
-  // (and houses) are only needed by the pop-ups, so they load when a pop-up is opened.
-  const [started, setStarted] = useState<Res[]>([]);
-  const [ready, setReady] = useState(false);        // wait one beat so a #keys link doesn't start the Overview lists first
+  // ---- staged loading (see lib/useStagedLoad.ts) ----
+  // The lists of the OPEN tab arrive one after the other; other tabs' lists are not requested until
+  // their tab is opened. Houses and workers are only needed by the pop-ups, so they load when one opens.
   const [wantLookups, setWantLookups] = useState(false);
-  useEffect(() => setReady(true), []);
-  const on = (r: Res) => started.includes(r);
+  const want: Res[] = [...NEEDS[tab]];
+  if (wantLookups) (["houses", "workers"] as Res[]).forEach((r) => { if (!want.includes(r)) want.push(r); });
+  const { on, ...stages } = useStages(want);
 
   const tasksQ = useApiList<Task[]>(on("tasks") ? "/api/tasks" : null, ["cleaningTask", "house", "worker"]);
   // open + rejected tickets only: closed ones pile up over time and this screen never shows them
@@ -99,19 +97,9 @@ export default function OpsOverview() {
   const workers = workersQ.data ?? [];
 
   const settled = (q: { data: unknown; error: boolean }) => q.data !== null || q.error;
-  const settledBy: Record<Res, boolean> = {
+  useStagesAdvance({ on, ...stages }, {
     tasks: settled(tasksQ), tickets: settled(ticketsQ), materials: settled(materialsQ), houses: settled(housesQ), workers: settled(workersQ),
-  };
-  const settledKey = (Object.keys(settledBy) as Res[]).map((r) => (settledBy[r] ? 1 : 0)).join("");
-  useEffect(() => {
-    if (!ready) return;
-    const want: Res[] = [...NEEDS[tab]];
-    if (wantLookups) (["houses", "workers"] as Res[]).forEach((r) => { if (!want.includes(r)) want.push(r); });
-    const next = want.find((r) => !started.includes(r));
-    if (!next) return;
-    if (want.slice(0, want.indexOf(next)).every((r) => settledBy[r])) setStarted((s) => (s.includes(next) ? s : [...s, next]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, ready, wantLookups, started, settledKey]);
+  });
 
   const lookupsReady = housesQ.data !== null && workersQ.data !== null;
   const openEditor = (open: () => void) => { setWantLookups(true); open(); };
