@@ -23,7 +23,7 @@ const TABS = ["products", "categories", "rules", "dietary", "reports"] as const;
 type Tab = (typeof TABS)[number];
 const TAB_LABEL: Record<Tab, string> = { products: "Products", categories: "Categories", rules: "Ordering rules", dietary: "Dietary requirements", reports: "Reports & history" };
 type Res = "info" | "products" | "categories" | "dietary" | "report" | "groups";
-const NEEDS: Record<Tab, Res[]> = { products: ["products"], categories: ["categories", "products"], rules: ["info"], dietary: ["dietary"], reports: ["report"] };
+const NEEDS: Record<Tab, Res[]> = { products: ["products", "categories"], categories: ["categories", "products"], rules: ["info"], dietary: ["dietary"], reports: ["report"] };
 
 type Report = {
   totals: { orders: number; units: number; requests: number }; byStatus: Record<string, number>;
@@ -65,6 +65,9 @@ export default function CataloguePage() {
   const [newDiet, setNewDiet] = useState("");
   const [newCat, setNewCat] = useState("");
   const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);   // products ticked in the Products tab
+  const [moveTo, setMoveTo] = useState("General");
+  const [moving, setMoving] = useState(false);
   const [closedCats, setClosedCats] = useState<string[]>([]); // categories folded shut in the Categories tab
   const toggleCat = (c: string) => setClosedCats((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
   const [err, setErr] = useState("");
@@ -76,6 +79,7 @@ export default function CataloguePage() {
   const [toggleErr, setToggleErr] = useState("");
   const [page, setPage] = useState(1);
   useEffect(() => setPage(1), [q, countryFilter, categoryFilter, stock]);
+  useEffect(() => setPicked([]), [q, countryFilter, categoryFilter, stock]);
 
   const refresh = () => { info.reload(); products.reload(); catList.reload(); dietary.reload(); report.reload(); };
   useLiveRefresh(refresh, { models: ["product", "category", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
@@ -107,6 +111,20 @@ export default function CataloguePage() {
     try { await api("/api/dietary", "POST", { name: newDiet }); setNewDiet(""); dietary.reload(); }
     catch (e: any) { setErr(e?.status === 409 ? tr("That requirement already exists.") : saveError(e, tr)); }
   }
+  // Move every ticked product to another category in one go.
+  async function moveSelected() {
+    if (!picked.length || !moveTo) return;
+    setMoving(true); setErr("");
+    let failed = 0;
+    for (const id of picked) {
+      try { await api(`/api/products/${id}`, "PATCH", { category: moveTo }); } catch { failed++; }
+    }
+    setMoving(false); setPicked([]);
+    if (failed) setErr(tr("Some products could not be moved."));
+    products.reload(); catList.reload();
+  }
+  const togglePick = (id: string) => setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+
   // Categories: the Super Admin creates, renames and removes them; products only pick one.
   async function catCall(method: "POST" | "PATCH" | "DELETE", body: object) {
     setErr("");
@@ -227,6 +245,17 @@ export default function CataloguePage() {
               ]}
               value={stock} onChange={setStock} label={tr("Products")} />
           </div>
+          {picked.length > 0 && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "10px 14px", background: "#E8F1DD", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)", fontSize: 13 }}>
+              <strong>{picked.length} {tr("selected")}</strong>
+              <span>{tr("Move to")}</span>
+              <select aria-label={tr("Move to")} style={{ ...S.input, width: "auto", minWidth: 160 }} value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+                {["General", ...catList.data.categories].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <button style={S.smallDark} disabled={moving} onClick={moveSelected}>{moving ? tr("Saving…") : tr("Move")}</button>
+              <button style={S.small} disabled={moving} onClick={() => setPicked([])}>{tr("Clear")}</button>
+            </div>
+          )}
           {toggleErr && <p role="alert" style={{ margin: 0, padding: "6px 14px", fontSize: 12.5, color: "var(--red)" }}>{toggleErr}</p>}
           {shownProducts.length > 0 && (
           <table className="h-table p-table">
@@ -249,18 +278,33 @@ export default function CataloguePage() {
                 return (
                   <Fragment key={p.id}>
                   {startsCategory && (
-                    <tr><td colSpan={7} style={{ background: "#F3F2EE", fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--ink-soft)", padding: "7px 12px" }}>{categoryOf(p)}</td></tr>
+                    <tr><td colSpan={7} style={{ background: "#F3F2EE", fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--ink-soft)", padding: "7px 12px" }}>
+                      {(() => {
+                        const ids = shownProducts.filter((x) => categoryOf(x) === categoryOf(p) && mayEdit(x)).map((x) => x.id);
+                        const all = ids.length > 0 && ids.every((id) => picked.includes(id));
+                        return (
+                          <label style={{ display: "inline-flex", gap: 8, alignItems: "center", cursor: ids.length ? "pointer" : "default" }}>
+                            {ids.length > 0 && <input type="checkbox" checked={all} aria-label={`${tr("Select all")}: ${categoryOf(p)}`}
+                              onChange={() => setPicked((cur) => (all ? cur.filter((id) => !ids.includes(id)) : Array.from(new Set([...cur, ...ids]))))} />}
+                            {categoryOf(p)} <span style={{ fontWeight: 500 }}>· {shownProducts.filter((x) => categoryOf(x) === categoryOf(p)).length}</span>
+                          </label>
+                        );
+                      })()}
+                    </td></tr>
                   )}
                   <tr className={p.active ? "" : "p-off"}>
                     <td>
                       <div className="h-cell-name" style={{ minWidth: 220 }}>
+                        {mayEdit(p) && <input type="checkbox" checked={picked.includes(p.id)} onChange={() => togglePick(p.id)} aria-label={`${tr("Select")}: ${p.name}`} style={{ flex: "none" }} />}
                         <ProductThumb p={p} size={46} />
                         <div style={{ minWidth: 0 }}>
                           <div className="h-name">{p.name}</div>
-                          <div style={{ marginTop: 3, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                            {p.category && <span className="p-chip cat">{p.category}</span>}
-                            {translated.length > 0 && <span style={{ fontSize: 11, color: "var(--ink-soft)" }}>{translated.map(([l, n]) => `${l.toUpperCase()}: ${n}`).join(" · ")}</span>}
-                          </div>
+                          {translated.length > 0 && (
+                            <div title={translated.map(([l, n]) => `${l.toUpperCase()}: ${n}`).join(" · ")}
+                              style={{ marginTop: 3, fontSize: 11, color: "var(--ink-soft)", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                              {translated.map(([l, n]) => `${l.toUpperCase()}: ${n}`).join(" · ")}
+                            </div>
+                          )}
                           <div className="h-sub">{countryLabel}</div>
                         </div>
                       </div>
