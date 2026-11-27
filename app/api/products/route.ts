@@ -5,7 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { cleanProduct, coordinatorCountries, groupsFor, jerr } from "@/lib/orderLogic";
 import { productInCountry } from "@/lib/ordering";
 import { slimProduct } from "@/lib/mediaSlim";
-import { categoryAllowed } from "@/lib/settings";
+import { categoryExists } from "@/lib/categories";
 
 // GET /api/products — the catalogue. Everyone signed in can read it; students and suppliers only see active products.
 export async function GET(req: NextRequest) {
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (g.error) return g.error;
   const { data, error } = await cleanProduct(await req.json().catch(() => ({})), false);
   if (error || !data) return jerr(error ?? "invalid product");
-  if (data.category !== undefined && !(await categoryAllowed(data.category))) return jerr("choose a category from the list");
+  if (data.category !== undefined && !(await categoryExists(data.category))) return jerr("choose a category from the list");
   // A coordinator can only add a product for the country of one of their own groups (never for "all countries").
   if (g.session.role !== "admin" && !(data.country && (await coordinatorCountries(g.session as any)).includes(data.country))) return jerr("forbidden", 403);
   const row = await db.product.create({ data });

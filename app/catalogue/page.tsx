@@ -56,7 +56,7 @@ export default function CataloguePage() {
   const info = useJson<Info | null>(on("info") ? "/api/ordering" : null, null);
   const products = useJson<Product[]>(on("products") ? "/api/products" : null, []);
   const dietary = useJson<{ id: string; name: string; description?: string | null }[]>(on("dietary") ? "/api/dietary" : null, []);
-  const catList = useJson<{ categories: string[]; counts: Record<string, number>; unlisted: string[] }>(on("categories") ? "/api/categories" : null, { categories: [], counts: {}, unlisted: [] });
+  const catList = useJson<{ categories: string[]; counts: Record<string, number> }>(on("categories") ? "/api/categories" : null, { categories: [], counts: {} });
   const report = useJson<Report | null>(on("report") ? `/api/reports?from=${from}&to=${to}` : null, null);
   useStagesAdvance(stages, { info: info.loaded, products: products.loaded, categories: catList.loaded, dietary: dietary.loaded, report: report.loaded, groups: myGroups.loaded });
   const router = useRouter();
@@ -78,7 +78,7 @@ export default function CataloguePage() {
   useEffect(() => setPage(1), [q, countryFilter, categoryFilter, stock]);
 
   const refresh = () => { info.reload(); products.reload(); catList.reload(); dietary.reload(); report.reload(); };
-  useLiveRefresh(refresh, { models: ["product", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
+  useLiveRefresh(refresh, { models: ["product", "category", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
   useEffect(() => { if (info.data && !cfg) setCfg(info.data.config); }, [info.data, cfg]);
 
   // Opening the product pop-up starts loading the dietary list it needs.
@@ -316,12 +316,9 @@ export default function CataloguePage() {
           <>
           {!catList.data.categories.length && <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--ink-soft)" }}>{tr("No categories yet.")}</p>}
           {(() => {
-            // Every category with its products underneath. Products whose category is not on the list yet (older ones) and the
-            // "General" ones (no category) are shown too, so no product is ever hidden.
-            const listed = catList.data.categories;
+            // Every category with its products underneath, plus "General" (products without a category) so no product is hidden.
             const blocks = [
-              ...listed.map((name) => ({ name, kind: "listed" as const })),
-              ...catList.data.unlisted.map((name) => ({ name, kind: "unlisted" as const })),
+              ...catList.data.categories.map((name) => ({ name, kind: "listed" as const })),
               ...(products.data.some((x) => categoryOf(x) === "General") ? [{ name: "General", kind: "general" as const }] : []),
             ];
             const canAdd = canEdit || (canProducts && myCountries.length > 0);
@@ -343,10 +340,8 @@ export default function CataloguePage() {
                           <span aria-hidden style={{ fontSize: 11, width: 10 }}>{open ? "▼" : "▶"}</span>
                           <strong style={{ fontSize: 14 }}>{c}</strong>
                           <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>({items.length})</span>
-                          {kind === "unlisted" && <span style={{ fontSize: 11, color: "var(--ink-soft)" }}>· {tr("not on the list yet")}</span>}
                         </button>
-                        {canAdd && kind !== "unlisted" && <button style={S.small} onClick={() => router.push(`/catalogue/product?category=${encodeURIComponent(c)}`)}>+ {tr("Add product")}</button>}
-                        {canEdit && kind === "unlisted" && <button style={S.small} onClick={() => catCall("POST", { name: c })}>+ {tr("Add to the list")}</button>}
+                        {canAdd && <button style={S.small} onClick={() => router.push(`/catalogue/product?category=${encodeURIComponent(c)}`)}>+ {tr("Add product")}</button>}
                         {canEdit && kind === "listed" && <button style={S.small} onClick={() => setRenaming({ from: c, to: c })}>{tr("Rename")}</button>}
                         {canEdit && kind === "listed" && <button style={S.small} disabled={items.length > 0} title={items.length > 0 ? tr("Some products still use this category. Change their category first.") : undefined} onClick={() => catCall("DELETE", { name: c })}>{tr("Remove")}</button>}
                       </>

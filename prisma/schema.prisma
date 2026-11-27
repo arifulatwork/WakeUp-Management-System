@@ -318,8 +318,20 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  categoryRef  Category @relation(fields: [category], references: [name], onUpdate: Cascade, onDelete: Restrict)
+
   requestLines RequestLine[]
   orderLines   OrderLine[]
+}
+
+// Food categories (Fruit, Dairy, Drinks …). The Super Admin creates them; a product points to its category by NAME,
+// so renaming a category renames it on every product (ON UPDATE CASCADE), and a category that still has products
+// cannot be deleted (ON DELETE RESTRICT). "General" is the built-in fallback and always exists.
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  products  Product[]
 }
 
 model DietaryRequirement {
