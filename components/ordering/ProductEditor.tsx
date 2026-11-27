@@ -8,6 +8,7 @@ import { PhotoPicker } from "@/components/Photos";
 import { Pills, FormFooter, S } from "@/components/ui";
 import { MAX_QTY, matchCategory, suggestCategory } from "@/lib/ordering";
 import { CountrySelect, Product } from "@/components/ordering/common";
+import { useSession } from "@/lib/useSession";
 
 // Admin: add / edit a product on its own full page (/catalogue/product): standard quantity, dietary suitability and approved alternatives.
 // `countries`: the countries this person may use (a coordinator: those of their own groups). Empty/undefined = any country, plus "All countries" (admin).
@@ -15,6 +16,8 @@ export default function ProductEditor({ product, dietary, categories, defaultCat
   product: Product | null; dietary: string[]; categories: string[]; defaultCategory?: string; countries?: string[] | null; onClose: () => void; onSaved: () => void;
 }) {
   const { tr, locale } = useI18n();
+  const session = useSession();
+  const isSuperAdmin = session?.role === "admin"; // the Super Admin may delete a product even when requests/orders use it
   const [name, setName] = useState(product?.name ?? "");
   const [category, setCategory] = useState(product?.category ?? defaultCategory ?? "General");
   // The Super Admin creates the categories (Catalogue → Categories); here one is only chosen. "General" is always there,
@@ -53,7 +56,7 @@ export default function ProductEditor({ product, dietary, categories, defaultCat
   }
   async function remove() {
     setSaving(true);
-    try { await api(`/api/products/${product!.id}`, "DELETE"); onSaved(); }
+    try { await api(`/api/products/${product!.id}${isSuperAdmin ? "?force=1" : ""}`, "DELETE"); onSaved(); }
     catch (e: any) { setError(e?.message === "in use" ? tr("This product is used in requests or orders. Set it to inactive instead.") : saveError(e, tr)); setSaving(false); }
   }
 
@@ -149,7 +152,8 @@ export default function ProductEditor({ product, dietary, categories, defaultCat
       </section>
 
       <div style={{ position: "sticky", bottom: 0, background: "var(--paper)", padding: "6px 0 14px", marginTop: -4 }}>
-        <FormFooter saving={saving} canSave={!!name.trim() && (!countries || !!country)} onSave={save} onClose={onClose} onDelete={product ? remove : undefined} error={error} />
+        <FormFooter saving={saving} canSave={!!name.trim() && (!countries || !!country)} onSave={save} onClose={onClose} onDelete={product ? remove : undefined} error={error}
+          confirmText={isSuperAdmin ? tr("Delete this product? If requests or orders use it, those lines are deleted too. This cannot be undone.") : undefined} />
       </div>
     </div>
   );

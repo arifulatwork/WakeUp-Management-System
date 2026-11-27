@@ -30,6 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // DELETE /api/products/:id — admin. A product already used in a request or order is kept for the history: set it inactive instead.
+// Super Admin only: ?force=1 deletes the product AND its lines in requests/orders (requests/orders left empty are removed too).
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const g = await requirePerm(req, "catalogue.products");
   if (g.error) return g.error;
@@ -37,9 +38,20 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!p) return jerr("not found", 404);
   if (g.session.role !== "admin" && !(p.country && (await coordinatorCountries(g.session as any)).includes(p.country))) return jerr("forbidden", 403);
   const used = (await db.requestLine.count({ where: { productId: p.id } })) + (await db.orderLine.count({ where: { productId: p.id } }));
-  if (used > 0) return jerr("in use", 409);
+  const force = req.nextUrl.searchParams.get("force") === "1";
+  if (used > 0 && !force) return jerr("in use", 409);
+  if (used > 0 && g.session.role !== "admin") return jerr("forbidden", 403);
+  if (used > 0) {
+    // Remember which requests/orders are affected, drop the lines, then drop the ones that ended up empty.
+    const reqIds = (await db.requestLine.findMany({ where: { productId: p.id }, select: { requestId: true } })).map((l) => l.requestId);
+    const ordIds = (await db.orderLine.findMany({ where: { productId: p.id }, select: { orderId: true } })).map((l) => l.orderId);
+    await db.requestLine.deleteMany({ where: { productId: p.id } });
+    await db.orderLine.deleteMany({ where: { productId: p.id } });
+    for (const id of new Set(reqIds)) if (!(await db.requestLine.count({ where: { requestId: id } }))) await db.studentRequest.delete({ where: { id } }).catch(() => {});
+    for (const id of new Set(ordIds)) if (!(await db.orderLine.count({ where: { orderId: id } }))) await db.order.delete({ where: { id } }).catch(() => {});
+  }
   await db.product.delete({ where: { id: p.id } });
   await deleteRef(p.photo);
-  await logAudit(req, "product", p.id, "delete", "Deleted product {name}", { name: p.name });
+  await logAudit(req, "product", p.id, "delete", used > 0 ? "Deleted product {name} and its {n} request/order lines" : "Deleted product {name}", { name: p.name, n: used });
   return NextResponse.json({ ok: true });
 }
