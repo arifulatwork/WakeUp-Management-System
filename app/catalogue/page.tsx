@@ -11,7 +11,7 @@ import { useCan } from "@/lib/useSession";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { useStages, useStagesAdvance } from "@/lib/useStagedLoad";
 import { Pills, S } from "@/components/ui";
-import { OrderingConfig, WEEKDAYS, countryName, countryOptions } from "@/lib/ordering";
+import { FOOD_CATEGORIES, OrderingConfig, WEEKDAYS, categoryOf, countryName, countryOptions } from "@/lib/ordering";
 import { CountrySelect, Info, Pill, Product, ProductThumb, td, th, useJson } from "@/components/ordering/common";
 import { Pager, norm } from "@/components/ordering/Pager";
 
@@ -19,11 +19,11 @@ const PRODUCTS_PER_PAGE = 15;
 // One tab per section. Only the open tab loads its data (NEEDS), so the screen no longer asks the server
 // for products, rules, dietary requirements and the report at the same moment. The open tab is kept in
 // the address (#rules).
-const TABS = ["products", "rules", "dietary", "reports"] as const;
+const TABS = ["products", "categories", "rules", "dietary", "reports"] as const;
 type Tab = (typeof TABS)[number];
-const TAB_LABEL: Record<Tab, string> = { products: "Products", rules: "Ordering rules", dietary: "Dietary requirements", reports: "Reports & history" };
-type Res = "info" | "products" | "dietary" | "report" | "groups";
-const NEEDS: Record<Tab, Res[]> = { products: ["products"], rules: ["info"], dietary: ["dietary"], reports: ["report"] };
+const TAB_LABEL: Record<Tab, string> = { products: "Products", categories: "Categories", rules: "Ordering rules", dietary: "Dietary requirements", reports: "Reports & history" };
+type Res = "info" | "products" | "categories" | "dietary" | "report" | "groups";
+const NEEDS: Record<Tab, Res[]> = { products: ["products"], categories: ["categories", "products"], rules: ["info"], dietary: ["dietary"], reports: ["report"] };
 
 type Report = {
   totals: { orders: number; units: number; requests: number }; byStatus: Record<string, number>;
@@ -56,12 +56,15 @@ export default function CataloguePage() {
   const info = useJson<Info | null>(on("info") ? "/api/ordering" : null, null);
   const products = useJson<Product[]>(on("products") ? "/api/products" : null, []);
   const dietary = useJson<{ id: string; name: string; description?: string | null }[]>(on("dietary") ? "/api/dietary" : null, []);
+  const catList = useJson<{ categories: string[]; counts: Record<string, number>; unlisted: string[] }>(on("categories") ? "/api/categories" : null, { categories: [], counts: {}, unlisted: [] });
   const report = useJson<Report | null>(on("report") ? `/api/reports?from=${from}&to=${to}` : null, null);
-  useStagesAdvance(stages, { info: info.loaded, products: products.loaded, dietary: dietary.loaded, report: report.loaded, groups: myGroups.loaded });
+  useStagesAdvance(stages, { info: info.loaded, products: products.loaded, categories: catList.loaded, dietary: dietary.loaded, report: report.loaded, groups: myGroups.loaded });
   const router = useRouter();
   const [cfg, setCfg] = useState<OrderingConfig | null>(null);
   const [saved, setSaved] = useState("");
   const [newDiet, setNewDiet] = useState("");
+  const [newCat, setNewCat] = useState("");
+  const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
   const [err, setErr] = useState("");
   const [countryFilter, setCountryFilter] = useState(""); // "" = every product, "ALL" = products for all countries, else a country code
   const [categoryFilter, setCategoryFilter] = useState(""); // "" = every category
@@ -72,7 +75,7 @@ export default function CataloguePage() {
   const [page, setPage] = useState(1);
   useEffect(() => setPage(1), [q, countryFilter, categoryFilter, stock]);
 
-  const refresh = () => { info.reload(); products.reload(); dietary.reload(); report.reload(); };
+  const refresh = () => { info.reload(); products.reload(); catList.reload(); dietary.reload(); report.reload(); };
   useLiveRefresh(refresh, { models: ["product", "dietaryRequirement", "appSetting", "order", "orderLine", "studentRequest"] });
   useEffect(() => { if (info.data && !cfg) setCfg(info.data.config); }, [info.data, cfg]);
 
@@ -102,6 +105,25 @@ export default function CataloguePage() {
     try { await api("/api/dietary", "POST", { name: newDiet }); setNewDiet(""); dietary.reload(); }
     catch (e: any) { setErr(e?.status === 409 ? tr("That requirement already exists.") : saveError(e, tr)); }
   }
+  // Categories: the Super Admin creates, renames and removes them; products only pick one.
+  async function catCall(method: "POST" | "PATCH" | "DELETE", body: object) {
+    setErr("");
+    try { await api("/api/categories", method, body); catList.reload(); products.reload(); return true; }
+    catch (e: any) {
+      setErr(e?.message === "exists" ? tr("That category already exists.")
+        : e?.message === "in use" ? tr("Some products still use this category. Change their category first.")
+        : saveError(e, tr));
+      return false;
+    }
+  }
+  async function addCat() {
+    if (!newCat.trim()) return;
+    if (await catCall("POST", { name: newCat })) setNewCat("");
+  }
+  async function saveRename() {
+    if (!renaming) return;
+    if (await catCall("PATCH", renaming)) setRenaming(null);
+  }
   async function delDiet(id: string) {
     try { await api(`/api/dietary/${id}`, "DELETE"); refresh(); } catch (e) { setErr(saveError(e, tr)); }
   }
@@ -120,7 +142,8 @@ export default function CataloguePage() {
     (!countryFilter || (countryFilter === "ALL" ? !p.country : p.country === countryFilter)) &&
     (!categoryFilter || p.category === categoryFilter) &&
     (stock === "available") === p.active &&
-    (!needle || [p.name, p.brand, p.category, ...Object.values(p.names ?? {})].some((v) => norm(v).includes(needle))));
+    (!needle || [p.name, p.brand, p.category, ...Object.values(p.names ?? {})].some((v) => norm(v).includes(needle))))
+    .sort((a, b) => categoryOf(a).localeCompare(categoryOf(b)) || a.name.localeCompare(b.name)); // by category, then A–Z
   const pages = Math.max(1, Math.ceil(shownProducts.length / PRODUCTS_PER_PAGE));
   const curPage = Math.min(page, pages);
   const pagedProducts = shownProducts.slice((curPage - 1) * PRODUCTS_PER_PAGE, curPage * PRODUCTS_PER_PAGE);
@@ -274,6 +297,54 @@ export default function CataloguePage() {
           )}
           {shownProducts.length > 0 && <div className="h-count">{pagedProducts.length} / {shownProducts.length} {tr("Products")}</div>}
           <Pager page={curPage} pages={pages} onPage={setPage} />
+          </>
+          )}
+        </PanelCard>
+      )}
+
+      {tab === "categories" && (
+        <PanelCard title={tr("Categories")} subtitle={tr("Created here by the Super Admin, then chosen on each product. Orders are shown grouped by category.")}>
+          {blocked(catList) ? waiting(catList) : (
+          <>
+          {!catList.data.categories.length && <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--ink-soft)" }}>{tr("No categories yet.")}</p>}
+          {catList.data.categories.map((c) => {
+            const n = catList.data.counts[c] ?? 0;
+            return (
+              <div key={c} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
+                {renaming?.from === c ? (
+                  <>
+                    <input style={{ ...S.input, flex: "1 1 160px" }} autoFocus value={renaming.to} maxLength={40} onChange={(e) => setRenaming({ from: c, to: e.target.value })} onKeyDown={(e) => e.key === "Enter" && saveRename()} />
+                    <button style={S.smallDark} onClick={saveRename}>{tr("Save")}</button>
+                    <button style={S.small} onClick={() => setRenaming(null)}>{tr("Cancel")}</button>
+                  </>
+                ) : (
+                  <>
+                    <strong style={{ flex: "1 1 160px", fontSize: 13.5 }}>{c}</strong>
+                    <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{n} {tr("Products").toLowerCase()}</span>
+                    {canEdit && <button style={S.small} onClick={() => setRenaming({ from: c, to: c })}>{tr("Rename")}</button>}
+                    {canEdit && <button style={S.small} disabled={n > 0} title={n > 0 ? tr("Some products still use this category. Change their category first.") : undefined} onClick={() => catCall("DELETE", { name: c })}>{tr("Remove")}</button>}
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {canEdit && catList.data.unlisted.length > 0 && (
+            <div style={{ background: "#FAF3D6", borderRadius: 8, padding: "8px 10px", fontSize: 12.5, marginTop: 12 }}>
+              <strong>{tr("Used by products but not on the list yet")}</strong>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {catList.data.unlisted.map((c) => (
+                  <button key={c} style={S.small} onClick={() => catCall("POST", { name: c })}>+ {c} ({catList.data.counts[c] ?? 0})</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {canEdit && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <input style={{ ...S.input, flex: "1 1 200px" }} placeholder={tr("New category, e.g. Fruit")} value={newCat} maxLength={40} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCat()} />
+              <button style={S.smallDark} onClick={addCat}>{tr("Add")}</button>
+              <button style={S.small} onClick={() => catCall("POST", { names: FOOD_CATEGORIES.filter((c) => c !== "General") })}>{tr("Add suggested categories")}</button>
+            </div>
+          )}
           </>
           )}
         </PanelCard>

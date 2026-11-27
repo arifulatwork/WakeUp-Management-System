@@ -5,8 +5,8 @@ import { api, saveError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Modal, Pills, FormFooter, S } from "@/components/ui";
 import { PanelCard } from "@/components/PanelShell";
-import { countryName, MAX_QTY, MAX_QTY_TOTAL, productInCountry, productName, showCode } from "@/lib/ordering";
-import { altLabel, CountrySelect, Order, Product, ProductThumb } from "@/components/ordering/common";
+import { categoryOf, countryName, groupByCategory, MAX_QTY, MAX_QTY_TOTAL, productInCountry, productName, showCode } from "@/lib/ordering";
+import { altLabel, CategoryHeading, CountrySelect, Order, Product, ProductThumb } from "@/components/ordering/common";
 
 export type Group = {
   id: string; name: string; codeActive: boolean; accessCode?: string; studentCount: number; memberLimit: number | null; country?: string | null;
@@ -216,6 +216,7 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const active = products.filter((p) => p.active && productInCountry(p, group.country)); // each country has its own products
+  const byCategory = groupByCategory<Product>(active, (p) => categoryOf(p), (p) => productName(p, lang)); // shown by category
 
   useEffect(() => {
     fetch(`/api/groups/${group.id}/students`).then((r) => (r.ok ? r.json() : [])).then(setStudents).catch(() => {});
@@ -267,7 +268,10 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
           </div>
         )}
         <button style={{ ...S.small, margin: "10px 0" }} onClick={fillStandard}>{tr("Fill standard quantities (per-student products × {n} students)", { n: Math.max(1, group.memberLimit ?? students.length) })}</button>
-        {active.map((p) => (
+        {byCategory.map((g) => (
+          <div key={g.category}>
+          <CategoryHeading name={g.category} count={g.items.length} />
+          {g.items.map((p) => (
           <div key={p.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
             <ProductThumb p={p} size={36} />
             <div style={{ flex: "1 1 160px", fontSize: 13 }}>{productName(p, lang)}<div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{tr("Standard")}: {p.standardQty} {p.unit}{p.perStudent ? ` · ${tr("per student")}` : ""}</div></div>
@@ -279,6 +283,8 @@ export function OrderBuilder({ group, order, products, onClose, onSaved }: {
             )}
             <input style={{ ...S.input, width: 70 }} type="number" min={0} max={p.perStudent ? MAX_QTY_TOTAL : MAX_QTY} value={qty[p.id] ?? 0} onChange={(e) => setQty({ ...qty, [p.id]: Math.max(0, Math.min(p.perStudent ? MAX_QTY_TOTAL : MAX_QTY, Math.floor(Number(e.target.value) || 0))) })} />
             {isException(p) && <input style={{ ...S.input, flex: "1 1 100%" }} placeholder={tr("Reason for a different quantity")} value={why[p.id] ?? ""} maxLength={200} onChange={(e) => setWhy({ ...why, [p.id]: e.target.value })} />}
+          </div>
+          ))}
           </div>
         ))}
         <label style={S.label}>{tr("Note for the supplier")}</label>

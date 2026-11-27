@@ -137,3 +137,50 @@ export const productName = (p: { name: string; names?: unknown }, lang: string):
 // A product with no country is for everybody; otherwise it must match the group's country.
 export const productInCountry = (p: { country?: string | null }, country?: string | null): boolean =>
   !p.country || p.country === (country ?? null);
+
+// ---- food categories: the choices in the product editor, and a guess from the product name ----
+export const FOOD_CATEGORIES = [
+  "Fruit", "Vegetables", "Dairy", "Eggs", "Bread & bakery", "Meat & fish", "Cereals & pasta",
+  "Drinks", "Snacks & sweets", "Condiments & spices", "Frozen", "General",
+] as const;
+
+// Words (English, Portuguese, Spanish, French, Italian) that point to a category. Checked in this order,
+// so "apple juice" is Drinks and "frozen peas" is Frozen. It is only a suggestion: the person can change it.
+const CATEGORY_WORDS: [string, string[]][] = [
+  ["Frozen", ["frozen", "congelado", "congelados", "congelada", "surgelé", "surgele", "surgelato", "icecream", "gelado", "helado", "glace", "gelato"]],
+  ["Drinks", ["water", "agua", "agua", "eau", "acqua", "juice", "sumo", "zumo", "jus", "succo", "tea", "coffee", "cafe", "caffe", "cola", "soda", "lemonade", "limonada", "drink", "bebida", "boisson", "bevanda"]],
+  ["Dairy", ["milk", "leite", "leche", "lait", "latte", "cheese", "queijo", "queso", "fromage", "formaggio", "yogurt", "yoghurt", "iogurte", "yaourt", "butter", "manteiga", "mantequilla", "beurre", "burro", "cream", "natas", "nata", "creme", "crema", "creme"]],
+  ["Eggs", ["egg", "eggs", "ovo", "ovos", "huevo", "huevos", "oeuf", "oeufs", "uovo", "uova"]],
+  ["Bread & bakery", ["bread", "pao", "pan", "pain", "pane", "baguette", "croissant", "toast", "torrada", "tostada", "bun", "roll", "bagel", "wrap", "tortilla"]],
+  ["Meat & fish", ["chicken", "frango", "pollo", "poulet", "beef", "vaca", "ternera", "boeuf", "manzo", "pork", "porco", "cerdo", "porc", "maiale", "ham", "fiambre", "presunto", "jamon", "jambon", "prosciutto", "sausage", "salsicha", "salchicha", "saucisse", "salsiccia", "turkey", "peru", "pavo", "fish", "peixe", "pescado", "poisson", "pesce", "tuna", "atum", "atun", "thon", "tonno", "salmon", "salmao", "saumon", "meat", "carne", "viande"]],
+  ["Cereals & pasta", ["rice", "arroz", "riz", "riso", "pasta", "spaghetti", "macarrao", "macarrones", "pates", "noodle", "noodles", "cereal", "cereals", "cereais", "cereales", "oats", "oat", "aveia", "avena", "flour", "farinha", "harina", "farine", "farina", "couscous"]],
+  ["Snacks & sweets", ["biscuit", "biscuits", "bolacha", "bolachas", "galleta", "galletas", "cookie", "cookies", "chocolate", "chips", "crisps", "candy", "sweets", "doce", "doces", "cake", "bolo", "pastel", "gateau", "torta", "snack", "nuts", "jam", "marmelada", "honey", "mel", "miel", "miele"]],
+  ["Condiments & spices", ["salt", "sal", "sel", "sale", "sugar", "acucar", "azucar", "sucre", "zucchero", "oil", "azeite", "aceite", "huile", "olio", "vinegar", "vinagre", "vinaigre", "aceto", "ketchup", "mayonnaise", "maionese", "mayonesa", "mustard", "mostarda", "sauce", "molho", "salsa", "sauce", "spice", "spices", "pepper", "pimenta", "herbs", "oregano"]],
+  ["Vegetables", ["tomato", "tomate", "tomates", "pomodoro", "potato", "batata", "patata", "pomme-de-terre", "patate", "carrot", "cenoura", "zanahoria", "carotte", "carota", "onion", "cebola", "cebolla", "oignon", "cipolla", "lettuce", "alface", "lechuga", "laitue", "lattuga", "cucumber", "pepino", "concombre", "cetriolo", "broccoli", "brocolos", "spinach", "espinafres", "espinacas", "epinards", "spinaci", "garlic", "alho", "ajo", "ail", "aglio", "cabbage", "couve", "repollo", "chou", "cavolo", "zucchini", "courgette", "curgete", "calabacin", "vegetable", "vegetables", "legume", "legumes", "verdura", "verduras", "bean", "beans", "feijao", "pea", "peas", "ervilhas"]],
+  ["Fruit", ["apple", "apples", "maca", "manzana", "pomme", "mela", "banana", "bananas", "platano", "orange", "oranges", "laranja", "naranja", "pear", "pera", "poire", "grape", "grapes", "uva", "uvas", "raisin", "strawberry", "strawberries", "morango", "fresa", "fraise", "fragola", "lemon", "limao", "limon", "citron", "limone", "melon", "melao", "melon", "watermelon", "melancia", "sandia", "peach", "pessego", "melocoton", "peche", "pesca", "kiwi", "mango", "manga", "pineapple", "ananas", "abacaxi", "cherry", "cherries", "cereja", "cereza", "cerise", "ciliegia", "plum", "ameixa", "ciruela", "prune", "fruit", "fruta", "fruto", "fruits"]],
+];
+const plain = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+export function suggestCategory(name: string): string | null {
+  const words = plain(name).split(/[^a-z0-9-]+/).filter(Boolean);
+  if (!words.length) return null;
+  for (const [category, list] of CATEGORY_WORDS) {
+    if (words.some((w) => list.includes(w) || list.includes(w.replace(/(es|s)$/, "")))) return category;
+  }
+  return null;
+}
+
+// Maps a guess such as "Fruit" onto the category the admin actually created (e.g. "Fruits"); null when there is none.
+export function matchCategory(suggestion: string, list: string[]): string | null {
+  const s = plain(suggestion);
+  return list.find((c) => { const p = plain(c); return p === s || (p.length >= 3 && (p.startsWith(s) || s.startsWith(p))); }) ?? null;
+}
+
+// ---- categories: every food list is shown by category (A–Z), products A–Z inside each category ----
+export const categoryOf = (p?: { category?: string | null } | null): string => (p?.category ?? "").trim() || "General";
+export function groupByCategory<T>(items: T[], getCategory: (x: T) => string, getName: (x: T) => string): { category: string; items: T[] }[] {
+  const m = new Map<string, T[]>();
+  for (const it of items) { const c = getCategory(it); m.set(c, [...(m.get(c) ?? []), it]); }
+  return Array.from(m.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([category, list]) => ({ category, items: list.slice().sort((a, b) => getName(a).localeCompare(getName(b))) }));
+}

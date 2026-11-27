@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { cleanProduct, coordinatorCountries, jerr } from "@/lib/orderLogic";
 import { slimProduct } from "@/lib/mediaSlim";
 import { deleteRef } from "@/lib/storage";
+import { categoryAllowed } from "@/lib/settings";
 
 // PATCH /api/products/:id — admin edits any of the product fields (brand, standard quantity, alternatives, active …).
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -14,6 +15,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!before) return jerr("not found", 404);
   const { data, error } = await cleanProduct(await req.json().catch(() => ({})), true);
   if (error || !data) return jerr(error ?? "invalid product");
+  if (data.category !== undefined && !(await categoryAllowed(data.category, before.category))) return jerr("choose a category from the list");
   if (g.session.role !== "admin") {
     // Coordinator: only products of their own groups' countries, and they can't move one to another country.
     const mine = await coordinatorCountries(g.session as any);

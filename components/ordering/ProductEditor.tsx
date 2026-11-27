@@ -5,17 +5,26 @@ import { api, saveError } from "@/lib/api";
 import { LANGS, useI18n } from "@/lib/i18n";
 import { PhotoPicker } from "@/components/Photos";
 import { Pills, FormFooter, S } from "@/components/ui";
-import { MAX_QTY } from "@/lib/ordering";
+import { MAX_QTY, matchCategory, suggestCategory } from "@/lib/ordering";
 import { CountrySelect, Product } from "@/components/ordering/common";
 
 // Admin: add / edit a product on its own full page (/catalogue/product): standard quantity, dietary suitability and approved alternatives.
 // `countries`: the countries this person may use (a coordinator: those of their own groups). Empty/undefined = any country, plus "All countries" (admin).
-export default function ProductEditor({ product, dietary, countries, onClose, onSaved }: {
-  product: Product | null; dietary: string[]; countries?: string[] | null; onClose: () => void; onSaved: () => void;
+export default function ProductEditor({ product, dietary, categories, countries, onClose, onSaved }: {
+  product: Product | null; dietary: string[]; categories: string[]; countries?: string[] | null; onClose: () => void; onSaved: () => void;
 }) {
   const { tr, locale } = useI18n();
   const [name, setName] = useState(product?.name ?? "");
   const [category, setCategory] = useState(product?.category ?? "General");
+  // The Super Admin creates the categories (Catalogue → Categories); here one is only chosen. "General" is always there,
+  // and an older product keeps the category it already has.
+  const [catTouched, setCatTouched] = useState(!!product); // a new product gets a category suggested from its name until someone picks one
+  const catOptions = Array.from(new Set<string>(["General", ...categories, ...(product?.category ? [product.category] : [])]));
+  const changeName = (v: string) => {
+    setName(v);
+    if (!catTouched) { const s = suggestCategory(v); setCategory((s && matchCategory(s, categories)) || "General"); }
+  };
+  const pickCategory = (v: string) => { setCatTouched(true); setCategory(v); };
   const [unit, setUnit] = useState(product?.unit ?? "pcs");
   const [brand, setBrand] = useState(product?.brand ?? "");
   const [standardQty, setStandardQty] = useState(product?.standardQty ?? 1);
@@ -35,7 +44,7 @@ export default function ProductEditor({ product, dietary, countries, onClose, on
 
   async function save() {
     setSaving(true); setError("");
-    const body = { name, names, country: country || null, category, unit, brand, standardQty, perStudent, dietaryTags: tags, active, alternatives: alts, ...(photo !== undefined ? { photo } : {}) };
+    const body = { name, names, country: country || null, category: category || "General", unit, brand, standardQty, perStudent, dietaryTags: tags, active, alternatives: alts, ...(photo !== undefined ? { photo } : {}) };
     try {
       if (product) await api(`/api/products/${product.id}`, "PATCH", body); else await api("/api/products", "POST", body);
       onSaved();
@@ -57,9 +66,15 @@ export default function ProductEditor({ product, dietary, countries, onClose, on
       <section style={sec}>
         <h2 style={secTitle}>{tr("Basic information")}</h2>
         <label style={S.label}>{tr("Name")}</label>
-        <input style={S.input} value={name} maxLength={80} autoFocus={!product} onChange={(e) => setName(e.target.value)} />
+        <input style={S.input} value={name} maxLength={80} autoFocus={!product} onChange={(e) => changeName(e.target.value)} />
         <div style={grid(180)}>
-          <div><label style={S.label}>{tr("Category")}</label><input style={S.input} value={category} maxLength={40} onChange={(e) => setCategory(e.target.value)} /></div>
+          <div>
+            <label style={S.label}>{tr("Category")}</label>
+            <select aria-label={tr("Category")} style={{ ...S.input, width: "100%", boxSizing: "border-box" }} value={category} onChange={(e) => pickCategory(e.target.value)}>
+              {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {!categories.length && <div style={{ fontSize: 11.5, color: "var(--ink-soft)", marginTop: 4 }}>{tr("No categories yet. The Super Admin creates them in Catalogue → Categories.")}</div>}
+          </div>
           <div><label style={S.label}>{tr("Unit")}</label><input style={S.input} value={unit} maxLength={20} onChange={(e) => setUnit(e.target.value)} /></div>
           <div><label style={S.label}>{perStudent ? tr("Standard quantity (per student)") : tr("Standard quantity (for the group)")}</label>
             <input style={S.input} type="number" min={1} max={MAX_QTY} value={standardQty} onChange={(e) => setStandardQty(Math.max(1, Math.min(MAX_QTY, Math.floor(Number(e.target.value) || 1))))} /></div>

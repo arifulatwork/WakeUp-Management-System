@@ -51,6 +51,15 @@ export function CountrySelect({ value, onChange, firstLabel, only, ariaLabel }: 
   );
 }
 
+// Small section heading used to split a food list by category.
+export function CategoryHeading({ name, count }: { name: string; count?: number }) {
+  return (
+    <div style={{ margin: "14px 0 6px", padding: "0 2px 4px", fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--ink-soft)", borderBottom: "2px solid var(--line)" }}>
+      {name}{count !== undefined && <span style={{ fontWeight: 500 }}> · {count}</span>}
+    </div>
+  );
+}
+
 export const altLabel = (a: { name: string; brand?: string }) => `${a.name}${a.brand ? ` (${a.brand})` : ""}`;
 export const th: React.CSSProperties = { textAlign: "left", fontSize: 10.5, textTransform: "uppercase", color: "var(--ink-soft)", borderBottom: "1px solid var(--line)", padding: "8px 10px" };
 export const td: React.CSSProperties = { padding: "9px 10px", borderBottom: "1px solid var(--line)", verticalAlign: "top" };

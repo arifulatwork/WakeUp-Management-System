@@ -54,6 +54,31 @@ export function cleanFields(v: unknown): TaskField[] | null {
   return out;
 }
 
+// Food categories (Fruit, Dairy, Drinks …) — created by the Super Admin and chosen on each product.
+export function cleanCategories(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of v) {
+    const s = String(x ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+    const k = s.toLowerCase();
+    if (!s || k === "general" || seen.has(k)) continue; // "General" is always available, it does not need to be on the list
+    seen.add(k);
+    out.push(s);
+    if (out.length >= 60) break;
+  }
+  return out;
+}
+export async function getCategories(): Promise<string[]> {
+  return cleanCategories(await read<unknown>("foodCategories", []));
+}
+export const setCategories = (list: string[]) => write("foodCategories", list);
+// A product may only get "General", a category on the list, or the one it already has (older products keep theirs).
+export async function categoryAllowed(category: string, current?: string | null): Promise<boolean> {
+  if (category === "General" || (!!current && category === current)) return true;
+  return (await getCategories()).includes(category);
+}
+
 // Product ordering rules (who orders, ordering days, cut-off time, approvals) — set by the Administrator.
 export async function getOrdering(): Promise<OrderingConfig> {
   return cleanOrdering(await read<unknown>("ordering", DEFAULT_ORDERING));

@@ -22,11 +22,12 @@ function ProductPageInner() {
 
   const products = useJson<Product[]>("/api/products", []);
   const dietary = useJson<{ id: string; name: string }[]>("/api/dietary", []);
+  const cats = useJson<{ categories: string[] }>("/api/categories", { categories: [] });
   const groups = useJson<{ country?: string | null }[]>(!canEdit && canProducts ? "/api/groups" : null, []);
   const myCountries = Array.from(new Set(groups.data.map((g) => g.country).filter((c): c is string => !!c)));
 
   const product = id ? products.data.find((p) => p.id === id) ?? null : null;
-  const ready = products.loaded && dietary.loaded && (canEdit || !canProducts || groups.loaded);
+  const ready = products.loaded && dietary.loaded && cats.loaded && (canEdit || !canProducts || groups.loaded);
   const failed = (products.error && !products.loaded) || (dietary.error && !dietary.loaded);
 
   return (
@@ -42,6 +43,7 @@ function ProductPageInner() {
             key={product?.id ?? "new"}
             product={product}
             dietary={dietary.data.map((d) => d.name)}
+            categories={cats.data.categories}
             countries={canEdit ? null : myCountries}
             onClose={back}
             onSaved={back}

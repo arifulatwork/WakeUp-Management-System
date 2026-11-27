@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
 import PanelTabs, { useHashTab } from "@/components/PanelTabs";
 import { LoadError, SkeletonRows } from "@/components/PanelKit";
@@ -9,8 +9,8 @@ import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useLiveRefresh } from "@/lib/useLiveRefresh";
 import { S } from "@/components/ui";
-import { productName } from "@/lib/ordering";
-import { altLabel, Flow, Line, Order, Pill, ProductThumb, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
+import { categoryOf, groupByCategory, productName } from "@/lib/ordering";
+import { altLabel, CategoryHeading, Flow, Line, Order, Pill, ProductThumb, td, th, unitsOf, useJson, when } from "@/components/ordering/common";
 
 const ACTIVE = ["APPROVED", "PREPARING", "PREPARED"];
 const DONE_PER_PAGE = 15;
@@ -42,17 +42,17 @@ export default function SupplierPage() {
 
   // Consolidated: every product summed across the orders still to prepare, with how many groups need it.
   const consolidated = useMemo(() => {
-    const m = new Map<string, { name: string; unit: string; brand: string | null; total: number; done: number; parts: { group: string; qty: number; alt?: string | null }[] }>();
+    const m = new Map<string, { category: string; name: string; unit: string; brand: string | null; total: number; done: number; parts: { group: string; qty: number; alt?: string | null }[] }>();
     for (const o of active) for (const l of o.lines) {
       const key = `${l.productId}|${l.alternativeName ?? ""}`;
-      const row = m.get(key) ?? { name: l.product ? productName(l.product, lang) : "—", unit: l.product?.unit ?? "", brand: l.product?.brand ?? null, total: 0, done: 0, parts: [] };
+      const row = m.get(key) ?? { category: categoryOf(l.product), name: l.product ? productName(l.product, lang) : "—", unit: l.product?.unit ?? "", brand: l.product?.brand ?? null, total: 0, done: 0, parts: [] };
       row.name = l.alternativeName ? `${l.product ? productName(l.product, lang) : ""} → ${l.alternativeName}` : row.name;
       row.total += l.quantity;
       if (l.status === "PREPARED") row.done += l.preparedQty ?? l.quantity;
       row.parts.push({ group: o.group?.name ?? "—", qty: l.quantity, alt: l.alternativeName });
       m.set(key, row);
     }
-    return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return groupByCategory(Array.from(m.values()), (r) => r.category, (r) => r.name); // picking list by category
   }, [active, lang]);
 
   async function act(orderId: string, body: Record<string, unknown>) {
@@ -98,13 +98,18 @@ export default function SupplierPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead><tr><th style={th}>{tr("Product")}</th><th style={th}>{tr("Total")}</th><th style={th}>{tr("Prepared")}</th><th style={th}>{tr("Per group")}</th></tr></thead>
               <tbody>
-                {consolidated.map((r) => (
-                  <tr key={r.name}>
-                    <td style={td}><strong>{r.name}</strong>{r.brand && <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{r.brand}</div>}</td>
-                    <td style={td}><strong>{r.total}</strong> {r.unit}</td>
-                    <td style={td}>{r.done}/{r.total}</td>
-                    <td style={{ ...td, fontSize: 12, color: "var(--ink-soft)" }}>{r.parts.map((p) => `${p.group}: ${p.qty}`).join(" · ")}</td>
-                  </tr>
+                {consolidated.map((g) => (
+                  <Fragment key={g.category}>
+                    <tr><td colSpan={4} style={{ ...td, background: "#F3F2EE", fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--ink-soft)" }}>{g.category} · {g.items.length}</td></tr>
+                    {g.items.map((r) => (
+                      <tr key={`${g.category}|${r.name}`}>
+                        <td style={td}><strong>{r.name}</strong>{r.brand && <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{r.brand}</div>}</td>
+                        <td style={td}><strong>{r.total}</strong> {r.unit}</td>
+                        <td style={td}>{r.done}/{r.total}</td>
+                        <td style={{ ...td, fontSize: 12, color: "var(--ink-soft)" }}>{r.parts.map((p) => `${p.group}: ${p.qty}`).join(" · ")}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -191,8 +196,13 @@ function OrderCard({ order: o, busy, onAct, locale }: { order: Order; busy: bool
     >
       <div style={{ marginBottom: 10 }}><Flow status={o.status} /></div>
       {o.note && <p style={{ fontSize: 12.5, margin: "0 0 8px" }}>💬 {o.note}</p>}
-      {o.lines.slice().sort((a, b) => (a.product?.name ?? "").localeCompare(b.product?.name ?? "")).map((l) => (
-        <LineRow key={l.id} line={l} editable={editable} busy={busy} onAct={(b) => onAct({ action: "line", lineId: l.id, ...b })} />
+      {groupByCategory(o.lines, (l) => categoryOf(l.product), (l) => l.product?.name ?? "").map((g) => (
+        <div key={g.category}>
+          <CategoryHeading name={g.category} count={g.items.length} />
+          {g.items.map((l) => (
+            <LineRow key={l.id} line={l} editable={editable} busy={busy} onAct={(b) => onAct({ action: "line", lineId: l.id, ...b })} />
+          ))}
+        </div>
       ))}
     </PanelCard>
   );
