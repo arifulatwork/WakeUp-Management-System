@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PanelShell, { PanelCard, StatCard, StatGrid } from "@/components/PanelShell";
 import PanelTabs, { useHashTab } from "@/components/PanelTabs";
@@ -65,6 +65,8 @@ export default function CataloguePage() {
   const [newDiet, setNewDiet] = useState("");
   const [newCat, setNewCat] = useState("");
   const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
+  const [closedCats, setClosedCats] = useState<string[]>([]); // categories folded shut in the Categories tab
+  const toggleCat = (c: string) => setClosedCats((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
   const [err, setErr] = useState("");
   const [countryFilter, setCountryFilter] = useState(""); // "" = every product, "ALL" = products for all countries, else a country code
   const [categoryFilter, setCategoryFilter] = useState(""); // "" = every category
@@ -240,11 +242,16 @@ export default function CataloguePage() {
               </tr>
             </thead>
             <tbody>
-              {pagedProducts.map((p) => {
+              {pagedProducts.map((p, i) => {
+                const startsCategory = i === 0 || categoryOf(pagedProducts[i - 1]) !== categoryOf(p); // a heading row before each category
                 const countryLabel = p.country ? countryName(p.country, locale) : tr("All countries");
                 const translated = Object.entries(p.names ?? {});
                 return (
-                  <tr key={p.id} className={p.active ? "" : "p-off"}>
+                  <Fragment key={p.id}>
+                  {startsCategory && (
+                    <tr><td colSpan={7} style={{ background: "#F3F2EE", fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--ink-soft)", padding: "7px 12px" }}>{categoryOf(p)}</td></tr>
+                  )}
+                  <tr className={p.active ? "" : "p-off"}>
                     <td>
                       <div className="h-cell-name" style={{ minWidth: 220 }}>
                         <ProductThumb p={p} size={46} />
@@ -284,6 +291,7 @@ export default function CataloguePage() {
                       <div className="h-actions">{mayEdit(p) && <button className="h-btn primary" onClick={() => openEditing(p)}>{tr("Edit")}</button>}</div>
                     </td>
                   </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -307,37 +315,60 @@ export default function CataloguePage() {
           {blocked(catList) ? waiting(catList) : (
           <>
           {!catList.data.categories.length && <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--ink-soft)" }}>{tr("No categories yet.")}</p>}
-          {catList.data.categories.map((c) => {
-            const n = catList.data.counts[c] ?? 0;
-            return (
-              <div key={c} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
-                {renaming?.from === c ? (
-                  <>
-                    <input style={{ ...S.input, flex: "1 1 160px" }} autoFocus value={renaming.to} maxLength={40} onChange={(e) => setRenaming({ from: c, to: e.target.value })} onKeyDown={(e) => e.key === "Enter" && saveRename()} />
-                    <button style={S.smallDark} onClick={saveRename}>{tr("Save")}</button>
-                    <button style={S.small} onClick={() => setRenaming(null)}>{tr("Cancel")}</button>
-                  </>
-                ) : (
-                  <>
-                    <strong style={{ flex: "1 1 160px", fontSize: 13.5 }}>{c}</strong>
-                    <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{n} {tr("Products").toLowerCase()}</span>
-                    {canEdit && <button style={S.small} onClick={() => setRenaming({ from: c, to: c })}>{tr("Rename")}</button>}
-                    {canEdit && <button style={S.small} disabled={n > 0} title={n > 0 ? tr("Some products still use this category. Change their category first.") : undefined} onClick={() => catCall("DELETE", { name: c })}>{tr("Remove")}</button>}
-                  </>
-                )}
-              </div>
-            );
-          })}
-          {canEdit && catList.data.unlisted.length > 0 && (
-            <div style={{ background: "#FAF3D6", borderRadius: 8, padding: "8px 10px", fontSize: 12.5, marginTop: 12 }}>
-              <strong>{tr("Used by products but not on the list yet")}</strong>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                {catList.data.unlisted.map((c) => (
-                  <button key={c} style={S.small} onClick={() => catCall("POST", { name: c })}>+ {c} ({catList.data.counts[c] ?? 0})</button>
-                ))}
-              </div>
-            </div>
-          )}
+          {(() => {
+            // Every category with its products underneath. Products whose category is not on the list yet (older ones) and the
+            // "General" ones (no category) are shown too, so no product is ever hidden.
+            const listed = catList.data.categories;
+            const blocks = [
+              ...listed.map((name) => ({ name, kind: "listed" as const })),
+              ...catList.data.unlisted.map((name) => ({ name, kind: "unlisted" as const })),
+              ...(products.data.some((x) => categoryOf(x) === "General") ? [{ name: "General", kind: "general" as const }] : []),
+            ];
+            const canAdd = canEdit || (canProducts && myCountries.length > 0);
+            return blocks.map(({ name: c, kind }) => {
+              const items = products.data.filter((x) => categoryOf(x) === c).sort((a, b) => a.name.localeCompare(b.name));
+              const open = !closedCats.includes(c);
+              return (
+                <div key={c} style={{ border: "1px solid var(--line)", borderRadius: 10, marginBottom: 10, overflow: "hidden", background: "#fff" }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "#F3F2EE", flexWrap: "wrap" }}>
+                    {renaming?.from === c ? (
+                      <>
+                        <input style={{ ...S.input, flex: "1 1 160px" }} autoFocus value={renaming.to} maxLength={40} onChange={(e) => setRenaming({ from: c, to: e.target.value })} onKeyDown={(e) => e.key === "Enter" && saveRename()} />
+                        <button style={S.smallDark} onClick={saveRename}>{tr("Save")}</button>
+                        <button style={S.small} onClick={() => setRenaming(null)}>{tr("Cancel")}</button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => toggleCat(c)} aria-expanded={open} style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "inline-flex", gap: 8, alignItems: "baseline", flex: "1 1 160px", textAlign: "left", font: "inherit" }}>
+                          <span aria-hidden style={{ fontSize: 11, width: 10 }}>{open ? "▼" : "▶"}</span>
+                          <strong style={{ fontSize: 14 }}>{c}</strong>
+                          <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>({items.length})</span>
+                          {kind === "unlisted" && <span style={{ fontSize: 11, color: "var(--ink-soft)" }}>· {tr("not on the list yet")}</span>}
+                        </button>
+                        {canAdd && kind !== "unlisted" && <button style={S.small} onClick={() => router.push(`/catalogue/product?category=${encodeURIComponent(c)}`)}>+ {tr("Add product")}</button>}
+                        {canEdit && kind === "unlisted" && <button style={S.small} onClick={() => catCall("POST", { name: c })}>+ {tr("Add to the list")}</button>}
+                        {canEdit && kind === "listed" && <button style={S.small} onClick={() => setRenaming({ from: c, to: c })}>{tr("Rename")}</button>}
+                        {canEdit && kind === "listed" && <button style={S.small} disabled={items.length > 0} title={items.length > 0 ? tr("Some products still use this category. Change their category first.") : undefined} onClick={() => catCall("DELETE", { name: c })}>{tr("Remove")}</button>}
+                      </>
+                    )}
+                  </div>
+                  {open && (items.length === 0
+                    ? <p style={{ margin: 0, padding: "10px 12px", fontSize: 12.5, color: "var(--ink-soft)" }}>{tr("No matching products.")}</p>
+                    : items.map((x) => (
+                      <div key={x.id} className={x.active ? "" : "p-off"} style={{ display: "flex", gap: 10, alignItems: "center", padding: "7px 12px", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
+                        <ProductThumb p={x} size={32} />
+                        <div style={{ flex: "1 1 160px", minWidth: 0, fontSize: 13 }}>
+                          <strong>{x.name}</strong>
+                          <div style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{x.standardQty} {x.unit}{x.brand ? ` · ${x.brand}` : ""}</div>
+                        </div>
+                        {!x.active && <span style={{ fontSize: 11.5, color: "var(--ink-soft)" }}>{tr("Unavailable")}</span>}
+                        {mayEdit(x) && <button style={S.small} onClick={() => openEditing(x)}>{tr("Edit")}</button>}
+                      </div>
+                    )))}
+                </div>
+              );
+            });
+          })()}
           {canEdit && (
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
               <input style={{ ...S.input, flex: "1 1 200px" }} placeholder={tr("New category, e.g. Fruit")} value={newCat} maxLength={40} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCat()} />

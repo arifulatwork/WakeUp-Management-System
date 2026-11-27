@@ -10,15 +10,15 @@ import { CountrySelect, Product } from "@/components/ordering/common";
 
 // Admin: add / edit a product on its own full page (/catalogue/product): standard quantity, dietary suitability and approved alternatives.
 // `countries`: the countries this person may use (a coordinator: those of their own groups). Empty/undefined = any country, plus "All countries" (admin).
-export default function ProductEditor({ product, dietary, categories, countries, onClose, onSaved }: {
-  product: Product | null; dietary: string[]; categories: string[]; countries?: string[] | null; onClose: () => void; onSaved: () => void;
+export default function ProductEditor({ product, dietary, categories, defaultCategory, countries, onClose, onSaved }: {
+  product: Product | null; dietary: string[]; categories: string[]; defaultCategory?: string; countries?: string[] | null; onClose: () => void; onSaved: () => void;
 }) {
   const { tr, locale } = useI18n();
   const [name, setName] = useState(product?.name ?? "");
-  const [category, setCategory] = useState(product?.category ?? "General");
+  const [category, setCategory] = useState(product?.category ?? defaultCategory ?? "General");
   // The Super Admin creates the categories (Catalogue → Categories); here one is only chosen. "General" is always there,
   // and an older product keeps the category it already has.
-  const [catTouched, setCatTouched] = useState(!!product); // a new product gets a category suggested from its name until someone picks one
+  const [catTouched, setCatTouched] = useState(!!product || !!defaultCategory); // a new product gets a category suggested from its name until someone picks one
   const catOptions = Array.from(new Set<string>(["General", ...categories, ...(product?.category ? [product.category] : [])]));
   const changeName = (v: string) => {
     setName(v);

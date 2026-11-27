@@ -15,7 +15,9 @@ import ProductEditor from "@/components/ordering/ProductEditor";
 function ProductPageInner() {
   const { tr } = useI18n();
   const router = useRouter();
-  const id = useSearchParams().get("id");
+  const params = useSearchParams();
+  const id = params.get("id");
+  const presetCategory = params.get("category"); // "+ Add product" inside a category opens the form with it already chosen
   const canEdit = useCan("catalogue.manage");      // admin: any country
   const canProducts = useCan("catalogue.products"); // coordinator: only the countries of their own groups
   const back = () => router.push("/catalogue#products");
@@ -44,6 +46,7 @@ function ProductPageInner() {
             product={product}
             dietary={dietary.data.map((d) => d.name)}
             categories={cats.data.categories}
+            defaultCategory={!id && presetCategory && cats.data.categories.includes(presetCategory) ? presetCategory : undefined}
             countries={canEdit ? null : myCountries}
             onClose={back}
             onSaved={back}
