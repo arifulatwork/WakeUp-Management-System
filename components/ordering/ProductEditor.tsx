@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { api, saveError } from "@/lib/api";
 import { LANGS, useI18n } from "@/lib/i18n";
 import { PhotoPicker } from "@/components/Photos";
@@ -124,7 +125,10 @@ export default function ProductEditor({ product, dietary, categories, defaultCat
         <h2 style={secTitle}>{tr("Suitable for")}</h2>
         {dietary.length > 0
           ? <div style={{ marginTop: 8 }}><Pills multi options={dietary} value={tags} label={(d) => d} onChange={setTags} /></div>
-          : <div style={hint}>—</div>}
+          : <div style={hint}>
+              {tr("Dietary requirements will show here after they are added in the Dietary requirements tab (e.g. Vegan, Gluten-free, Nut-free).")}{" "}
+              <Link href="/catalogue#dietary" style={{ color: "var(--green-dark)", fontWeight: 600 }}>{tr("Dietary requirements")} →</Link>
+            </div>}
       </section>
 
       <section style={sec}>
